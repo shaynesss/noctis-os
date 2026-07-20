@@ -136,6 +136,7 @@ The interface can only render what's structured. Per mode:
 - `build-spine.md` **becomes** `modes/dev/dev.md`.
 - `~/.claude/CLAUDE.md` shrinks to universal rules only; the launcher injects the active mode's methodology per session. **Exact residue contents not yet decided — see Open Questions.**
 - Sequenced as the first build milestone: **mode folders (methodology + lessons + state + agents) → backend → frontend tracker → telemetry → nightshift.**
+- **Mode folders: done (2026-07-20).** All five `second-brain/modes/<name>/` folders built: methodology file, `lessons.md`, `state.md` (seeded with the locked frontmatter contract per mode), `jobs/` (empty, ready for real jobs), `agents/*.md` (all seven v1 subagent stubs). `build-spine.md` retired; `~/.claude/CLAUDE.md` symlinks directly to `modes/dev/dev.md`. Next: backend.
 
 ### Version control workflow
 
@@ -219,8 +220,9 @@ Claude Code CLI, the Claude Code VS Code extension, PIL, a Python frontmatter/YA
 These are correctly undecided — not gaps to silently fill, decisions for Shayne to close when ready:
 
 1. **Interface sub-name** — Deck / Bridge / Console / none.
-2. **Exact residue of `~/.claude/CLAUDE.md`** once the dev process moves out to `modes/dev/dev.md`.
-3. **Noctis-as-MCP-server's concrete trigger** — parked, no trigger condition named yet beyond "a session needs OS state and can't get it cleanly through files."
+2. **Noctis-as-MCP-server's concrete trigger** — parked, no trigger condition named yet beyond "a session needs OS state and can't get it cleanly through files."
+
+**Resolved 2026-07-20:** Exact residue of `~/.claude/CLAUDE.md` — decided as no separate generic spine at all. `build-spine.md` moved entirely into `modes/dev/dev.md`; the symlink retargets there directly. `modes/dev/dev.md` is now the one universal dev methodology for every project, not just Noctis OS.
 
 ---
 
