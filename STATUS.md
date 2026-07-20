@@ -4,7 +4,7 @@ Last updated: 2026-07-20
 
 ## Current state
 
-Phase 1 and Phase 2 both complete. Repo scaffolded, backend/frontend running, `make setup`/`make dev` verified. Three local commits, nothing pushed (manual push, per this project's git workflow). Next real work is Phase 3 — building out the mode folders.
+Phase 1 and Phase 2 both complete. Repo scaffolded, backend/frontend running, `make setup`/`make dev` verified. Pushed to `origin/main`. Phase 3 underway — mode-folder build-out (first milestone) is done; backend is next.
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 
@@ -24,17 +24,20 @@ Phase 1 and Phase 2 both complete. Repo scaffolded, backend/frontend running, `m
 - `SETUP.md` — three-bucket checklist
 - No secrets tracked
 
-## Known issue
+## Done this pass (Phase 3, mode-folder milestone)
 
-`.env.example`'s `VAULT_PATH` has the wrong home directory — my error, not Claude Code's. One-line manual fix needed (`sed` command given), couldn't be fixed from Desktop due to a dotfile-indexing limitation in the vault connector.
+- All five `second-brain/modes/<name>/` folders built (dev, learn, research, settings, nightshift): full methodology file (8-part mode anatomy), `lessons.md` (seeded with entry format + security note), `state.md` (seeded with the locked frontmatter contract per mode's card content), `jobs/` (empty, ready), `agents/*.md` (all seven v1 subagent stubs: critic, quizmaster, gap-finder, credibility-checker, synthesizer, lint-runner, distiller)
+- `build-spine.md` moved into `modes/dev/dev.md`, restructured into the mode anatomy, Noctis-flavored (ship-gate step 9, library catalog, near-empty slack surface folded in). `~/.claude/CLAUDE.md` symlink retargeted directly to `modes/dev/dev.md` — no separate generic spine; this is now the one universal dev methodology for every project
+- Every asserted-in reference to `build-spine.md` updated across the vault (`CLAUDE.md`, `README.md`, `index.md`, `wiki/Claude Code Workflow.md`) and this repo (`CLAUDE.md`, `README.md`)
+- `.env.example`'s `VAULT_PATH` home-directory typo fixed (was tracked as a known issue, resolved in the doc-reconciliation commit)
 
 ## Not started
 
-- Phase 3: actual mode-folder build-out (`second-brain/modes/<name>/` per mode — methodology, lessons, state, jobs, agents)
-- Backend auth implementation (currently a TODO)
+- Backend implementation (FastAPI, stateless, auth currently a TODO)
+- Frontend tracker, telemetry, nightshift infra (launchd)
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
 - Custos's trigger thresholds (backend logic)
 
 ## Blocking
 
-Nothing. Ready to start Phase 3.
+Nothing. Mode folders done, ready to start the backend.
