@@ -4,7 +4,7 @@ Last updated: 2026-07-20
 
 ## Current state
 
-Phase 1 and Phase 2 both complete. Repo scaffolded, frontend running, `make setup`/`make dev` verified. Pushed to `origin/main`. Phase 3 underway — mode-folder build-out and backend milestones both done; frontend tracker is next.
+Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` verified. Pushed to `origin/main`. Phase 3 underway — mode-folder build-out, backend, and frontend tracker milestones all done and smoke-tested live in a browser; telemetry hooks and nightshift infra are next.
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 
@@ -40,14 +40,23 @@ Phase 1 and Phase 2 both complete. Repo scaffolded, frontend running, `make setu
 - Nightshift inbox: `GET /inbox`, `GET /inbox/{id}` (full proposal content), `POST /inbox/{id}/accept|reject` (removes from index, archives the proposal file, logs the decision) — mode-specific diff-apply on accept is a known follow-up once a real proposal producer exists
 - 23 passing pytest tests (`backend/tests/`) covering auth, vault_io, and all three routers
 
+## Done this pass (Phase 3, frontend milestone)
+
+- `World.tsx`: real character sprites at their locked footing coordinates, polls `GET /mode/{name}` every 15s, renders busy/idle state and Noctua/Echo's count badges per Interface.md's Views section
+- `ProfileOverlay.tsx`: all five modes' locked card content — Faber's job rows w/ phase badges (+ idle copy when no jobs), Noctua/Vesper's stat blocks, Custos's trigger badges + diff count (+ idle copy), Echo's inbox rows with working accept/reject (no launch button, per spec)
+- `api.ts` client, `frontend/public/assets` symlinked to the repo-level `assets/` (never duplicated into `src`, per the hard constraint), Press Start 2P + JetBrains Mono self-hosted, leftover Vite-template CSS replaced with the world's real design tokens
+- Interim per-character sprite crops added (`assets/characters/*.png`) so the world has real art now — documented as interim, swappable at the same filenames once the locked grid-data/PIL pipeline exists
+- **Smoke-tested live**: both dev servers started, driven with a headless Playwright browser (no `chromium-cli` in this environment), screenshotted the world and multiple profile overlays with real seeded backend data. Caught a real bug this way — missing CORS middleware was silently blocking every frontend fetch — fixed with two regression tests added to the backend suite (now 25 passing)
+- A visual mockup of the world screen was also produced as a shareable Artifact before wiring, using the same real assets
+
 ## Not started
 
-- Frontend tracker (World/ProfileOverlay wired to real backend data), telemetry hooks, nightshift infra (launchd scheduler)
+- Telemetry hooks (Claude Code session action-feed), nightshift infra (launchd scheduler)
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
 - Custos's trigger thresholds (backend logic)
 - Mode-specific proposal apply logic for nightshift's accept flow (currently archives only)
-- Exact character hex palette (backend currently uses placeholder approximations for Terminal tint colors)
+- Exact character hex palette (now sampled from real sprites rather than guessed, but still interim until the grid-data pass locks final production values)
 
 ## Blocking
 
-Nothing. Mode folders and backend both done, ready to start the frontend tracker.
+Nothing. Mode folders, backend, and frontend tracker all done and verified live. Ready for telemetry hooks / nightshift infra.
