@@ -1,4 +1,4 @@
-> **Status: pre-Phase-2.** Spec (Definition/PRD/EDD) locked below. Design Brief still open — per build-spine's own gate, folder scaffolding, `.env.example`, and repo setup wait until that closes.
+> **Status: see STATUS.md.** Spec (Definition/PRD/EDD/Design Brief) locked below. Phase 3 (mode-folder build-out) is in progress — per the dev-mode gate, folder scaffolding, `.env.example`, and repo setup happen after the spec closes.
 
 # Noctis OS
 

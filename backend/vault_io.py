@@ -6,7 +6,18 @@ filesystem read/write, no istefox/MCP dependency").
 """
 
 import os
+import threading
 from pathlib import Path
+from typing import Any
+
+import frontmatter
+
+# Files every mode session can append to concurrently — CLAUDE.md's hard
+# constraint: "log.md/index.md go through a single serialized writer."
+# Per-mode lessons.md/state.md/job contexts have exactly one writer-type
+# each and don't need this lock.
+_SERIALIZED_FILES = {"log.md", "index.md"}
+_write_lock = threading.Lock()
 
 
 def get_vault_path() -> Path:
@@ -22,9 +33,44 @@ def read_file(relative_path: str) -> str:
 
 
 def write_file(relative_path: str, content: str) -> None:
-    # TODO: shared vault files (log.md, index.md) must go through a single
-    # serialized writer once multiple sessions can call this concurrently
-    # (see SPEC.md EDD: "Serialized write path for shared vault files").
     path = get_vault_path() / relative_path
+    if relative_path in _SERIALIZED_FILES:
+        with _write_lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+
+
+def read_frontmatter(relative_path: str) -> tuple[dict[str, Any], str]:
+    """Parse a mode's state.md/lessons.md/job-context.md: YAML frontmatter
+    (the state-schema contract every mode's files carry) plus freeform body.
+    """
+    path = get_vault_path() / relative_path
+    post = frontmatter.loads(path.read_text(encoding="utf-8"))
+    return dict(post.metadata), post.content
+
+
+def write_frontmatter(relative_path: str, metadata: dict[str, Any], content: str) -> None:
+    path = get_vault_path() / relative_path
+    post = frontmatter.Post(content, **metadata)
+    serialized = frontmatter.dumps(post)
+    if relative_path in _SERIALIZED_FILES:
+        with _write_lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(serialized, encoding="utf-8")
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(serialized, encoding="utf-8")
+
+
+def file_exists(relative_path: str) -> bool:
+    return (get_vault_path() / relative_path).exists()
+
+
+def move_file(src_relative: str, dst_relative: str) -> None:
+    vault_path = get_vault_path()
+    dst = vault_path / dst_relative
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    (vault_path / src_relative).rename(dst)

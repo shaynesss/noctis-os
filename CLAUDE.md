@@ -1,6 +1,6 @@
 # CLAUDE.md — Noctis OS project overrides
 
-Universal process is already active globally via `~/.claude/CLAUDE.md` → `build-spine.md`. This file adds only what's specific to *this* project.
+Universal process is already active globally via `~/.claude/CLAUDE.md` → `second-brain/modes/dev/dev.md` (Faber, moved from `build-spine.md` 2026-07-20 as part of this project's own mode-folder build-out). This file adds only what's specific to *this* project.
 
 Full spec, with reasoning: `noctis-os/SPEC.md`. If anything here and `SPEC.md` disagree, `SPEC.md` wins. **If a decision gets made about this project anywhere other than in a file both of these read, it doesn't count — write it here or in SPEC.md immediately, not after the fact.** As of 2026-07-20, this includes checking the *wiki* too — several locked decisions sat in the vault for a day without ever reaching `SPEC.md`. Both directions need checking, not just chat-vs-file.
 
@@ -48,4 +48,4 @@ Tailwind wiring + path alias. `/impeccable init`, register as **Product** (not B
 
 ## Launch surfaces
 
-Learn/Research/Settings/Nightshift → Terminal.app (tinted per character). Dev → VS Code. Fire-and-forget — the interface launches and reads back state via hooks/state files, never watches or controls a running session live. Full detail: `wiki/Noctis OS/Interface.md`.
+Learn/Research/Settings/Nightshift → Terminal.app (tinted per character), launched with `CLAUDE_CONFIG_DIR` set to `noctis-os/backend/launch_config/nondev/` so these sessions get a minimal universal CLAUDE.md instead of Dev's full methodology. Dev → VS Code, no override — reads the default `~/.claude/CLAUDE.md` → `modes/dev/dev.md`. Fire-and-forget — the interface launches and reads back state via hooks/state files, never watches or controls a running session live. Full detail: `wiki/Noctis OS/Interface.md`, `SPEC.md`'s "Mode files + CLAUDE.md migration" section.
