@@ -4,7 +4,7 @@ Last updated: 2026-07-20
 
 ## Current state
 
-Phase 1 and Phase 2 both complete. Repo scaffolded, backend/frontend running, `make setup`/`make dev` verified. Pushed to `origin/main`. Phase 3 underway — mode-folder build-out (first milestone) is done; backend is next.
+Phase 1 and Phase 2 both complete. Repo scaffolded, frontend running, `make setup`/`make dev` verified. Pushed to `origin/main`. Phase 3 underway — mode-folder build-out and backend milestones both done; frontend tracker is next.
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 
@@ -31,13 +31,23 @@ Phase 1 and Phase 2 both complete. Repo scaffolded, backend/frontend running, `m
 - Every asserted-in reference to `build-spine.md` updated across the vault (`CLAUDE.md`, `README.md`, `index.md`, `wiki/Claude Code Workflow.md`) and this repo (`CLAUDE.md`, `README.md`)
 - `.env.example`'s `VAULT_PATH` home-directory typo fixed (was tracked as a known issue, resolved in the doc-reconciliation commit)
 
+## Done this pass (Phase 3, backend milestone)
+
+- Auth: bearer-token + Origin middleware (`backend/auth.py`), applied to every router except `/health`
+- `vault_io.py`: frontmatter read/write (`python-frontmatter`), serialized writer for `log.md`/`index.md`, file move/exists helpers
+- `GET /mode/{name}` — reads a mode's `state.md` frontmatter, returns ambient state
+- `POST /session/launch` — constructs the mode's invocation (methodology + lessons + job context), Dev opens VS Code (two-step, no `CLAUDE_CONFIG_DIR` override), the other four open a character-tinted Terminal.app window via `osascript` with `CLAUDE_CONFIG_DIR` pointed at `launch_config/nondev/`
+- Nightshift inbox: `GET /inbox`, `GET /inbox/{id}` (full proposal content), `POST /inbox/{id}/accept|reject` (removes from index, archives the proposal file, logs the decision) — mode-specific diff-apply on accept is a known follow-up once a real proposal producer exists
+- 23 passing pytest tests (`backend/tests/`) covering auth, vault_io, and all three routers
+
 ## Not started
 
-- Backend implementation (FastAPI, stateless, auth currently a TODO)
-- Frontend tracker, telemetry, nightshift infra (launchd)
+- Frontend tracker (World/ProfileOverlay wired to real backend data), telemetry hooks, nightshift infra (launchd scheduler)
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
 - Custos's trigger thresholds (backend logic)
+- Mode-specific proposal apply logic for nightshift's accept flow (currently archives only)
+- Exact character hex palette (backend currently uses placeholder approximations for Terminal tint colors)
 
 ## Blocking
 
-Nothing. Mode folders done, ready to start the backend.
+Nothing. Mode folders and backend both done, ready to start the frontend tracker.
