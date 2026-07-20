@@ -4,7 +4,7 @@ This folder holds the world backdrop plate(s) Shayne drops in manually. This REA
 
 ## Current reference image (2026-07-19)
 
-Generated via Copilot from the Indigo Variant art-direction brief (full brief in `noctis-os/SPEC.md` → Design Brief section). Verdict: strong match — flat color blocks, no gradients within any shape, correct indigo-to-violet sky, sparse asymmetric stars, full-width cloud coverage with no horizon gaps, ambient-only lighting.
+Generated via Copilot from the Indigo Variant art-direction brief (full brief in `noctis-os/SPEC.md` → Design Brief section). Verdict: strong match — flat color blocks, no gradients within any shape, correct indigo-to-violet sky, sparse asymmetric stars, full-width cloud coverage with no horizon gaps, ambient-only lighting. File is `world-backdrop.jpeg` (renamed 2026-07-20 from its original export filename so the frontend can reference it as a stable URL).
 
 ## Footing spots (locked 2026-07-19)
 
