@@ -17,15 +17,15 @@ MODE_CHARACTER = {
     "nightshift": "Echo",
 }
 
-# Approximate hex per the named palette locked in wiki/Noctis OS/Modes.md
-# (warm red / gold / purple / burnt orange / deep navy) — placeholder until
-# the character asset pass locks exact hex values; swap in place then.
+# Sampled directly from assets/characters/<name>.png's dominant fill color
+# (see that folder's README) — still interim until the grid-data/PIL render
+# pipeline locks exact production values, but real, not guessed.
 CHARACTER_HEX = {
-    "dev": "#C0392B",
-    "learn": "#D4AC0D",
-    "research": "#8E44AD",
-    "settings": "#CA6F1E",
-    "nightshift": "#1B2A4A",
+    "dev": "#E53311",
+    "learn": "#ECA207",
+    "research": "#953EAD",
+    "settings": "#DA5B00",
+    "nightshift": "#293187",
 }
 
 NONDEV_CONFIG_DIR = Path(__file__).parent / "launch_config" / "nondev"

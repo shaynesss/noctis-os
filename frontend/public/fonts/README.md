@@ -1,0 +1,1 @@
+Press Start 2P (Cody "CodeMan38" Boisclair, SIL OFL 1.1) and JetBrains Mono (JetBrains, Apache 2.0) — both locked in the Design Brief (`SPEC.md`). Self-hosted here rather than linked from Google Fonts so the app has zero runtime network dependency, consistent with this project's local-only scope.
