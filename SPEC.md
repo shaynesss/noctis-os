@@ -123,20 +123,21 @@ The interface can only render what's structured. Per mode:
 - **Read path:** the launcher preloads it alongside the methodology file and working context.
 - **Consumption:** Custos scans `modes/*/lessons.md` during its Audit stage, drafts proposed methodology diffs with specific lesson entries cited as evidence, stages them in the inbox. Settings mode keeps its own lessons file at `modes/settings/lessons.md` — recursive, deliberately.
 - **Guardrail unchanged:** lessons accumulate freely; methodology only changes via this staged, human-gated path.
+- **Inbox proposal format (added 2026-07-20 — was underspecified: "cites evidence" didn't say where the evidence or the diff itself actually live).** Each staged item is indexed in `modes/nightshift/state.md`'s `inbox` array (`slug`, `origin_mode`, `description`, `rationale`, `confidence`, `staged_at`) with full content in `modes/nightshift/inbox/<slug>.md` — see that folder's `README.md` for the exact three-part shape (plain-language rationale, the diff, cited evidence). The `rationale` field is mandatory: a proposal is not staged until it has a plain-English "what changes and why" line, not just a diff plus a citation Shayne would otherwise have to go read to understand.
 
 ### Session launch surfaces, per mode
 
-- **Learn, Research, Settings, Nightshift → macOS Terminal.app.** Launcher opens a new Terminal.app window via `osascript`, sets background to a darkened/desaturated version of the character's locked hex (HSL lightness ~15-20%, hue preserved), sets window title to `{character} — {mode} — {current job/topic}`. Terminal.app has no separate "border" — window chrome is OS-drawn — so background tint is the real equivalent of the original colored-border idea.
-- **Dev → VS Code**, via Claude Code's VS Code extension. Two-step launch: `code <project-path>` first, then `open "vscode://anthropic.claude-code/open?prompt=<url-encoded methodology+context>"`.
+- **Learn, Research, Settings, Nightshift → macOS Terminal.app.** Launcher opens a new Terminal.app window via `osascript`, sets background to a darkened/desaturated version of the character's locked hex (HSL lightness ~15-20%, hue preserved), sets window title to `{character} — {mode} — {current job/topic}`. Terminal.app has no separate "border" — window chrome is OS-drawn — so background tint is the real equivalent of the original colored-border idea. **The `claude` invocation for these four is launched with `CLAUDE_CONFIG_DIR` set to `noctis-os/backend/launch_config/nondev/`** — see "Mode files + CLAUDE.md migration" above — so these sessions get a minimal universal CLAUDE.md instead of Dev's full methodology.
+- **Dev → VS Code**, via Claude Code's VS Code extension. Two-step launch: `code <project-path>` first, then `open "vscode://anthropic.claude-code/open?prompt=<url-encoded methodology+context>"`. No `CLAUDE_CONFIG_DIR` override — Dev wants the default `~/.claude/CLAUDE.md` → `modes/dev/dev.md`, and the VS Code extension doesn't respect the env var regardless.
 - **VS Code localhost preview** — `workbench.browser.openLocalhostLinks`, a global VS Code user setting (not per-repo), routes localhost links into VS Code's Integrated Browser. One-time manual step in `SETUP.md`.
 
 ### Mode files + CLAUDE.md migration
 
 - Mode folders live at `second-brain/modes/<name>/` (dev, learn, research, settings, nightshift) — methodology (`<name>.md`), lessons (`lessons.md`), state (`state.md`), jobs (`jobs/<slug>/context.md`), agents (`agents/*.md`).
 - `build-spine.md` **becomes** `modes/dev/dev.md`.
-- `~/.claude/CLAUDE.md` shrinks to universal rules only; the launcher injects the active mode's methodology per session. **Exact residue contents not yet decided — see Open Questions.**
 - Sequenced as the first build milestone: **mode folders (methodology + lessons + state + agents) → backend → frontend tracker → telemetry → nightshift.**
-- **Mode folders: done (2026-07-20).** All five `second-brain/modes/<name>/` folders built: methodology file, `lessons.md`, `state.md` (seeded with the locked frontmatter contract per mode), `jobs/` (empty, ready for real jobs), `agents/*.md` (all seven v1 subagent stubs). `build-spine.md` retired; `~/.claude/CLAUDE.md` symlinks directly to `modes/dev/dev.md`. Next: backend.
+- **Mode folders: done (2026-07-20).** All five `second-brain/modes/<name>/` folders built: methodology file, `lessons.md`, `state.md` (seeded with the locked frontmatter contract per mode), `jobs/` (empty, ready for real jobs), `agents/*.md` (all seven v1 subagent stubs). `build-spine.md` retired; `~/.claude/CLAUDE.md` symlinks directly to `modes/dev/dev.md`.
+- **`~/.claude/CLAUDE.md` residue — fully resolved (2026-07-20, second pass).** The symlink stays pointed at `modes/dev/dev.md` unchanged — correct for Dev-mode launches and any ad hoc terminal `claude` use in Shayne's other projects, since those are all dev-mode work. For Learn/Research/Settings/Nightshift launches specifically, the launcher sets the `CLAUDE_CONFIG_DIR` environment variable (undocumented by Anthropic but confirmed CLI-respected — redirects which directory Claude Code reads its config/CLAUDE.md from) to `noctis-os/backend/launch_config/nondev/`, which holds a minimal universal-rules-only `CLAUDE.md` (vault write discipline, communication style, session-close lessons-append reminder — nothing dev-specific). Per-process env var, so it's safe under the locked parallel-sessions requirement (no shared-file race, unlike the alternative of renaming the real file in and out). Known limitation: the VS Code extension doesn't respect `CLAUDE_CONFIG_DIR` — irrelevant here since Dev launches via VS Code and wants the global file anyway; only the four Terminal.app/CLI launches need the override, and the CLI does respect it.
 
 ### Version control workflow
 
@@ -220,9 +221,9 @@ Claude Code CLI, the Claude Code VS Code extension, PIL, a Python frontmatter/YA
 These are correctly undecided — not gaps to silently fill, decisions for Shayne to close when ready:
 
 1. **Interface sub-name** — Deck / Bridge / Console / none.
-2. **Noctis-as-MCP-server's concrete trigger** — parked, no trigger condition named yet beyond "a session needs OS state and can't get it cleanly through files."
-
-**Resolved 2026-07-20:** Exact residue of `~/.claude/CLAUDE.md` — decided as no separate generic spine at all. `build-spine.md` moved entirely into `modes/dev/dev.md`; the symlink retargets there directly. `modes/dev/dev.md` is now the one universal dev methodology for every project, not just Noctis OS.
+2. ~~Exact residue of `~/.claude/CLAUDE.md` once the dev process moves out to `modes/dev/dev.md`.~~ **Resolved 2026-07-20** — see "Mode files + CLAUDE.md migration" (`CLAUDE_CONFIG_DIR` override for non-dev launches, minimal universal file at `noctis-os/backend/launch_config/nondev/CLAUDE.md`).
+3. **Noctis-as-MCP-server's concrete trigger** — parked, no trigger condition named yet beyond "a session needs OS state and can't get it cleanly through files."
+4. **Nightshift's scheduler mechanism** (cron+headless / Cowork bridge / launchd) — EDD-time decision.
 
 ---
 
