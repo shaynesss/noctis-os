@@ -1,31 +1,51 @@
 # CLAUDE.md — Noctis OS project overrides
 
-Universal process (Phase 1-4, ship gate, Confusion Protocol, standing rules) is already active globally via `~/.claude/CLAUDE.md` → `build-spine.md`. This file adds only what's specific to *this* project — not a copy of the spine itself, to avoid recreating the two-copy drift the global symlink exists to prevent.
+Universal process is already active globally via `~/.claude/CLAUDE.md` → `build-spine.md`. This file adds only what's specific to *this* project.
 
-Full spec, with reasoning: `noctis-os/SPEC.md`. If anything here and `SPEC.md` disagree, `SPEC.md` wins — this file is a quick-reference, not the source of truth.
+Full spec, with reasoning: `noctis-os/SPEC.md`. If anything here and `SPEC.md` disagree, `SPEC.md` wins. **If a decision gets made about this project anywhere other than in a file both of these read, it doesn't count — write it here or in SPEC.md immediately, not after the fact.** As of 2026-07-20, this includes checking the *wiki* too — several locked decisions sat in the vault for a day without ever reaching `SPEC.md`. Both directions need checking, not just chat-vs-file.
 
 ## Stack
 
-FastAPI (stateless, no ORM, no migrations) + React/Vite. Vault (`second-brain/`) is the sole database — every backend endpoint reads/writes it directly on disk, no MCP dependency for the backend itself.
+FastAPI (stateless, no ORM, no migrations) + React/Vite. Vault (`second-brain/`) is the sole database.
+
+## Dependencies are derived from SPEC.md, never hardcoded
+
+Phase 2 setup installs exactly what `SPEC.md`'s Stack + Design Brief sections declare, plus globally-always-on tools (Impeccable). No shadcn currently — because it isn't declared, not because it's banned. If a future need arises, add it to `SPEC.md` explicitly.
+
+## Version control
+
+Commit as work progresses. Shayne pushes manually. (Matches Portfolio Platform, not Articulation Loop's fully-manual-commits rule.)
+
+## Mode folder structure — every mode is a folder, not a flat file
+
+`second-brain/modes/<name>/` contains:
+- `<name>.md` — methodology (the mode file itself)
+- `lessons.md` — accumulating retros, appended freely at session close, no gate
+- `state.md` — the interface's actual read target for ambient cards (current jobs + statuses as frontmatter)
+- `jobs/<slug>/context.md` — per-job durable state (stage/track/status frontmatter + prose)
+- `agents/*.md` — this mode's subagent definitions
+
+Hook-driven action-feed logs (high-churn, ephemeral) are **not** vault content — they live in `noctis-os/backend/runtime/`, gitignored.
 
 ## Hard constraints, every session
 
-- **No secrets in vault writes.** Job contexts and lessons entries included. `.env` stays local, never committed, never mirrored into the vault.
-- **Backend auth is mandatory.** Every route needs bearer-token auth + Origin checking — localhost binding alone is not sufficient. Never pass skip-permissions flags for interactive sessions.
-- **`assets/characters/`** is the sole source of truth for sprite grid data + render script + generated PNGs. Never duplicate grid data into `frontend/src`.
-- **`assets/world/`** is the sole source of truth for the background plate + footing coordinates. Same rule.
-- **Model routing is Claude-family only in v1** (`--model` flag, per-mode default + per-job override). No cross-vendor routing — see `wiki/Agent Harnesses.md` for why a model being *available* (e.g. Kimi K3) doesn't make it a safe swap.
-- **Shared vault files (`log.md`, `index.md`) go through a single serialized writer** in the backend — never write these directly from multiple sessions in parallel.
-- **Sessions run in parallel across modes, not within one job.** A mode is methodology + view focus, not an execution lock.
+- **No secrets in vault writes**, ever.
+- **Backend auth is mandatory** — bearer-token + Origin checking on every route.
+- **`assets/characters/`** and **`assets/world/`** are sole sources of truth — never duplicated into `frontend/src`.
+- **Model routing: Claude-family only in v1.** See `wiki/Agent Harnesses.md` for why availability ≠ safety.
+- **`log.md`/`index.md` go through a single serialized writer.** Per-mode lessons/state/job files don't need this — one writer-type each.
+- **Sessions run in parallel across modes, not within one job.**
+- **No mode ever rewrites its own or another mode's live methodology file** — lessons accumulate freely, methodology only changes through Custos's staged, evidence-backed diffs.
+- **Deterministic-where-possible:** date math, staleness checks, health checks, git commits are backend code, never left to session judgment.
 
 ## Build order (locked)
 
-git for the vault (done) → mode files (`second-brain/modes/<name>.md`, `build-spine.md` → `modes/dev.md`) → backend → frontend tracker → telemetry → nightshift.
+git for the vault (done) → mode folders (methodology + lessons + state + agents) → backend → frontend tracker → telemetry → nightshift.
 
 ## Design tooling (Phase 2, once frontend is scaffolded)
 
-Run the standard kickoff sequence from `wiki/Tooling Decisions.md`'s "Phase 2 kickoff prompt" (Tailwind wiring, path alias, `shadcn init --preset bd1gAd4y --force`, `.mcp.json` for shadcn MCP, `/impeccable init`). Component sourcing beyond that: personal 21st.dev Library first, public shadcn registry second, hand-build anything that fights the pixel-art/world aesthetic.
+Tailwind wiring + path alias. `/impeccable init`, register as **Product** (not Brand). No shadcn step.
 
-## Launch surfaces (don't build a live PTY wrapper)
+## Launch surfaces
 
-Learn/Research/Settings/Nightshift open macOS Terminal.app (background tinted per character, via `osascript`). Dev opens VS Code (`code <path>` then the Claude Code extension's URI handler). The interface is fire-and-forget — it launches a session and reads back state via hooks/job-context files, it never tries to watch or control a running session live. Full detail: `wiki/Noctis OS/Interface.md`.
+Learn/Research/Settings/Nightshift → Terminal.app (tinted per character). Dev → VS Code. Fire-and-forget — the interface launches and reads back state via hooks/state files, never watches or controls a running session live. Full detail: `wiki/Noctis OS/Interface.md`.

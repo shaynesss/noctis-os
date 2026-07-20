@@ -4,23 +4,37 @@ Last updated: 2026-07-20
 
 ## Current state
 
-Phase 1 fully closed (Definition/PRD/EDD/Design Brief locked). Phase 2 setup starting: `.env.example` and project `CLAUDE.md` written. Repo scaffolding, GitHub repo creation, and dependency installs still need a Claude Code session — nothing in this list requires shell execution I can't do from here has been skipped, it's queued for that session.
+Phase 1 and Phase 2 both complete. Repo scaffolded, backend/frontend running, `make setup`/`make dev` verified. Three local commits, nothing pushed (manual push, per this project's git workflow). Next real work is Phase 3 — building out the mode folders.
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 
 - Five-mode architecture, harness framing, stateless FastAPI + React/Vite + direct vault filesystem access
-- Profile overlay card system (per-mode content, idle states, typography, animation) — see Interface.md
-- World backdrop (peak-dusk cloud bed) + character sprite sheet — both delivered as real assets in `assets/`
-- Session launch surfaces: Terminal.app (tinted per character) for four modes, VS Code for Dev
-- Git for the vault — done
+- Full mode-folder structure: `second-brain/modes/<name>/{<name>.md, lessons.md, state.md, jobs/, agents/}`
+- Profile overlay card system, world backdrop, character sprite sheet — all delivered as real assets
+- Session launch surfaces (Terminal.app tinted / VS Code for Dev), spec-completeness audit as a Custos capability
+- Git for the vault, git for this repo — both done
+
+## Done this pass (Phase 2)
+
+- GitHub repo created (`shaynesss/noctis-os`, private)
+- Backend: `main.py`, `routers/{mode,session,nightshift}.py`, `vault_io.py`, `requirements.txt` — auth is a TODO marker, not yet implemented
+- Frontend: Vite + React/TS, Tailwind wired and verified, `@` alias, `World.tsx`/`ProfileOverlay.tsx` stubs — no shadcn (initialized then removed per the mid-session correction, confirmed clean rebuild)
+- `/impeccable init` run, `PRODUCT.md` written, registered Product
+- `Makefile` (`setup`/`dev`) — `make setup` timed ~10.5s warm-cache, `make dev` smoke-tested live
+- `SETUP.md` — three-bucket checklist
+- No secrets tracked
+
+## Known issue
+
+`.env.example`'s `VAULT_PATH` has the wrong home directory — my error, not Claude Code's. One-line manual fix needed (`sed` command given), couldn't be fixed from Desktop due to a dotfile-indexing limitation in the vault connector.
 
 ## Not started
 
-- Phase 2 repo scaffolding (backend/frontend folder structure, GitHub repo, Makefile, dependency installs) — next Claude Code session
-- Mode files (`second-brain/modes/<name>.md`) — first real build milestone once Phase 2 setup completes
-- Composite scale test (sprite vs. background at real size) and two minor background touch-ups (stray artifact, star-shape consistency)
-- Custos's trigger thresholds (backend logic, not blocking)
+- Phase 3: actual mode-folder build-out (`second-brain/modes/<name>/` per mode — methodology, lessons, state, jobs, agents)
+- Backend auth implementation (currently a TODO)
+- Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
+- Custos's trigger thresholds (backend logic)
 
 ## Blocking
 
-Nothing. Ready for a Claude Code session to run Phase 2 setup.
+Nothing. Ready to start Phase 3.
