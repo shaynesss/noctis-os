@@ -16,5 +16,13 @@ dist-ssr/
 # Impeccable live-mode runtime journal (local recovery state, not project source)
 .impeccable/live/sessions/
 
+# Claude Code's own runtime state accumulates here once this dir is used as
+# CLAUDE_CONFIG_DIR for a non-dev launch (see session.py) -- only CLAUDE.md
+# is source, everything else is generated session/cache state.
+backend/launch_config/nondev/.claude.json
+backend/launch_config/nondev/backups/
+backend/launch_config/nondev/cache/
+backend/launch_config/nondev/settings.json
+
 # OS
 .DS_Store
