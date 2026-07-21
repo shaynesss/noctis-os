@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import {
   acceptInboxItem,
   getInbox,
+  getJobLog,
   getModeState,
   launchSession,
   rejectInboxItem,
@@ -108,12 +109,40 @@ function FaberBody({ state }: { state: ModeState }) {
           <div>
             <span className="name">{job.name}</span>
             <span className="job-status">{job.status}</span>
+            <ActionFeedLine mode="dev" slug={job.slug} />
           </div>
           <span className="phase-badge">{job.stage}</span>
         </div>
       ))}
     </>
   )
+}
+
+// Polls this job's runtime action log (backend/hooks/log_action.py, one
+// line per tool call) and shows the most recent line — a live pulse under
+// the job row rather than a full feed, to hold the card's fixed height.
+function ActionFeedLine({ mode, slug }: { mode: Mode; slug: string }) {
+  const [lastLine, setLastLine] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const poll = () => {
+      getJobLog(mode, slug, 1)
+        .then(({ lines }) => {
+          if (!cancelled) setLastLine(lines[0] ?? null)
+        })
+        .catch(() => {})
+    }
+    poll()
+    const interval = setInterval(poll, 5000)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [mode, slug])
+
+  if (!lastLine) return null
+  return <span className="action-feed-line">{lastLine}</span>
 }
 
 function NoctuaBody({ state }: { state: ModeState }) {

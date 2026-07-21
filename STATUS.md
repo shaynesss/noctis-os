@@ -1,10 +1,10 @@
 # STATUS.md
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 ## Current state
 
-Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` verified. Pushed to `origin/main`. Phase 3 underway — mode-folder build-out, backend, and frontend tracker milestones all done and smoke-tested live in a browser; telemetry hooks and nightshift infra are next.
+Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` verified. Pushed to `origin/main`. Phase 3 underway — mode-folder build-out, backend, frontend tracker, and telemetry hooks milestones all done and smoke-tested live; nightshift infra is next.
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 
@@ -49,9 +49,19 @@ Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` veri
 - **Smoke-tested live**: both dev servers started, driven with a headless Playwright browser (no `chromium-cli` in this environment), screenshotted the world and multiple profile overlays with real seeded backend data. Caught a real bug this way — missing CORS middleware was silently blocking every frontend fetch — fixed with two regression tests added to the backend suite (now 25 passing)
 - A visual mockup of the world screen was also produced as a shareable Artifact before wiring, using the same real assets
 
+## Done this pass (Phase 3, telemetry hooks milestone)
+
+- `backend/hooks/log_action.py` — Claude Code PostToolUse hook, appends one action line (timestamp, tool name, short summary) per tool call to `backend/runtime/<mode>__<job>.log`. Job identity via `NOCTIS_MODE`/`NOCTIS_JOB_ID` env vars for Terminal.app launches (exported per-window, so concurrent nondev sessions never race on a shared settings file), or `--mode`/`--job-id` baked into the hook command for Dev/VS Code launches (whose URI-handler launch doesn't carry shell env)
+- `launch_surfaces.py`: `_merge_hook()` idempotently registers the hook in a session's `settings.json` without clobbering Claude Code's own generated keys (theme, etc.) — nondev sessions get a static env-var-driven hook in `launch_config/nondev/settings.json`, Dev sessions get a per-project baked-args hook in `<project_path>/.claude/settings.local.json`
+- `PATCH /mode/{name}/jobs/{slug}` — rewrites a job's `context.md` frontmatter at stage/track transitions (stage/status/track + `last_touched`) and syncs the mirrored entry in the mode's `state.md`
+- `GET /mode/{name}/jobs/{slug}/log` — tailed read of a job's runtime log, the interface's poll target
+- `ProfileOverlay.tsx`'s Faber job rows poll the log every 5s and show the most recent action line under the job's status (fixed-height card preserved — one line, not a full feed)
+- 14 new pytest tests (hook script, launch-surface hook merging, new mode-router endpoints) — 37 passing total
+- Smoke-tested live: real backend run, seeded a job, PATCHed its stage, piped a fake tool-call through the hook script, confirmed the log endpoint and synced `state.md` both reflected it, then cleaned the vault back to its pre-test state
+
 ## Not started
 
-- Telemetry hooks (Claude Code session action-feed), nightshift infra (launchd scheduler)
+- Nightshift infra (launchd scheduler)
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
 - Custos's trigger thresholds (backend logic)
 - Mode-specific proposal apply logic for nightshift's accept flow (currently archives only)
@@ -59,4 +69,4 @@ Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` veri
 
 ## Blocking
 
-Nothing. Mode folders, backend, and frontend tracker all done and verified live. Ready for telemetry hooks / nightshift infra.
+Nothing. Mode folders, backend, frontend tracker, and telemetry hooks all done and verified live. Ready for nightshift infra.

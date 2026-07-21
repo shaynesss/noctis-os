@@ -11,14 +11,16 @@ def test_nondev_launch_opens_terminal(client, auth_headers, vault, monkeypatch):
     monkeypatch.setattr(
         launch_surfaces,
         "launch_terminal",
-        lambda mode, job_label, prompt, model=None: calls.append((mode, job_label, model)),
+        lambda mode, job_label, prompt, job_slug=None, model=None: calls.append(
+            (mode, job_label, job_slug, model)
+        ),
     )
 
     response = client.post("/session/launch", json={"mode": "learn"}, headers=auth_headers)
 
     assert response.status_code == 200
     assert response.json() == {"launched": True, "mode": "learn", "surface": "terminal"}
-    assert calls == [("learn", "no active job", None)]
+    assert calls == [("learn", "no active job", None, None)]
 
 
 def test_dev_launch_requires_project_path(client, auth_headers, vault):
@@ -37,7 +39,9 @@ def test_dev_launch_opens_vscode(client, auth_headers, vault, monkeypatch):
     monkeypatch.setattr(
         launch_surfaces,
         "launch_dev",
-        lambda project_path, prompt, model=None: calls.append((project_path, model)),
+        lambda project_path, prompt, job_slug=None, model=None: calls.append(
+            (project_path, job_slug, model)
+        ),
     )
 
     response = client.post(
@@ -48,4 +52,4 @@ def test_dev_launch_opens_vscode(client, auth_headers, vault, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["surface"] == "vscode"
-    assert calls == [("/tmp/noctis-os", "claude-opus-4-8")]
+    assert calls == [("/tmp/noctis-os", "noctis-build", "claude-opus-4-8")]
