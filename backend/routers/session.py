@@ -56,4 +56,14 @@ def launch_session(request: LaunchRequest):
         )
         surface = "terminal"
 
+    # Nothing in the system ever set this -- found live when launching
+    # Noctua's session didn't update its card at all. Setting it true is
+    # deterministic (the backend just performed the launch, no need to
+    # infer it); clearing it back to false on the other end is the Stop
+    # hook's job (mark_session_end.py), since that's the point that
+    # actually knows the session ended.
+    state, content = vault_io.read_frontmatter(f"modes/{request.mode}/state.md")
+    state["busy"] = True
+    vault_io.write_frontmatter(f"modes/{request.mode}/state.md", state, content)
+
     return {"launched": True, "mode": request.mode, "surface": surface}

@@ -39,8 +39,13 @@ def test_merge_hook_replaces_stale_entry_for_same_script(tmp_path):
     accumulate alongside it -- otherwise the old job's hook keeps firing on
     every future session in that project (2026-07-21 ship-gate finding)."""
     settings_path = tmp_path / "settings.json"
-    old_command = f"python3 {HOOK_SCRIPT} --mode dev --job-id old-job"
-    new_command = f"python3 {HOOK_SCRIPT} --mode dev --job-id new-job"
+    # _merge_hook's replace-by-script-identity match is keyed on
+    # PYTHON_BIN + script_path, not a literal "python3" prefix (launch
+    # commands invoke the venv's own interpreter, not whatever's on PATH
+    # in the launched shell -- see launch_surfaces.PYTHON_BIN).
+    prefix = f"{launch_surfaces.PYTHON_BIN} {HOOK_SCRIPT}"
+    old_command = f"{prefix} --mode dev --job-id old-job"
+    new_command = f"{prefix} --mode dev --job-id new-job"
 
     launch_surfaces._merge_hook(settings_path, "PostToolUse", old_command, HOOK_SCRIPT)
     launch_surfaces._merge_hook(settings_path, "PostToolUse", new_command, HOOK_SCRIPT)

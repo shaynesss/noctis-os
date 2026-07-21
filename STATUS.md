@@ -151,6 +151,13 @@ Researched alternatives rather than defaulting to Tauri: compared pywebview, Tau
 - **Flagged jobs could never be un-flagged.** Found live: `noctis-os`'s own job was showing `FLAGGED` on Faber's card because `last_touched` hadn't moved since an early PATCH and the 6-hour staleness threshold had passed — a real, honest consequence of this whole session's work happening through direct file edits rather than the app's own launch-a-session flow, which is the only thing the telemetry hooks can observe. Real behavior, not a bug, but exposed a real gap: `staleness.py` can set `flagged`, nothing could clear it. `JobUpdate` gained a `flagged` field; `handleResumeJob` (World.tsx) now clears it before launching, since resuming is the natural point a flagged job gets addressed. Verified live against the real running job via the API — flag cleared, `last_touched` refreshed.
 - 1 new test (flag-clearing), 88 passing total.
 
+## Done this pass (busy indicator actually works now; world fills the window)
+
+- **Nothing ever set `busy`, for any mode.** Found live: launching Noctua's session didn't update its card at all. Grepped the whole backend — zero writes to `busy` anywhere, ever; it was a schema field with no writer. `POST /session/launch` now sets it `true` deterministically (the backend just performed the launch); `mark_session_end.py` (the existing Stop hook) now also clears it `false` on a clean session exit, alongside its existing SESSION_END sentinel work.
+- That required fixing how hooks are invoked: they ran under bare `python3` (whatever's on PATH in the launched shell), fine while they were stdlib-only, but `mark_session_end.py` now needs `vault_io` (→ `python-frontmatter`). `launch_surfaces.py` now invokes hooks with the venv's own interpreter explicitly (`PYTHON_BIN`).
+- **World now always fills the window, no letterboxing — third pass on this.** `.world` is `100vw`/`100vh` with the backdrop stretched (`background-size: 100% 100%`) instead of the fixed 1376×768 canvas from the previous pass, which letterboxed on any window that wasn't exactly that size. Sprite sizing stays on `cqw` (container query units) so it can never drift from the background regardless of window shape — verified numerically (`.world`'s bounding box exactly equals the viewport at two very different window shapes) and visually (no bars, sprites correctly footed, acceptable minor stretch on the tall shape).
+- 2 new/updated tests (busy-set-on-launch, busy-cleared-on-session-end), 89 passing total.
+
 ## Not started
 
 - Sprite sheet split into individual per-character assets (distinct from the expression extraction above — this is about the *idle* sprites' own source format)
