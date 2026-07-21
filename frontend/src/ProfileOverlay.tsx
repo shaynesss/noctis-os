@@ -57,7 +57,9 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
         style={{ ['--accent' as string]: `var(${meta.accentVar})` }}
       >
         <div className="header">
-          <h2>{meta.name.toUpperCase()}</h2>
+          <h2>
+            <Typewriter text={meta.name.toUpperCase()} />
+          </h2>
           <button type="button" className="close" aria-label="Close" onClick={onClose}>
             &times;
           </button>
@@ -97,18 +99,29 @@ function renderBody(
   }
 }
 
+const BODY_START_DELAY_MS = 150
+const LINE_STAGGER_MS = 220
+
 function FaberBody({ state }: { state: ModeState }) {
   const jobs = state.jobs ?? []
   if (jobs.length === 0) {
-    return <p className="idle-note">no dams under construction. the pond is calm.</p>
+    return (
+      <p className="idle-note">
+        <Typewriter text="no dams under construction. the pond is calm." startDelayMs={BODY_START_DELAY_MS} />
+      </p>
+    )
   }
   return (
     <>
-      {jobs.map((job) => (
+      {jobs.map((job, i) => (
         <div className="job-row" key={job.slug}>
           <div>
-            <span className="name">{job.name}</span>
-            <span className="job-status">{job.status}</span>
+            <span className="name">
+              <Typewriter text={job.name} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS} />
+            </span>
+            <span className="job-status">
+              <Typewriter text={job.status} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS + 80} />
+            </span>
             <ActionFeedLine mode="dev" slug={job.slug} />
           </div>
           <span className="phase-badge">{job.stage}</span>
@@ -116,6 +129,46 @@ function FaberBody({ state }: { state: ModeState }) {
       ))}
     </>
   )
+}
+
+// The locked entrance style from card-design mockup iteration (Interface.md
+// "typewriter reveal... won out over three other animation styles"): card
+// *content* types in character by character, not just the card container
+// fading/scaling in. speedMs is per-character; startDelayMs staggers
+// multiple lines so they type in sequence rather than all at once.
+function Typewriter({
+  text,
+  speedMs = 16,
+  startDelayMs = 0,
+}: {
+  text: string
+  speedMs?: number
+  startDelayMs?: number
+}) {
+  const [count, setCount] = useState(0)
+
+  useEffect(() => {
+    setCount(0)
+    if (!text) return
+    let interval: ReturnType<typeof setInterval> | undefined
+    const timeout = setTimeout(() => {
+      interval = setInterval(() => {
+        setCount((c) => {
+          if (c >= text.length) {
+            if (interval) clearInterval(interval)
+            return c
+          }
+          return c + 1
+        })
+      }, speedMs)
+    }, startDelayMs)
+    return () => {
+      clearTimeout(timeout)
+      if (interval) clearInterval(interval)
+    }
+  }, [text, speedMs, startDelayMs])
+
+  return <>{text.slice(0, count)}</>
 }
 
 // Polls this job's runtime action log (backend/hooks/log_action.py, one
@@ -153,12 +206,18 @@ function NoctuaBody({ state }: { state: ModeState }) {
     <div className="stat-blocks">
       <div className="stat-block">
         <span className="stat-label">DEEP</span>
-        <span className="stat-main">{deepDue} due</span>
-        <span className="stat-sub">{deepRetained} retained</span>
+        <span className="stat-main">
+          <Typewriter text={`${deepDue} due`} startDelayMs={BODY_START_DELAY_MS} />
+        </span>
+        <span className="stat-sub">
+          <Typewriter text={`${deepRetained} retained`} startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS} />
+        </span>
       </div>
       <div className="stat-block">
         <span className="stat-label">SHALLOW</span>
-        <span className="stat-main">{shallowDone} done</span>
+        <span className="stat-main">
+          <Typewriter text={`${shallowDone} done`} startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS * 2} />
+        </span>
       </div>
     </div>
   )
@@ -167,23 +226,41 @@ function NoctuaBody({ state }: { state: ModeState }) {
 function VesperBody({ state }: { state: ModeState }) {
   const adopt = (state.adopt_counts as Record<string, number> | undefined) ?? {}
   const inquiry = (state.inquiry_counts as Record<string, number> | undefined) ?? {}
+  const adoptBadges = [
+    { cls: 'good', text: `adopt ${adopt.adopt ?? 0}` },
+    { cls: 'bad', text: `reject ${adopt.reject ?? 0}` },
+    { cls: 'neutral', text: `park ${adopt.park ?? 0}` },
+  ]
+  const inquiryBadges = [
+    { cls: 'good', text: `sound ${inquiry.sound ?? 0}` },
+    { cls: 'good', text: `promising ${inquiry.promising ?? 0}` },
+    { cls: 'bad', text: `weak ${inquiry.weak ?? 0}` },
+    { cls: 'bad', text: `hype ${inquiry.hype ?? 0}` },
+  ]
   return (
     <div className="stat-blocks">
       <div className="stat-block">
         <span className="stat-label">ADOPT</span>
         <div className="verdict-badges">
-          <span className="verdict good">adopt {adopt.adopt ?? 0}</span>
-          <span className="verdict bad">reject {adopt.reject ?? 0}</span>
-          <span className="verdict neutral">park {adopt.park ?? 0}</span>
+          {adoptBadges.map((badge, i) => (
+            <span className={`verdict ${badge.cls}`} key={badge.text}>
+              <Typewriter text={badge.text} startDelayMs={BODY_START_DELAY_MS + i * 90} speedMs={10} />
+            </span>
+          ))}
         </div>
       </div>
       <div className="stat-block">
         <span className="stat-label">INQUIRY</span>
         <div className="verdict-badges">
-          <span className="verdict good">sound {inquiry.sound ?? 0}</span>
-          <span className="verdict good">promising {inquiry.promising ?? 0}</span>
-          <span className="verdict bad">weak {inquiry.weak ?? 0}</span>
-          <span className="verdict bad">hype {inquiry.hype ?? 0}</span>
+          {inquiryBadges.map((badge, i) => (
+            <span className={`verdict ${badge.cls}`} key={badge.text}>
+              <Typewriter
+                text={badge.text}
+                startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS + i * 90}
+                speedMs={10}
+              />
+            </span>
+          ))}
         </div>
       </div>
     </div>
@@ -195,20 +272,26 @@ function CustosBody({ state }: { state: ModeState }) {
   const diffsAwaiting = typeof state.diffs_awaiting_review === 'number' ? state.diffs_awaiting_review : 0
   const hasTriggers = triggers.friction || triggers.accumulation || triggers.suspicion
   if (!hasTriggers && diffsAwaiting === 0) {
-    return <p className="idle-note">nothing to tend. the sett holds.</p>
+    return (
+      <p className="idle-note">
+        <Typewriter text="nothing to tend. the sett holds." startDelayMs={BODY_START_DELAY_MS} />
+      </p>
+    )
   }
   return (
     <>
       <div className="trigger-list">
-        {(['friction', 'accumulation', 'suspicion'] as const).map((trigger) => (
+        {(['friction', 'accumulation', 'suspicion'] as const).map((trigger, i) => (
           <span key={trigger} className={`trigger-badge${triggers[trigger] ? ' lit' : ''}`}>
-            {trigger}
+            <Typewriter text={trigger} startDelayMs={BODY_START_DELAY_MS + i * 90} speedMs={10} />
           </span>
         ))}
       </div>
       <div className="stat-block">
         <span className="stat-label">DIFFS AWAITING REVIEW</span>
-        <span className="stat-main">{diffsAwaiting}</span>
+        <span className="stat-main">
+          <Typewriter text={String(diffsAwaiting)} startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS} />
+        </span>
       </div>
     </>
   )
@@ -222,11 +305,15 @@ function EchoBody({
   onDecision: (itemId: string, decision: 'accept' | 'reject') => void
 }) {
   if (inbox.length === 0) {
-    return <p className="idle-note">inbox empty.</p>
+    return (
+      <p className="idle-note">
+        <Typewriter text="inbox empty." startDelayMs={BODY_START_DELAY_MS} />
+      </p>
+    )
   }
   return (
     <>
-      {inbox.map((item) => (
+      {inbox.map((item, i) => (
         <div className="inbox-row" key={item.slug}>
           <span
             className="origin-tag"
@@ -235,8 +322,13 @@ function EchoBody({
             {MODE_META[item.origin_mode].name}
           </span>
           <span className="inbox-desc">
-            {item.description}
-            <span className="inbox-rationale">{item.rationale}</span>
+            <Typewriter text={item.description} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS} />
+            <span className="inbox-rationale">
+              <Typewriter
+                text={item.rationale}
+                startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS + 120}
+              />
+            </span>
           </span>
           {item.confidence && <span className={`confidence ${item.confidence}`}>{item.confidence}</span>}
           <span className="inbox-actions">
