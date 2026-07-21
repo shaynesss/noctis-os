@@ -24,6 +24,7 @@ interface ProfileOverlayProps {
 export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
   const [state, setState] = useState<ModeState | null>(null)
   const [inbox, setInbox] = useState<InboxItem[]>([])
+  const [newBuildOpen, setNewBuildOpen] = useState(false)
 
   useEffect(() => {
     if (!mode) return
@@ -40,7 +41,7 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
   async function handleLaunch() {
     if (!mode) return
     if (mode === 'dev') {
-      await startNewDevBuild()
+      setNewBuildOpen(true)
       return
     }
     await launchSession(mode)
@@ -54,14 +55,10 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
   // Nothing could ever create a job before this -- Faber's card stayed
   // idle regardless of real work happening, since "launch stays available
   // even idle, since that's how a new build starts" (Interface.md) had no
-  // actual mechanism behind it. window.prompt is a placeholder for a real
-  // designed input, not the intended final UI -- it exists so starting a
-  // build is possible at all.
-  async function startNewDevBuild() {
-    const name = window.prompt('New build name?')
-    if (!name) return
-    const projectPath = window.prompt('Project path (absolute)?')
-    if (!projectPath) return
+  // actual mechanism behind it. Replaced the original window.prompt
+  // placeholder with a real designed form (see the new-build-modal render
+  // below and NewBuildModal component).
+  async function submitNewDevBuild(name: string, projectPath: string) {
     const slug = name
       .toLowerCase()
       .trim()
@@ -72,6 +69,7 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
     await createJob('dev', slug, name, projectPath)
     await launchSession('dev', slug)
     setState(await getModeState('dev'))
+    setNewBuildOpen(false)
   }
 
   async function handleDecision(itemId: string, decision: 'accept' | 'reject') {
@@ -124,6 +122,68 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
             </button>
           </div>
         )}
+      </div>
+
+      {newBuildOpen && (
+        <NewBuildModal onCancel={() => setNewBuildOpen(false)} onSubmit={submitNewDevBuild} />
+      )}
+    </>
+  )
+}
+
+function NewBuildModal({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void
+  onSubmit: (name: string, projectPath: string) => void
+}) {
+  const [name, setName] = useState('')
+  const [projectPath, setProjectPath] = useState('')
+  const canSubmit = name.trim().length > 0 && projectPath.trim().length > 0
+
+  return (
+    <>
+      <div className="scrim new-build-scrim" onClick={onCancel} />
+      <div
+        className="new-build-modal"
+        role="dialog"
+        aria-label="Start a new build"
+        style={{ ['--accent' as string]: 'var(--faber)' }}
+      >
+        <h3>NEW BUILD</h3>
+        <label>
+          <span>name</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Noctis OS"
+            autoFocus
+          />
+        </label>
+        <label>
+          <span>project path</span>
+          <input
+            type="text"
+            value={projectPath}
+            onChange={(e) => setProjectPath(e.target.value)}
+            placeholder="/Users/you/Developer/project"
+          />
+        </label>
+        <div className="new-build-actions">
+          <button type="button" className="new-build-cancel" onClick={onCancel}>
+            cancel
+          </button>
+          <button
+            type="button"
+            className="new-build-submit"
+            disabled={!canSubmit}
+            onClick={() => onSubmit(name.trim(), projectPath.trim())}
+          >
+            create &amp; launch
+          </button>
+        </div>
       </div>
     </>
   )
