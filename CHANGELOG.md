@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Custos's trigger thresholds: `backend/triggers.py` computes friction/accumulation/suspicion live on every `GET /mode/settings` poll. Accumulation reuses nightshift's undistilled-lessons cursor; friction is an opt-in `FRICTION:` marker in lessons.md entries (documented in all five modes' lessons files); suspicion is a 7-day state.md staleness check. Resolves the Design Brief's last open item. Verified live end-to-end (2026-07-21)
 - Security: first full ship-gate pass (dev.md's 9-step FINISH checklist) fixed stale README/CHANGELOG, and an 8-angle security-focused review found and fixed real path-traversal (unsanitized job slugs reaching filesystem paths), a hook-accumulation bug that defeated staleness flagging, missing per-item fault isolation in nightshift's run loop, an unlocked concurrent-write race on `state.md`, and an unanchored sentinel string match. `vault_io.py` now enforces path containment on every read/write and exposes `is_safe_slug()` for API-boundary validation. Verified live against the running backend with real attack payloads (2026-07-21)
 - Fix: restore the locked typewriter-reveal entrance for profile-overlay card content — the card container had a fade/scale entrance, but the actual per-character content typing was never built (2026-07-21)
 - Fix: vertically center idle-note text within the profile card body, was top-anchored via margin (2026-07-21)

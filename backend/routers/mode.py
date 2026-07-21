@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 import staleness
+import triggers
 import vault_io
 
 router = APIRouter(prefix="/mode", tags=["mode"])
@@ -33,7 +34,17 @@ def get_mode_state(name: str):
     # state.md is the lightweight index the profile overlay and world ambient
     # badges read — not every job file individually (SPEC.md EDD "State files
     # and the state-schema contract").
-    metadata, _ = vault_io.read_frontmatter(f"modes/{name}/state.md")
+    metadata, content = vault_io.read_frontmatter(f"modes/{name}/state.md")
+
+    if name == "settings":
+        # Same live-on-every-poll pattern as dev's staleness check --
+        # settings.md itself flagged trigger thresholds as an open
+        # backend-logic question until this pass (triggers.py).
+        computed = triggers.compute_triggers()
+        if metadata.get("triggers") != computed:
+            metadata["triggers"] = computed
+            vault_io.write_frontmatter(f"modes/{name}/state.md", metadata, content)
+
     return metadata
 
 

@@ -91,10 +91,15 @@ An 8-angle security-focused code review (3 correctness + 3 cleanup + altitude + 
 
 12 new/updated pytest tests, 69 passing total. All fixes verified live against the running backend, not just unit-tested.
 
+## Done this pass (Custos's trigger thresholds — resolves the last open Design Brief item)
+
+- `backend/triggers.py`: friction/accumulation/suspicion computed live on every `GET /mode/settings` poll, same pattern as `staleness.py`'s dev job flagging. Accumulation reuses nightshift's undistilled-lessons cursor signal exactly (no separate tracking); friction is an opt-in `FRICTION:` marker in a mode's lessons.md text since the last distillation pass (documented in all five modes' `lessons.md`, not inferred from prose — deterministic); suspicion is a 7-day `state.md` mtime staleness check.
+- 6 new pytest tests — 75 passing total. Verified live end-to-end against the running backend: appended a real `FRICTION:`-tagged lessons entry, confirmed both badges lit via the API and a Playwright screenshot of Custos's actual card, then cleaned up and confirmed the badges correctly cleared.
+- Design Brief's last open item (`SPEC.md`: "Custos's trigger thresholds, backend-logic, not blocking") is now resolved.
+
 ## Not started
 
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
-- Custos's trigger thresholds (backend logic)
 - Mode-specific proposal apply logic for nightshift's accept flow (currently archives only) — this now includes advancing the `lessons_distilled_through` cursor on accept, a known follow-up from the nightshift milestone above
 - A real designed "new build" input (name/path) — currently `window.prompt`, a functional placeholder, not the intended final UI
 - Exact character hex palette (now sampled from real sprites rather than guessed, but still interim until the grid-data pass locks final production values)
