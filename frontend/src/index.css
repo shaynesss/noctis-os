@@ -174,15 +174,24 @@ button {
 }
 
 .character .label {
-  margin-top: 6px;
+  margin-top: 8px;
   font-family: var(--font-pixel);
-  font-size: 7px;
-  letter-spacing: 0.06em;
+  font-size: 8px;
+  letter-spacing: 0.05em;
   color: var(--cloud-lt);
-  background: rgba(16, 11, 36, 0.55);
-  padding: 4px 6px;
-  border-radius: 2px;
+  background: rgba(10, 6, 22, 0.82);
+  padding: 5px 7px;
+  border-radius: 3px;
   white-space: nowrap;
+  /* Contrast held up on its own now (darker, more opaque fill) rather
+     than leaning on the text color alone -- was hard to read against the
+     bright cloud background at 55% opacity. */
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.character .sprite-wrap {
+  position: relative;
+  display: inline-flex;
 }
 
 .character .badge {
@@ -204,8 +213,12 @@ button {
 }
 
 .character .state-dot {
+  /* Anchored to the sprite wrapper's own corner now, not the whole
+     character block (image + label stacked) -- it was positioned
+     relative to the full button before, landing near the label's bottom
+     edge and overlapping the pill instead of sitting on the sprite. */
   position: absolute;
-  bottom: 2px;
+  bottom: -2px;
   right: -4px;
   width: 9px;
   height: 9px;

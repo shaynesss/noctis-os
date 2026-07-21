@@ -95,12 +95,14 @@ export default function World({ onSelect, activeMode }: WorldProps) {
             }}
             onClick={() => onSelect(mode)}
           >
-            {badge !== null && badge > 0 && <span className="badge">{badge}</span>}
-            <img src={`/assets/characters/${meta.sprite}.png`} alt={`${meta.name}, ${mode} mode`} />
+            <span className="sprite-wrap">
+              {badge !== null && badge > 0 && <span className="badge">{badge}</span>}
+              <img src={`/assets/characters/${meta.sprite}.png`} alt={`${meta.name}, ${mode} mode`} />
+              <span className="state-dot" />
+            </span>
             <span className="label">
               {meta.name.toUpperCase()} · {mode.toUpperCase()}
             </span>
-            <span className="state-dot" />
           </button>
         )
       })}
