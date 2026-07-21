@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.noctis-os.nightshift</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/shayneyong/Developer/noctis-os/scripts/nightshift_run.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/shayneyong/Developer/noctis-os</string>
+
+    <!-- Nightly, 03:00 local -- single fixed run, not an interval. Nightshift
+         re-derives slack from scratch every run (nightshift.md's Failure
+         Behavior), so a missed run just means the next one catches up. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/shayneyong/Developer/noctis-os/backend/runtime/nightshift.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/shayneyong/Developer/noctis-os/backend/runtime/nightshift.log</string>
+</dict>
+</plist>
