@@ -7,10 +7,16 @@ Manages the same two dev-server processes `make dev` starts (backend
 uvicorn, frontend Vite), then opens a frameless native window pointed at
 the frontend -- same hot-reload dev workflow as a browser tab, just without
 browser chrome. Sets a placeholder Dock icon at runtime via AppKit (Faber's
-sprite, standing in for real app art). A proper double-click-able .app
-bundle with a bundled .icns (py2app or PyInstaller) is still a deliberate
-follow-up, not done here -- this covers window/process lifecycle plus a
-real-but-placeholder icon for `make app`'s from-source workflow.
+sprite, standing in for real app art) -- kept even now that desktop/NoctisOS.app
+carries a real bundled .icns (from the same sprite), since this script also
+runs bare via `make app`, without the bundle, during from-source dev work.
+
+desktop/NoctisOS.app is a thin wrapper around this script, not a py2app/
+PyInstaller freeze -- its launcher just execs this file from the live repo,
+so double-clicking it in Finder/Dock always runs current source, never a
+stale snapshot. A Refresh command (Cmd+R, or the "Noctis OS" menu this
+module registers) reloads the window in place -- the intended way to pick
+up a code change without quitting and relaunching the whole app.
 """
 
 import atexit
@@ -24,6 +30,7 @@ import urllib.request
 from pathlib import Path
 
 import webview
+from webview.menu import Menu, MenuAction
 
 REPO_ROOT = Path(__file__).parent.parent
 BACKEND_DIR = REPO_ROOT / "backend"
@@ -103,6 +110,17 @@ def _set_dock_icon() -> None:
         print(f"desktop/app.py: couldn't set dock icon: {exc}", file=sys.stderr)
 
 
+def _refresh() -> None:
+    """The frontend's own Cmd+R listener (App.tsx) is the reliable path --
+    this menu item exists so Refresh shows up as a real, discoverable native
+    command (App menu, macOS convention) rather than a shortcut you have to
+    already know. evaluate_js over load_url: reloads in place, no flash of
+    the window's background_color while the page re-fetches.
+    """
+    for window in webview.windows:
+        window.evaluate_js('window.location.reload()')
+
+
 def main() -> None:
     # Registered three ways on purpose: webview's own closed event (the
     # normal path -- Cmd+Q/Cmd+W on a real Cocoa window), atexit (covers
@@ -138,7 +156,8 @@ def main() -> None:
         background_color="#100b24",
     )
     window.events.closed += _cleanup
-    webview.start(func=_set_dock_icon)
+    app_menu = [Menu("Noctis OS", [MenuAction("Refresh", _refresh)])]
+    webview.start(func=_set_dock_icon, menu=app_menu)
     _cleanup()
 
 
