@@ -74,23 +74,29 @@ button {
 /* ---------- world scene ---------- */
 
 .world {
-  /* Fixed canvas at the backdrop's native resolution (1376x768) --
-     deliberately NOT responsive. Two earlier passes tried to make the
-     scene scale with the window (aspect-ratio lock, then container
-     queries for sprite size) -- both were solving the wrong problem.
-     Shayne's actual call (2026-07-21): the layout at a large/fullscreen
-     window is the only layout: fixed pixel positions and sizes, centered
-     in the viewport, letterboxed/cropped at the edges on a smaller
-     window rather than reflowing. This is what the footing-spot
-     fractions and the sprite-size clamp's own max (84px) were already
-     designed against, so fixing to exactly this size is pixel-accurate,
-     not a new guess. */
+  /* Always fills the current window exactly -- no letterbox bars
+     (Shayne's call, round three: the fixed-1376x768-canvas pass above
+     letterboxed on anything that wasn't exactly that size, which reads
+     as "doesn't fill full screen." The actual constraint was never
+     "don't scale," it was "don't let sprite size and background position
+     drift apart," which was the real bug all along -- see the very first
+     aspect-ratio-lock commit this same day for the original diagnosis).
+     background-size is 100% 100% (stretch), not cover (crop) -- cover on
+     a container whose aspect ratio doesn't match the image is exactly
+     what caused the original footing-drift bug, since it crops a
+     different slice of the image at every window size. Stretching means
+     every pixel maps proportionally regardless of window shape, so the
+     percentage-positioned characters can never drift relative to it,
+     at the cost of the art looking slightly stretched on window shapes
+     far from the backdrop's native 1376:768 ratio -- an acceptable
+     trade for "always fills the window, sprites never drift." */
   position: relative;
-  width: 1376px;
-  height: 768px;
-  flex: none;
-  background: url('/assets/world/world-backdrop.jpeg') center 38% / cover no-repeat, var(--sky);
-  --sprite-w: 84px;
+  width: 100vw;
+  height: 100vh;
+  background: url('/assets/world/world-backdrop.jpeg') 0 0 / 100% 100% no-repeat, var(--sky);
+  container-type: inline-size;
+  container-name: world;
+  --sprite-w: clamp(46px, 6cqw, 84px);
 }
 
 .world::after {

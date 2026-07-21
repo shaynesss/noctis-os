@@ -32,6 +32,12 @@ CHARACTER_HEX = {
 NONDEV_CONFIG_DIR = Path(__file__).parent / "launch_config" / "nondev"
 HOOK_SCRIPT = Path(__file__).parent / "hooks" / "log_action.py"
 SESSION_END_HOOK_SCRIPT = Path(__file__).parent / "hooks" / "mark_session_end.py"
+# Bare "python3" resolves to whatever's on PATH in the launched Terminal
+# shell, not this project's venv -- fine while the hooks were stdlib-only,
+# but mark_session_end.py now needs vault_io (python-frontmatter) to clear
+# the busy flag on session end, so hooks need the venv's interpreter
+# specifically. Found while wiring that up, not before it mattered.
+PYTHON_BIN = Path(__file__).parent / ".venv" / "bin" / "python3"
 
 
 def _merge_hook(settings_path: Path, event: str, command: str, script_path: Path) -> None:
@@ -59,7 +65,7 @@ def _merge_hook(settings_path: Path, event: str, command: str, script_path: Path
         except json.JSONDecodeError:
             settings = {}
 
-    script_prefix = f"python3 {shlex.quote(str(script_path))}"
+    script_prefix = f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(script_path))}"
     entries = settings.setdefault("hooks", {}).setdefault(event, [])
 
     for entry in entries:
@@ -86,9 +92,9 @@ def _ensure_nondev_hooks() -> None:
     staleness.py's flagging mechanism (a job that closes cleanly must never
     get flagged, however old it later gets).
     """
-    log_command = f"python3 {shlex.quote(str(HOOK_SCRIPT))}"
+    log_command = f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(HOOK_SCRIPT))}"
     _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "PostToolUse", log_command, HOOK_SCRIPT)
-    end_command = f"python3 {shlex.quote(str(SESSION_END_HOOK_SCRIPT))}"
+    end_command = f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(SESSION_END_HOOK_SCRIPT))}"
     _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "Stop", end_command, SESSION_END_HOOK_SCRIPT)
 
 
@@ -101,12 +107,12 @@ def _ensure_dev_hooks(project_path: str, job_slug: str | None) -> None:
     """
     settings_path = Path(project_path) / ".claude" / "settings.local.json"
     log_command = (
-        f"python3 {shlex.quote(str(HOOK_SCRIPT))} "
+        f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(HOOK_SCRIPT))} "
         f"--mode dev --job-id {shlex.quote(job_slug or 'general')}"
     )
     _merge_hook(settings_path, "PostToolUse", log_command, HOOK_SCRIPT)
     end_command = (
-        f"python3 {shlex.quote(str(SESSION_END_HOOK_SCRIPT))} "
+        f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(SESSION_END_HOOK_SCRIPT))} "
         f"--mode dev --job-id {shlex.quote(job_slug or 'general')}"
     )
     _merge_hook(settings_path, "Stop", end_command, SESSION_END_HOOK_SCRIPT)

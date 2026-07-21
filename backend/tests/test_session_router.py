@@ -1,4 +1,5 @@
 import launch_surfaces
+import vault_io
 
 
 def test_unknown_mode_404(client, auth_headers):
@@ -21,6 +22,11 @@ def test_nondev_launch_opens_terminal(client, auth_headers, vault, monkeypatch):
     assert response.status_code == 200
     assert response.json() == {"launched": True, "mode": "learn", "surface": "terminal"}
     assert calls == [("learn", "no active job", None, None)]
+
+    # Nothing in the system ever set this before -- found live when
+    # launching Noctua's session didn't update its card at all.
+    state, _ = vault_io.read_frontmatter("modes/learn/state.md")
+    assert state["busy"] is True
 
 
 def test_dev_launch_requires_project_path(client, auth_headers, vault):
