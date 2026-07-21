@@ -39,11 +39,15 @@ def launch_session(request: LaunchRequest):
                 status_code=400,
                 detail="Dev launches require a job context with a project_path field",
             )
-        launch_surfaces.launch_dev(project_path, prompt, model=request.model)
+        launch_surfaces.launch_dev(
+            project_path, prompt, job_slug=request.job_slug, model=request.model
+        )
         surface = "vscode"
     else:
         job_label = request.job_slug or "no active job"
-        launch_surfaces.launch_terminal(request.mode, job_label, prompt, model=request.model)
+        launch_surfaces.launch_terminal(
+            request.mode, job_label, prompt, job_slug=request.job_slug, model=request.model
+        )
         surface = "terminal"
 
     return {"launched": True, "mode": request.mode, "surface": surface}

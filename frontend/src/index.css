@@ -313,6 +313,18 @@ button {
   color: #55506a;
 }
 
+.action-feed-line {
+  display: block;
+  margin-top: 4px;
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #8a84a3;
+}
+
 .phase-badge {
   font-family: var(--font-mono);
   font-size: 10px;

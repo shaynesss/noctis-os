@@ -52,6 +52,10 @@ export function getModeState(mode: Mode): Promise<ModeState> {
   return request(`/mode/${mode}`)
 }
 
+export function getJobLog(mode: Mode, slug: string, lines = 20): Promise<{ lines: string[] }> {
+  return request(`/mode/${mode}/jobs/${slug}/log?lines=${lines}`)
+}
+
 export function launchSession(mode: Mode, jobSlug?: string, model?: string) {
   return request<{ launched: boolean; mode: Mode; surface: string }>('/session/launch', {
     method: 'POST',

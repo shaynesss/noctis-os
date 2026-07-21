@@ -16,6 +16,14 @@ dist-ssr/
 # Impeccable live-mode runtime journal (local recovery state, not project source)
 .impeccable/live/sessions/
 
+# Hook-driven action-feed logs (backend/hooks/log_action.py) -- high-churn,
+# ephemeral, explicitly NOT vault content. See SPEC.md EDD "State files".
+backend/runtime/*.log
+
+# A Dev-mode launch writes a per-project local hook registration here (see
+# launch_surfaces._ensure_dev_hooks) -- local machine state, not source.
+.claude/settings.local.json
+
 # Claude Code's own runtime state accumulates here once this dir is used as
 # CLAUDE_CONFIG_DIR for a non-dev launch (see session.py) -- only CLAUDE.md
 # is source, everything else is generated session/cache state.
