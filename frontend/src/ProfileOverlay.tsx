@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react'
 import {
   acceptInboxItem,
+  createJob,
   getInbox,
   getJobLog,
   getModeState,
@@ -38,7 +39,39 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
 
   async function handleLaunch() {
     if (!mode) return
+    if (mode === 'dev') {
+      await startNewDevBuild()
+      return
+    }
     await launchSession(mode)
+  }
+
+  async function handleResumeJob(jobSlug: string) {
+    if (!mode) return
+    await launchSession(mode, jobSlug)
+  }
+
+  // Nothing could ever create a job before this -- Faber's card stayed
+  // idle regardless of real work happening, since "launch stays available
+  // even idle, since that's how a new build starts" (Interface.md) had no
+  // actual mechanism behind it. window.prompt is a placeholder for a real
+  // designed input, not the intended final UI -- it exists so starting a
+  // build is possible at all.
+  async function startNewDevBuild() {
+    const name = window.prompt('New build name?')
+    if (!name) return
+    const projectPath = window.prompt('Project path (absolute)?')
+    if (!projectPath) return
+    const slug = name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '')
+    if (!slug) return
+
+    await createJob('dev', slug, name, projectPath)
+    await launchSession('dev', slug)
+    setState(await getModeState('dev'))
   }
 
   async function handleDecision(itemId: string, decision: 'accept' | 'reject') {
@@ -65,12 +98,12 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
           </button>
         </div>
 
-        <div className="body">{state && renderBody(mode, state, inbox, handleDecision)}</div>
+        <div className="body">{state && renderBody(mode, state, inbox, handleDecision, handleResumeJob)}</div>
 
         {mode !== 'nightshift' && (
           <div className="launch-row">
             <button type="button" className="launch-btn" onClick={handleLaunch}>
-              LAUNCH SESSION
+              {mode === 'dev' && (state?.jobs?.length ?? 0) > 0 ? '+ NEW BUILD' : 'LAUNCH SESSION'}
             </button>
           </div>
         )}
@@ -84,10 +117,11 @@ function renderBody(
   state: ModeState,
   inbox: InboxItem[],
   onDecision: (itemId: string, decision: 'accept' | 'reject') => void,
+  onResumeJob: (jobSlug: string) => void,
 ) {
   switch (mode) {
     case 'dev':
-      return <FaberBody state={state} />
+      return <FaberBody state={state} onResumeJob={onResumeJob} />
     case 'learn':
       return <NoctuaBody state={state} />
     case 'research':
@@ -102,7 +136,7 @@ function renderBody(
 const BODY_START_DELAY_MS = 150
 const LINE_STAGGER_MS = 220
 
-function FaberBody({ state }: { state: ModeState }) {
+function FaberBody({ state, onResumeJob }: { state: ModeState; onResumeJob: (jobSlug: string) => void }) {
   const jobs = state.jobs ?? []
   if (jobs.length === 0) {
     return (
@@ -114,17 +148,23 @@ function FaberBody({ state }: { state: ModeState }) {
   return (
     <>
       {jobs.map((job, i) => (
-        <div className="job-row" key={job.slug}>
+        <div className={`job-row${job.flagged ? ' flagged' : ''}`} key={job.slug}>
           <div>
             <span className="name">
               <Typewriter text={job.name} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS} />
+              {job.flagged && <span className="flagged-badge">flagged</span>}
             </span>
             <span className="job-status">
               <Typewriter text={job.status} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS + 80} />
             </span>
             <ActionFeedLine mode="dev" slug={job.slug} />
           </div>
-          <span className="phase-badge">{job.stage}</span>
+          <div className="job-actions">
+            <span className="phase-badge">{job.stage}</span>
+            <button type="button" className="resume-btn" onClick={() => onResumeJob(job.slug)}>
+              resume
+            </button>
+          </div>
         </div>
       ))}
     </>

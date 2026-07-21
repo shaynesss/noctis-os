@@ -17,6 +17,32 @@ def test_known_mode_returns_state(client, auth_headers, vault):
     assert response.json()["deep_due"] == 4
 
 
+def test_create_job_writes_context_and_syncs_state(client, auth_headers, vault):
+    response = client.post(
+        "/mode/dev/jobs",
+        json={"slug": "new-project", "name": "New Project", "project_path": "/tmp/new-project"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["stage"] == "Plan"
+    assert body["status"] == "just started"
+
+    metadata, _ = vault_io.read_frontmatter("modes/dev/jobs/new-project/context.md")
+    assert metadata["name"] == "New Project"
+    assert metadata["project_path"] == "/tmp/new-project"
+
+    state_meta, _ = vault_io.read_frontmatter("modes/dev/state.md")
+    assert state_meta["jobs"][0]["slug"] == "new-project"
+    assert state_meta["jobs"][0]["flagged"] is False
+
+
+def test_create_job_conflicts_on_existing_slug(client, auth_headers, vault):
+    client.post("/mode/dev/jobs", json={"slug": "dup", "name": "Dup"}, headers=auth_headers)
+    response = client.post("/mode/dev/jobs", json={"slug": "dup", "name": "Dup again"}, headers=auth_headers)
+    assert response.status_code == 409
+
+
 def _seed_job(vault, mode="dev", slug="noctis-build"):
     job_dir = vault / "modes" / mode / "jobs" / slug
     job_dir.mkdir(parents=True)
@@ -54,6 +80,7 @@ def test_update_job_rewrites_context_and_syncs_state(client, auth_headers, vault
             "stage": "Ship",
             "status": "in progress",
             "last_touched": metadata["last_touched"],
+            "flagged": False,
         }
     ]
 

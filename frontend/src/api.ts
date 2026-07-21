@@ -13,6 +13,7 @@ export interface Job {
   stage: string
   status: string
   last_touched: string | null
+  flagged?: boolean
 }
 
 export interface ModeState {
@@ -60,6 +61,13 @@ export function launchSession(mode: Mode, jobSlug?: string, model?: string) {
   return request<{ launched: boolean; mode: Mode; surface: string }>('/session/launch', {
     method: 'POST',
     body: JSON.stringify({ mode, job_slug: jobSlug, model }),
+  })
+}
+
+export function createJob(mode: Mode, slug: string, name: string, projectPath?: string) {
+  return request<Job>(`/mode/${mode}/jobs`, {
+    method: 'POST',
+    body: JSON.stringify({ slug, name, project_path: projectPath }),
   })
 }
 

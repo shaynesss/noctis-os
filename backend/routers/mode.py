@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+import staleness
 import vault_io
 
 router = APIRouter(prefix="/mode", tags=["mode"])
@@ -21,11 +22,54 @@ def get_mode_state(name: str):
     if name not in VALID_MODES:
         raise HTTPException(status_code=404, detail=f"Unknown mode: {name}")
 
+    if name == "dev":
+        # Deterministic staleness -> flagged check runs inline here rather
+        # than only in a nightly sweep -- this endpoint is already polled
+        # every 15s by the World screen, so a dead session shows up live
+        # instead of waiting for nightshift's 03:00 run (staleness.py:
+        # "Deterministic-where-possible", dev's own domain, not nightshift's).
+        staleness.flag_stale_dev_jobs()
+
     # state.md is the lightweight index the profile overlay and world ambient
     # badges read — not every job file individually (SPEC.md EDD "State files
     # and the state-schema contract").
     metadata, _ = vault_io.read_frontmatter(f"modes/{name}/state.md")
     return metadata
+
+
+class JobCreate(BaseModel):
+    slug: str
+    name: str
+    project_path: str | None = None
+
+
+@router.post("/{name}/jobs")
+def create_job(name: str, job: JobCreate):
+    """Registers a new job — the missing half of "launch stays available
+    even idle, since that's how a new build starts" (Interface.md): until
+    now nothing ever created a job, so Faber's card stayed idle regardless
+    of real work happening, and dev's slack-surface scan had nothing to
+    ever find flagged.
+    """
+    if name not in VALID_MODES:
+        raise HTTPException(status_code=404, detail=f"Unknown mode: {name}")
+
+    job_path = f"modes/{name}/jobs/{job.slug}/context.md"
+    if vault_io.file_exists(job_path):
+        raise HTTPException(status_code=409, detail=f"Job already exists: {job.slug}")
+
+    metadata = {
+        "name": job.name,
+        "stage": "Plan",
+        "status": "just started",
+        "last_touched": datetime.now(timezone.utc).isoformat(),
+    }
+    if job.project_path:
+        metadata["project_path"] = job.project_path
+
+    vault_io.write_frontmatter(job_path, metadata, "")
+    _sync_state_job_entry(name, job.slug, metadata)
+    return {"slug": job.slug, **metadata}
 
 
 class JobUpdate(BaseModel):
@@ -69,6 +113,7 @@ def _sync_state_job_entry(mode: str, slug: str, job_metadata: dict) -> None:
         "stage": job_metadata.get("stage"),
         "status": job_metadata.get("status"),
         "last_touched": job_metadata.get("last_touched"),
+        "flagged": job_metadata.get("flagged", False),
     }
     for i, existing in enumerate(jobs):
         if existing.get("slug") == slug:
