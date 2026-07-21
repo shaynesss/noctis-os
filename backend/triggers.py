@@ -23,7 +23,17 @@ def _new_lessons_text(mode: str, cursor: dict) -> str:
     -- the same cursor nightshift's settings slack-check already tracks
     (modes/settings/state.md's lessons_distilled_through), reused here
     rather than tracked a second time.
+
+    This runs on every GET /mode/settings poll (World screen, every 15s) --
+    a missing lessons.md (mid-setup for a mode, a vault file briefly absent
+    during a git operation) must degrade to "no new text" rather than 500
+    the whole poll. Every mode's lessons.md exists today by construction
+    (seeded at mode-folder scaffolding time), so this is a defensive guard
+    against a state that can't currently occur, not a fix for an observed
+    failure -- caught in the 2026-07-21 ship-gate review.
     """
+    if not vault_io.file_exists(f"modes/{mode}/lessons.md"):
+        return ""
     content = vault_io.read_file(f"modes/{mode}/lessons.md")
     lines = content.splitlines()
     seen = cursor.get(mode, 0)

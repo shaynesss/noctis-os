@@ -72,11 +72,21 @@ def test_merge_hook_purges_stale_registration_under_a_different_event(tmp_path):
     moving from Stop to SessionEnd, since Stop turned out to fire after
     every agent turn rather than on real session termination) must not
     keep firing under its old event too -- otherwise a settings.json from
-    before the fix double-fires on both forever."""
+    before the fix double-fires on both forever.
+
+    The stale entry uses a bare "python3" prefix on purpose, not
+    PYTHON_BIN -- that's what a *real* pre-existing settings.json actually
+    has (registered before PYTHON_BIN existed at all). A first version of
+    this test used PYTHON_BIN for the stale command too, which made the
+    purge's real bug invisible: it matched on a prefix built from
+    PYTHON_BIN, so it could never have matched a genuinely old bare-python3
+    entry in the first place -- confirmed live against the real running
+    settings.json, which still had exactly this stale entry. Fixed by
+    matching on the script's own path instead of the full interpreter
+    prefix (2026-07-21 ship-gate review, angle B/C both caught it)."""
     settings_path = tmp_path / "settings.json"
-    prefix = f"{launch_surfaces.PYTHON_BIN} {HOOK_SCRIPT}"
-    stale_command = f"{prefix} --mode dev --job-id noctis-build"
-    new_command = f"{prefix} --mode dev --job-id noctis-build"
+    stale_command = f"python3 {HOOK_SCRIPT} --mode dev --job-id noctis-build"
+    new_command = f"{launch_surfaces.PYTHON_BIN} {HOOK_SCRIPT} --mode dev --job-id noctis-build"
 
     launch_surfaces._merge_hook(settings_path, "Stop", stale_command, HOOK_SCRIPT)
     launch_surfaces._merge_hook(settings_path, "SessionEnd", new_command, HOOK_SCRIPT)
@@ -85,6 +95,36 @@ def test_merge_hook_purges_stale_registration_under_a_different_event(tmp_path):
     assert settings["hooks"]["Stop"] == []
     commands = [h["command"] for e in settings["hooks"]["SessionEnd"] for h in e["hooks"]]
     assert commands == [new_command]
+
+
+def test_merge_hook_purge_runs_even_when_target_event_already_exact(tmp_path):
+    """The purge must run on every call, not just when the target event's
+    entry doesn't already match exactly. Writes a settings.json directly
+    (not via _merge_hook) with SessionEnd already holding the exact correct
+    command *and* a stale Stop entry still present -- a shape that can't
+    arise from calling _merge_hook alone once the prefix-matching bug above
+    is fixed, but is exactly what a hand-edited or externally-written
+    settings.json could look like. A version of this function that returned
+    early on "already registered exactly as-is" before running the
+    cross-event purge would leave Stop's stale entry untouched forever."""
+    settings_path = tmp_path / "settings.json"
+    correct_command = f"{launch_surfaces.PYTHON_BIN} {HOOK_SCRIPT}"
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": f"python3 {HOOK_SCRIPT}"}]}],
+                    "SessionEnd": [{"matcher": "", "hooks": [{"type": "command", "command": correct_command}]}],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    launch_surfaces._merge_hook(settings_path, "SessionEnd", correct_command, HOOK_SCRIPT)
+
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert settings["hooks"]["Stop"] == []
 
 
 def test_launch_terminal_exports_job_env(monkeypatch):

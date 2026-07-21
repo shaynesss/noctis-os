@@ -1,10 +1,16 @@
 """Apply + verify's Apply half (settings.md stage 3): "the interface
 performs a deterministic git-diff apply (backend code, not session
-judgment) and commits" on accept. Tolerant of the inbox proposal format's
-simplified diff shape (inbox/README.md's worked example has no line
-numbers) -- this is not a general unified-diff/patch implementation, it's
-a literal find-the-old-block-and-replace-it applier, deliberately refusing
-to guess when the match isn't unique.
+judgment)" on accept. Tolerant of the inbox proposal format's simplified
+diff shape (inbox/README.md's worked example has no line numbers) -- this
+is not a general unified-diff/patch implementation, it's a literal
+find-the-old-block-and-replace-it applier, deliberately refusing to guess
+when the match isn't unique.
+
+Writes the target file only -- does NOT run `git commit` in the vault, even
+though settings.md's stage-3 text says "and commits." Caught by the
+2026-07-21 ship-gate review as a stale/aspirational claim in this
+docstring, not a regression: the commit half was never actually built.
+Flagged in STATUS.md as a real follow-up rather than rushed in here.
 """
 
 import re

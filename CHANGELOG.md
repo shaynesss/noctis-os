@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v1.0.0 — 2026-07-21
+
+Full build order complete (mode folders, backend, frontend tracker, telemetry hooks, nightshift infra, dev job lifecycle), two ship-gate passes run, deployed locally per the locked EDD (single-user, single-machine — nothing to deploy). Everything below.
 
 - Fix: `desktop/NoctisOS.app` failed to launch from Spotlight/Finder double-click (`FileNotFoundError: 'npm'`, confirmed live) — LaunchServices runs the app with a minimal PATH that excludes Homebrew, unlike a terminal-launched `make app`. Resolves npm's absolute path with Homebrew-path fallbacks and passes an augmented PATH to its subprocess (npm's own `env node` shebang needs it too). Icon switched to the faber-building expression (2026-07-21)
 
