@@ -215,7 +215,7 @@ Claude Code CLI, the Claude Code VS Code extension, PIL, a Python frontmatter/YA
 
 **Component sourcing — no shadcn, fully hand-built, and this is a derived fact, not a rule.** Every element of the card system fought the pixel-art/world aesthetic enough to warrant hand-building. Setup installs whatever the Stack section declares — currently that's Tailwind + Impeccable, no shadcn — because nothing here needed it, not because of a standing ban. A different project's Design Brief could resolve the other way.
 
-**Design Brief is complete.** Remaining items are asset-production tasks: two touch-ups on the background image, a composite scale test, Custos's trigger thresholds (backend-logic, not blocking).
+**Design Brief is complete.** Remaining items are asset-production tasks: two touch-ups on the background image, a composite scale test. Custos's trigger thresholds — done (2026-07-21): `backend/triggers.py` computes friction/accumulation/suspicion live on every `GET /mode/settings` poll (accumulation reuses nightshift's undistilled-lessons cursor signal; friction is an opt-in `FRICTION:` marker in a mode's lessons.md, documented in each mode's lessons.md; suspicion is a 7-day state.md staleness check).
 
 ---
 
