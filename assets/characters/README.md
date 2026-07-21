@@ -19,3 +19,7 @@ Shayne drops sprite files in here manually. See `../world/README.md` for the bac
 | Vesper | `#953EAD` |
 | Custos | `#DA5B00` |
 | Echo | `#293187` |
+
+## Expression variants (added 2026-07-21)
+
+`expressions/` holds every other sprite on `noctisv1sprites.png` beyond the idle frame — 19 variants across all five characters (hard-hat, sleepy, magnifier, and 16 others), extracted and cleaned with the same pipeline as the idle crops above. Not wired into the app: idle roaming and the full expression library are explicitly v2 scope. See `expressions/README.md` for the full list and naming confidence per file.
