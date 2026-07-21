@@ -127,6 +127,16 @@ Do not write anywhere else. Do not run any other tool besides Read/Grep/Write.
         text=True,
     )
 
+    if inbox_path.exists() and item.slug_hint.startswith("undistilled-"):
+        # Records which mode's lessons_distilled_through cursor to advance
+        # on accept, and to what -- computed here (deterministic, draft
+        # time), not re-derived later from the slug at accept time (see
+        # apply.py's parse_cursor_advance for why that would be fragile).
+        target_mode = item.slug_hint.removeprefix("undistilled-")
+        line_count = len(vault_io.read_file(f"modes/{target_mode}/lessons.md").splitlines())
+        with inbox_path.open("a", encoding="utf-8") as f:
+            f.write(f"\n<!-- cursor-advance: {target_mode}={line_count} -->\n")
+
 
 ADVANCE = {
     "flagged-job": _draft_flagged_job_summary,

@@ -104,10 +104,16 @@ An 8-angle security-focused code review (3 correctness + 3 cleanup + altitude + 
 - Custos itself still never runs on a schedule, by design (`settings.md`: "deliberately no calendar") — this only makes the on-demand path scoped instead of generic; nightshift's existing nightly borrow of the distiller subagent for undistilled lessons is the only automatic path, unchanged.
 - 2 new/updated pytest tests — 76 passing total. Verified live: confirmed via the running API that a job's `notes` field lands correctly in `context.md`'s prose, and via Playwright screenshots that address buttons appear only next to lit triggers and disappear when unlit.
 
+## Done this pass (nightshift's accept-flow apply logic — the propose/review/apply loop is real end-to-end now)
+
+- `backend/nightshift/apply.py`: parses a proposal's `## Diff` section and applies it — a literal find-the-old-block-and-replace-it applier tolerant of the inbox format's simplified diff shape (no line numbers), not a general unified-diff/patch implementation. Refuses to guess: raises if the old text isn't found, or is found more than once (ambiguous).
+- `POST /nightshift/inbox/{id}/accept` now applies before removing from the inbox — a failed apply (422) leaves the item still pending review rather than losing it. Dev's flagged-job proposals (no diff, by design) apply as a no-op and archive normally.
+- The `lessons_distilled_through` cursor-advance follow-up flagged in the nightshift milestone is done: `runner.py`'s distillation drafts now leave a machine-readable `<!-- cursor-advance: mode=count -->` marker (computed deterministically at draft time, not re-derived from the slug later — slug/slug_hint aren't a reliable place to recover which mode a distillation targeted). Accept parses it and advances the cursor.
+- 11 new/updated pytest tests — 87 passing total. Verified live against the running backend and real vault: staged a real diff-bearing proposal, accepted it, confirmed the target file actually changed; staged a malformed proposal, confirmed accept returned 422 and the item stayed in the inbox untouched; cleaned up all smoke-test artifacts including a stray log.md entry the accept flow itself wrote.
+
 ## Not started
 
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
-- Mode-specific proposal apply logic for nightshift's accept flow (currently archives only) — this now includes advancing the `lessons_distilled_through` cursor on accept, a known follow-up from the nightshift milestone above
 - A real designed "new build" input (name/path) — currently `window.prompt`, a functional placeholder, not the intended final UI
 - Exact character hex palette (now sampled from real sprites rather than guessed, but still interim until the grid-data pass locks final production values)
 

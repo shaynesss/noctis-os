@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 
 import vault_io
+from nightshift import apply
 
 router = APIRouter(prefix="/nightshift", tags=["nightshift"])
 
@@ -52,17 +53,30 @@ def get_inbox_item(item_id: str):
 
 @router.post("/inbox/{item_id}/accept")
 def accept_inbox_item(item_id: str):
-    item = _remove_from_inbox(item_id)
+    """Apply + verify's Apply half (settings.md stage 3): a deterministic
+    git-diff-shaped apply, not session judgment. Applies before removing
+    from the inbox -- a failed apply must leave the item still pending
+    review rather than silently losing it.
+    """
+    state, _ = vault_io.read_frontmatter(STATE_PATH)
+    item = _find_item(state.get("inbox", []), item_id)
 
-    # NOTE: applying the item's actual content (a settings methodology diff,
-    # a research verdict, etc.) is mode-specific and depends on each mode's
-    # own proposal-generation existing first — not yet built. This endpoint
-    # covers the generic accept mechanism (remove from inbox, archive the
-    # proposal file, log the decision); mode-specific apply logic is a
-    # follow-up once a real producer exists.
+    proposal_path = f"modes/nightshift/inbox/{item_id}.md"
+    proposal_text = vault_io.read_file(proposal_path) if vault_io.file_exists(proposal_path) else ""
+
+    try:
+        applied_target = apply.apply_proposal(proposal_text)
+    except apply.DiffApplyError as exc:
+        raise HTTPException(status_code=422, detail=f"Diff apply failed, item still pending: {exc}") from exc
+
+    cursor_advance = apply.parse_cursor_advance(proposal_text)
+    if cursor_advance:
+        apply.advance_lessons_cursor(*cursor_advance)
+
+    _remove_from_inbox(item_id)
     _archive_proposal(item_id)
-    _log_decision(item, "accepted")
-    return {"accepted": True, "item": item}
+    _log_decision(item, "accepted" + (f" (applied to {applied_target})" if applied_target else ""))
+    return {"accepted": True, "item": item, "applied_to": applied_target}
 
 
 @router.post("/inbox/{item_id}/reject")
