@@ -1,8 +1,15 @@
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from auth import ALLOWED_ORIGIN, require_auth
-from routers import mode, nightshift, session
+# Loads ../.env (VAULT_PATH, NOCTIS_API_TOKEN, PORT) so `make dev` works
+# standalone — without this, those vars only exist if the launching shell
+# happened to have .env sourced manually, which silently breaks auth/vault
+# access on every fresh terminal.
+load_dotenv()
+
+from auth import ALLOWED_ORIGIN, require_auth  # noqa: E402
+from routers import mode, nightshift, session  # noqa: E402
 
 app = FastAPI(title="Noctis OS backend")
 
