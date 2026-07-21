@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Claude Code Stop hook -- does two things on a clean session exit:
+"""Claude Code SessionEnd hook -- does two things on a clean session exit.
+
+Registered on SessionEnd, not Stop: Stop fires after every agent turn
+(Claude finishes one response, waits for the next prompt), which isn't
+session termination at all -- that bug shipped briefly and was caught live
+when busy expressions flipped back to idle mid-session, well before the
+terminal actually closed. SessionEnd fires exactly once, when the CLI
+process itself exits.
 
 1. The other half of the staleness-flagging mechanism (backend/staleness.py):
    appends a SESSION_END sentinel to the job's runtime log, exactly the way

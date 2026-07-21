@@ -217,7 +217,13 @@ button {
 .character:hover img {
   filter: brightness(1.12);
 }
-.character.active .label {
+.character.active .label,
+.character.busy .label {
+  /* Same accent-tinted label used for "this card is open" now also means
+     "this mode's session is running" -- driven by the `busy` flag (World.tsx),
+     which only flips on POST /session/launch and off on the real SessionEnd
+     hook, so unlike .active it survives closing the profile overlay and
+     only clears when the session itself actually terminates. */
   color: var(--accent);
 }
 

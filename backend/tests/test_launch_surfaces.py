@@ -67,6 +67,26 @@ def test_merge_hook_leaves_other_scripts_alone(tmp_path):
     assert "python3 /fake/hook.py --job-id x" in commands
 
 
+def test_merge_hook_purges_stale_registration_under_a_different_event(tmp_path):
+    """A script re-registered under a new event (e.g. mark_session_end.py
+    moving from Stop to SessionEnd, since Stop turned out to fire after
+    every agent turn rather than on real session termination) must not
+    keep firing under its old event too -- otherwise a settings.json from
+    before the fix double-fires on both forever."""
+    settings_path = tmp_path / "settings.json"
+    prefix = f"{launch_surfaces.PYTHON_BIN} {HOOK_SCRIPT}"
+    stale_command = f"{prefix} --mode dev --job-id noctis-build"
+    new_command = f"{prefix} --mode dev --job-id noctis-build"
+
+    launch_surfaces._merge_hook(settings_path, "Stop", stale_command, HOOK_SCRIPT)
+    launch_surfaces._merge_hook(settings_path, "SessionEnd", new_command, HOOK_SCRIPT)
+
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert settings["hooks"]["Stop"] == []
+    commands = [h["command"] for e in settings["hooks"]["SessionEnd"] for h in e["hooks"]]
+    assert commands == [new_command]
+
+
 def test_launch_terminal_exports_job_env(monkeypatch):
     calls = []
     monkeypatch.setattr(launch_surfaces.subprocess, "run", lambda *a, **k: calls.append(a))
@@ -87,5 +107,23 @@ def test_launch_dev_registers_project_hook(tmp_path, monkeypatch):
     settings_path = tmp_path / ".claude" / "settings.local.json"
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     command = settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"]
+    assert "--mode dev" in command
+    assert "--job-id noctis-build" in command
+
+
+def test_mark_session_end_registers_on_session_end_not_stop(tmp_path, monkeypatch):
+    """Stop fires after every agent turn, not on real session termination --
+    registering there cleared `busy`/wrote SESSION_END after Claude's first
+    response, mid-session, well before the terminal closed. Found live: busy
+    expressions flipped back to idle while the user was still working."""
+    monkeypatch.setattr(launch_surfaces.subprocess, "run", lambda *a, **k: None)
+
+    launch_surfaces.launch_dev(str(tmp_path), "prompt text", job_slug="noctis-build")
+
+    settings_path = tmp_path / ".claude" / "settings.local.json"
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert "Stop" not in settings["hooks"]
+    command = settings["hooks"]["SessionEnd"][0]["hooks"][0]["command"]
+    assert "mark_session_end.py" in command
     assert "--mode dev" in command
     assert "--job-id noctis-build" in command
