@@ -24,6 +24,21 @@ def test_no_triggers_when_nothing_changed(vault):
     assert result == {"friction": False, "accumulation": False, "suspicion": False}
 
 
+def test_missing_lessons_file_does_not_500_the_poll(vault):
+    """compute_triggers() runs on every GET /mode/settings poll -- a
+    missing lessons.md (e.g. mid-setup for a mode) must degrade to "no new
+    text" rather than raise FileNotFoundError and 500 the whole poll."""
+    _seed_cursor({m: 1 for m in triggers.MODES})
+    for m in triggers.MODES:
+        if m != "dev":
+            vault_io.write_file(f"modes/{m}/lessons.md", "# header\n")
+    # modes/dev/lessons.md deliberately never written.
+
+    result = triggers.compute_triggers()
+
+    assert result == {"friction": False, "accumulation": False, "suspicion": False}
+
+
 def test_accumulation_fires_when_lessons_grow_past_cursor(vault):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:

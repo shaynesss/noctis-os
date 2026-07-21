@@ -1,4 +1,4 @@
-> **Status: see STATUS.md.** Spec (Definition/PRD/EDD/Design Brief) locked. Phase 3 (the full build order — mode folders, backend, frontend tracker, telemetry hooks, nightshift infra, dev job lifecycle) is **complete**. Everything below actually runs.
+> **Status: see STATUS.md.** Spec (Definition/PRD/EDD/Design Brief) locked. **v1 shipped, 2026-07-21** — full build order complete (mode folders, backend, frontend tracker, telemetry hooks, nightshift infra, dev job lifecycle), two ship-gate passes run. Everything below actually runs.
 
 # Noctis OS
 
@@ -13,11 +13,14 @@ Modes as spaces with distinct personalities, characters as the way you enter the
 ## Running it
 
 ```
-make setup   # installs backend + frontend deps, copies .env.example -> .env
-make dev     # starts backend (FastAPI, :8000) + frontend (Vite, :5173) together
+make setup     # installs backend + frontend deps, copies .env.example -> .env
+make dev       # starts backend (FastAPI, :8000) + frontend (Vite, :5173) together, browser tab
+make open-app  # double-click equivalent -- starts both servers, opens the native window
 ```
 
 Fill in `.env` first (`VAULT_PATH`, `NOCTIS_API_TOKEN`) — see `SETUP.md` for the full one-time machine checklist (Claude Code login, VS Code setting, nightshift's launchd job).
+
+`make open-app` opens `desktop/NoctisOS.app` — a real Dock/Finder-icon app (macOS, pywebview-based), but a thin wrapper around live source, not a frozen build: a code change just needs the app's own Refresh command (Cmd+R, or the "Noctis OS" menu), never a rebuild. `make app` runs the same thing without the bundle, for from-source dev work.
 
 ## Current state
 

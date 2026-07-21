@@ -4,7 +4,7 @@ Last updated: 2026-07-21
 
 ## Current state
 
-Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` verified. Pushed to `origin/main`. **Phase 3 complete** — mode-folder build-out, backend, frontend tracker, telemetry hooks, and nightshift infra all done and smoke-tested live. All items on the locked build order (mode folders → backend → frontend tracker → telemetry → nightshift) are built. **First full ship-gate pass run 2026-07-21** — README/CHANGELOG staleness fixed, dependency audits clean, and a security-focused code review caught and fixed real path-traversal and correctness bugs (see below). Deploy decision: stays local, per the locked EDD ("Any deployment — local-only," single-user single-machine).
+**v1 shipped, 2026-07-21.** Phase 1, 2, and 3 all complete. All build-order milestones done and smoke-tested live. Two full ship-gate passes run (first: 2026-07-21 morning, security-focused; second: 2026-07-21 evening, closing this file out for real after a large batch of desktop-app/sprite/spec-completeness work). Deploy decision unchanged from the locked EDD: stays local, single-user, single-machine — nothing to deploy. `desktop/NoctisOS.app` is the real way to run it now (double-click, real Dock icon), `make dev`/`make app` remain for from-source work.
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 
@@ -158,11 +158,61 @@ Researched alternatives rather than defaulting to Tauri: compared pywebview, Tau
 - **World now always fills the window, no letterboxing — third pass on this.** `.world` is `100vw`/`100vh` with the backdrop stretched (`background-size: 100% 100%`) instead of the fixed 1376×768 canvas from the previous pass, which letterboxed on any window that wasn't exactly that size. Sprite sizing stays on `cqw` (container query units) so it can never drift from the background regardless of window shape — verified numerically (`.world`'s bounding box exactly equals the viewport at two very different window shapes) and visually (no bars, sprites correctly footed, acceptable minor stretch on the tall shape).
 - 2 new/updated tests (busy-set-on-launch, busy-cleared-on-session-end), 89 passing total.
 
+## Done this pass (world screen fills the window for real, desktop app process cleanup verified, sprite bugs)
+
+- **World fills the window, verified this time with actual numbers.** `.world` at `100vw`/`100vh`, backdrop stretched (`background-size: 100% 100%`) rather than cropped — confirmed via `getBoundingClientRect()` matching the viewport exactly at two very different window shapes, plus real screenshots.
+- **Desktop app process cleanup, verified live.** `npm run dev`'s real child (the Vite server) survived `Popen.terminate()` since it only signals the immediate `npm` process — fixed with process groups, confirmed via a real Cmd+Q keystroke and `lsof`/`ps` afterward showing zero leftover processes or bound ports.
+- **Sprite bugs found and fixed by direct pixel inspection, not by eye:** stray opaque-white backgrounds (should've been transparent), a stray black edge column, an anti-alias halo — all confirmed via `PIL`/`numpy` pixel sampling before and after.
+
+## Done this pass (spec-completeness audit — confidence flag + failure-behavior parity)
+
+Ran a real completeness audit against `SPEC.md` (not a guess) and found 5 gaps; closed 2 by Shayne's choice:
+
+- **Confidence flag.** Nightshift's inbox staged every proposal with `confidence: null`. `inbox/README.md`'s proposal format gained a mandatory 4th section (`## Confidence`, high/low + reason); dev's mechanical flagged-job note gets `high` automatically (no judgment made there, by design); settings' distillation subagent now writes a genuine self-assessment, enforced the same way `## Rationale` already was (malformed/missing → discarded, not staged with a placeholder).
+- **Failure-behavior parity.** `staleness.py`'s stale-and-flagged mechanism only ever worked for dev, despite learn/research/settings all promising the same behavior in their own methodology files. Generalized to `flag_stale_jobs(mode)`, wired into all four (nightshift correctly excluded — stateless by design). Found along the way that Noctua/Vesper/Custos's cards never rendered job rows at all — a backend flag nobody could see — so extracted `FaberBody`'s job-row rendering into a shared `JobList` component, reused across all four.
+- 10 new/updated tests, 96 passing (backend).
+- Deferred, not forgotten: library catalog, token audit, per-mode default model config.
+
+## Done this pass (busy indicator actually fixed — the earlier "fix" only worked by accident)
+
+The `busy`-set/clear wiring from the previous pass looked complete but had a real bug: `mark_session_end.py` was registered on Claude Code's `Stop` hook, which — confirmed against the actual docs via a subagent, not assumed from memory — fires after *every* agent turn, not on session termination. Found live: busy expressions were flipping back to idle mid-session, well before the terminal closed. Moved both hook registrations (dev + nondev) to `SessionEnd`, which fires exactly once on real process exit. `_merge_hook` now also purges a script's registration from every other event bucket when it moves to a new one, so a settings.json written before this fix can't end up firing the hook twice forever. Added a second busy indicator (label goes accent-colored while a session runs, `.character.busy .label`, same `busy` flag, survives closing the profile overlay). 2 new tests.
+
+## Done this pass (Faber sprite fixes — teeth alignment, transparent-hole bug)
+
+Two real asset bugs, found and fixed by direct pixel inspection (`PIL`/`numpy`), not by eye: the three non-idle Faber expression sprites (hardhat, blush, building) had their teeth punched out as fully transparent holes rather than filled white — invisible against a white background, but reading as black cutouts against the world's colored backdrop. Filled with the same opaque white the base sprite uses. Separately, the base sprite's own two teeth were vertically misaligned by 1-2px (confirmed by exact pixel bounding boxes) — fixed by mirroring one tooth onto the other. A follow-up "slim the teeth down" experiment was tried and explicitly reverted per direct feedback ("they don't look like teeth, too far apart") — kept only the alignment fix, discarded the width change.
+
+## Done this pass (real .app bundle, Refresh command, Spotlight-launch fix)
+
+- **`desktop/NoctisOS.app`** — real double-clickable app, thin wrapper (not a py2app/PyInstaller freeze) around `desktop/app.py`, so it always runs live source; a real bundled `.icns` (faber-building expression, Shayne's pick) instead of only the runtime AppKit placeholder-icon trick. Closes the ".app bundle" follow-up flagged when the pywebview wrapper first shipped.
+- **Refresh command**, since a code change to this always-live-source bundle only needs a reload, never a rebuild: a native "Noctis OS ▸ Refresh" menu item plus a Cmd+R/Ctrl+R listener in the frontend (the reliable path — works even if the native shortcut doesn't bind).
+- **Spotlight/double-click launches were actually broken** — found from a real user report and confirmed in the log, not guessed: `FileNotFoundError: 'npm'`. LaunchServices runs the app with a minimal PATH that excludes Homebrew, unlike a terminal-launched `make app`. Same root-cause class as an earlier `PYTHON_BIN` fix. Fixed in two parts (resolving npm's absolute path wasn't enough on its own — npm's own `#!/usr/bin/env node` shebang needs `node` on PATH too): `_resolve_npm()` + `_npm_env()`. Verified under a genuinely stripped `env -i` PATH (not just "should work"), then via a real `open desktop/NoctisOS.app` launch with a clean log.
+- 4 new tests (`desktop/tests/`, the first tests this script has ever had) — 100 backend+desktop tests total.
+
+## Done this pass (second ship-gate review — 5-angle review found a real live bug in the fix from two passes ago)
+
+Ran the full 9-step FINISH checklist again given how much had landed since the first pass. Test suite (98 backend + 4 desktop, 102 total), diff review (`pyflakes`/`oxlint` clean, no debug prints or commented-out code in our own source), README/CHANGELOG/STATUS.md all brought current, secrets scan clean, `npm audit`/`pip-audit` both clean.
+
+The 5-angle code review (3 correctness + reuse/simplification/efficiency + altitude/conventions) found one real, live-confirmed bug — worse than a normal finding, because it was already reported to Shayne as fixed:
+
+- **`_merge_hook`'s cross-event purge (from the Stop→SessionEnd fix two passes ago) never actually worked, confirmed live.** It matched stale entries on a command prefix built from the *new* `PYTHON_BIN` path, but a real pre-existing `settings.json` had its stale `Stop` entry registered with bare `python3` (from before `PYTHON_BIN` existed) — `startswith()` never matched, so the purge silently no-op'd. Verified directly against the running `backend/launch_config/nondev/settings.json`: it genuinely had both a stale `Stop` entry and the new `SessionEnd` entry for `mark_session_end.py` at the same time, meaning the busy-indicator bug was still live despite the earlier fix. A second, compounding bug: the purge ran *after* an early-return for "target event already has this exact command," so even a corrected matcher wouldn't self-heal a settings.json that reached that state some other way. Fixed both: matching is now on the script's own path (stable across whatever interpreter prefixed it historically), and the purge runs unconditionally on every call, before any early return. Manually re-ran the fixed `_ensure_nondev_hooks()` against the live settings.json and confirmed the stale `Stop` entry is now actually gone. 2 new tests, including one that reproduces the exact historical failure shape (bare-`python3` stale entry) rather than testing against a scenario that couldn't have caught the bug.
+- Two smaller real issues also fixed: `triggers.py`'s `_new_lessons_text` had no guard against a missing `lessons.md` (would 500 every 15s settings poll if one were ever absent — defensive fix for a state that can't currently occur, not an observed failure); `nightshift/apply.py`'s docstring claimed the accept flow "commits" when it only writes the file — fixed the docstring, flagged the actual missing git-commit-on-accept behavior below rather than rushing it into this pass.
+
+**Found but deliberately deferred, not fixed this pass** (documented so they don't get silently lost, not because they're unimportant):
+
+- **`busy` has no self-healing recovery path**, unlike `flagged` (which staleness.py actively re-derives on every poll). If a session's `SessionEnd` hook never fires (force-quit, SIGKILL, machine sleep), `busy` stays stuck `true` forever with no timeout. A real gap, but needs its own small design pass (does it reuse staleness.py's threshold? a different one?) rather than a rushed fix here.
+- **`_ensure_dev_hooks` overwrites, not accumulates, per `project_path`** — launching a second dev job in the same project while an earlier job's session is still open silently redirects that open session's telemetry (PostToolUse log lines, eventual SessionEnd sentinel) to the new job's id. Matches this app's actual usage pattern (one job worked at a time) closely enough that it wasn't worth a redesign under ship-gate time pressure, but is a real edge case if that assumption ever changes.
+- **Nightshift's diff-apply has no schema-aware validation of its target file** — a malformed or malicious proposal's `--- <path>` header isn't checked against an expected file set before the raw find/replace runs. The accept click is meant to be the safety gate (a human reads the rendered diff before clicking), but there's no automated backstop if that review is cursory.
+- **A read-modify-write race between `staleness.flag_stale_jobs` and the settings-trigger recompute in the same `GET /mode/settings` handler** — already an accepted, documented risk per `vault_io.py`'s own module docstring (not a new regression from this pass), full read-modify-write atomicity remains a known, lower-priority gap for this app's actual concurrency level (one user, mostly-sequential polling).
+- **`nightshift/apply.py` doesn't actually run `git commit`**, despite `settings.md`'s stage-3 text describing the accept flow as applying "and commits." The apply half is real; the commit half was never built. Needs a real design pass (which repo — this one or the vault's? failure handling if the commit itself fails?), not a rushed addition.
+- Minor code-quality items, not correctness bugs: `apply.py`/`runner.py` each have their own near-identical markdown-section-extraction loop (3 copies of the same logic across 2 files); `mode.py`'s settings branch and `triggers.py` both independently re-read `modes/settings/state.md` on the same request; `compute_triggers()` loops over all 5 modes twice with no early exit once every trigger is already lit.
+
 ## Not started
 
 - Sprite sheet split into individual per-character assets (distinct from the expression extraction above — this is about the *idle* sprites' own source format)
 - Exact character hex palette (now sampled from real sprites rather than guessed, but still interim until the grid-data pass locks final production values)
+- Deferred by explicit choice: library catalog, token audit, per-mode default model config
+- Deferred by this pass's ship-gate review, documented above: `busy`'s missing self-healing recovery, dev-hook overwrite on a second same-project job, nightshift diff-apply's missing schema validation, the settings.md read-modify-write race, `apply.py`'s missing git-commit-on-accept, and a handful of code-quality dedup opportunities
 
 ## Blocking
 
-Nothing. All Phase 3 build-order milestones (mode folders, backend, frontend tracker, telemetry hooks, nightshift infra) are done and verified live.
+Nothing. All Phase 3 build-order milestones are done and verified live. This pass's review found one real live bug (the hook-purge fix above) and fixed it; everything else found is either already-accepted risk or explicitly deferred with a reason, not silently dropped.

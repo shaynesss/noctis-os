@@ -64,6 +64,19 @@ def _merge_hook(settings_path: Path, event: str, command: str, script_path: Path
     (found live: Stop fires per-turn, not on real session termination)
     would have left the stale Stop registration firing forever alongside
     the new correct one on any settings.json that predated the fix.
+
+    Two bugs found in that purge itself during the 2026-07-21 ship-gate
+    review (both confirmed live against the real running settings.json,
+    which still had a stale `Stop` entry sitting next to the new
+    `SessionEnd` one): (1) the match was keyed on a prefix built from
+    PYTHON_BIN, so an entry registered before PYTHON_BIN existed (bare
+    `python3`) never matched and never got purged — now matches on the
+    script's own path as a substring, independent of whatever interpreter
+    prefixed it historically. (2) the purge ran *after* an early return for
+    "already registered exactly as-is," so once the target event's entry
+    was correct, the purge never ran again on subsequent calls, even though
+    a stale entry from the older prefix was still sitting in another event
+    bucket — the purge now always runs first, unconditionally.
     """
     settings: dict = {}
     if settings_path.exists():
@@ -72,32 +85,35 @@ def _merge_hook(settings_path: Path, event: str, command: str, script_path: Path
         except json.JSONDecodeError:
             settings = {}
 
-    script_prefix = f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(script_path))}"
+    script_marker = shlex.quote(str(script_path))
+
+    def _same_script(existing_command: str) -> bool:
+        return script_marker in existing_command
+
     hooks_by_event = settings.setdefault("hooks", {})
-    entries = hooks_by_event.setdefault(event, [])
 
-    for entry in entries:
-        for hook in entry.get("hooks", []):
-            if hook.get("command") == command:
-                return  # already registered exactly as-is
-
+    changed = False
     for other_event, other_entries in hooks_by_event.items():
         if other_event == event:
             continue
-        other_entries[:] = [
-            entry
-            for entry in other_entries
-            if not any(hook.get("command", "").startswith(script_prefix) for hook in entry.get("hooks", []))
+        filtered = [
+            entry for entry in other_entries if not any(_same_script(hook.get("command", "")) for hook in entry.get("hooks", []))
         ]
+        if filtered != other_entries:
+            changed = True
+        other_entries[:] = filtered
 
-    entries[:] = [
-        entry
-        for entry in entries
-        if not any(hook.get("command", "").startswith(script_prefix) for hook in entry.get("hooks", []))
-    ]
-    entries.append({"matcher": "", "hooks": [{"type": "command", "command": command}]})
-    settings_path.parent.mkdir(parents=True, exist_ok=True)
-    settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+    entries = hooks_by_event.setdefault(event, [])
+
+    already_exact = any(hook.get("command") == command for entry in entries for hook in entry.get("hooks", []))
+    if not already_exact:
+        entries[:] = [entry for entry in entries if not any(_same_script(hook.get("command", "")) for hook in entry.get("hooks", []))]
+        entries.append({"matcher": "", "hooks": [{"type": "command", "command": command}]})
+        changed = True
+
+    if changed:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
 
 
 def _ensure_nondev_hooks() -> None:
