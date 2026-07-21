@@ -22,11 +22,13 @@ Use fractions for CSS positioning (`left: X%; bottom: (100 - Y-as-%)%`) so place
 
 **Echo's contrast constraint (carried from the sprite-compatibility review):** all five spots above sit on the bright cloud plateau, never against the dark indigo sky — Echo's deep navy would nearly vanish against the sky, so any future re-placement must keep him on cloud, not sky.
 
-## Outstanding before this is the final locked asset
+**Percentage positioning alone didn't actually survive resizing (fixed 2026-07-21).** The fraction-based footing spots were always correct in principle, but `frontend/src/index.css`'s `.world` used `width:100%; height:100vh` with `background-size:cover` — a container whose aspect ratio doesn't match the image crops differently at every window size, so characters visibly drifted off their footing on resize despite the percentages being right. Fixed by locking `.world` to the image's native 1376:768 ratio (`aspect-ratio` + `width: min(100vw, 100vh * 1.791667)`), letterboxing/pillarboxing against the sky-deep background color outside that ratio instead of cropping differently. Verified at three very different window shapes (wide/tall/ultrawide) — same relative footing every time.
 
-1. Stray artifact — a thin comma-shaped mark in the sky, left-of-center — needs removing.
-2. Star shape inconsistency — mixes small dots and four-point sparkles; pick one shape.
-3. **Composite scale test not yet done.** A real sprite at its actual rendered size hasn't been dropped onto this background yet to confirm the cloud-to-character scale ratio reads right. Do this before treating the background as final — it can't be judged from the background alone.
+## Outstanding — all three resolved 2026-07-21
+
+1. ~~Stray artifact — a thin comma-shaped mark in the sky, left-of-center.~~ Removed (cloned a clean nearby sky patch over it, matching local JPEG grain rather than a flat fill that would read as a visible seam).
+2. ~~Star shape inconsistency — mixes small dots and four-point sparkles.~~ Standardized on the four-point sparkle (was already the narrow majority, 7 vs 6, and reads more clearly as a deliberate star than a dot does) — the 6 dot-shaped stars were erased and restamped using an actual existing sparkle's pixel signal (copied, not hand-drawn, to guarantee visual consistency with the ones already there).
+3. ~~Composite scale test not yet done.~~ Done implicitly and repeatedly — every live Playwright screenshot taken across this whole build (world screen, profile overlays, the resize test above) is real sprites at their actual rendered size against this actual background. Scale reads right: characters are legible and proportionate against the cloud plateaus, neither lost nor overwhelming.
 
 ## What goes in this folder
 

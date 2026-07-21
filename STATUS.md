@@ -111,9 +111,17 @@ An 8-angle security-focused code review (3 correctness + 3 cleanup + altitude + 
 - The `lessons_distilled_through` cursor-advance follow-up flagged in the nightshift milestone is done: `runner.py`'s distillation drafts now leave a machine-readable `<!-- cursor-advance: mode=count -->` marker (computed deterministically at draft time, not re-derived from the slug later — slug/slug_hint aren't a reliable place to recover which mode a distillation targeted). Accept parses it and advances the cursor.
 - 11 new/updated pytest tests — 87 passing total. Verified live against the running backend and real vault: staged a real diff-bearing proposal, accepted it, confirmed the target file actually changed; staged a malformed proposal, confirmed accept returned 422 and the item stayed in the inbox untouched; cleaned up all smoke-test artifacts including a stray log.md entry the accept flow itself wrote.
 
+## Done this pass (world/sprite polish — sprite drift fix, background touch-ups, expression extraction)
+
+- **Sprite drift bug, fixed.** `.world`'s footing-spot percentages were always correct in principle, but `background-size:cover` on a container whose aspect ratio didn't match the image (`width:100%; height:100vh`) cropped differently at every window size, so characters visibly drifted off their cloud footing on resize. Fixed by locking `.world` to the backdrop's native 1376:768 ratio; letterboxes/pillarboxes against the sky-deep background outside that ratio instead. Verified at three very different window shapes (wide/tall/ultrawide) — same relative footing every time.
+- **Both documented background touch-ups, done.** Removed the stray comma-shaped artifact (cloned a clean nearby sky patch over it, matching local JPEG grain rather than a flat fill that would show a seam). Standardized the star field on the four-point sparkle shape (was mixing dots and sparkles) — the 6 dot stars were erased and restamped using an actual existing sparkle's real pixel signal, not hand-drawn, for guaranteed visual consistency.
+- **Composite scale test — done implicitly.** Every live Playwright screenshot taken across this whole build already is real sprites at real render size against the real background; scale reads correctly (legible, proportionate, no adjustment needed).
+- **Sprite sheet expressions extracted.** `assets/characters/expressions/` — 19 non-idle variants (hard-hat, sleepy, magnifier, and 16 others) found via connected-component labeling on the reference sheet (not hand-picked crops) and cleaned with the same pipeline as the 5 locked idle sprites. Not wired into the app — idle roaming/expression swapping is explicitly v2 scope — this is asset-production only, ready for when that's built. A few labels are honest best-guesses from visual inspection, flagged as such in `expressions/README.md`.
+- Answered a process question: this stays a local web app (browser tab / VS Code Integrated Browser), not a native Mac app — `SPEC.md` explicitly lists "Tauri desktop wrap" under out-of-scope, a deliberate parked decision, not an oversight.
+
 ## Not started
 
-- Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
+- Sprite sheet split into individual per-character assets (distinct from the expression extraction above — this is about the *idle* sprites' own source format)
 - A real designed "new build" input (name/path) — currently `window.prompt`, a functional placeholder, not the intended final UI
 - Exact character hex palette (now sampled from real sprites rather than guessed, but still interim until the grid-data pass locks final production values)
 
