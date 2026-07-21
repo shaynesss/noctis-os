@@ -209,11 +209,11 @@ function renderBody(
     case 'dev':
       return <FaberBody state={state} onResumeJob={onResumeJob} />
     case 'learn':
-      return <NoctuaBody state={state} />
+      return <NoctuaBody state={state} onResumeJob={onResumeJob} />
     case 'research':
-      return <VesperBody state={state} />
+      return <VesperBody state={state} onResumeJob={onResumeJob} />
     case 'settings':
-      return <CustosBody state={state} onStartTask={onStartSettingsTask} />
+      return <CustosBody state={state} onStartTask={onStartSettingsTask} onResumeJob={onResumeJob} />
     case 'nightshift':
       return <EchoBody inbox={inbox} onDecision={onDecision} />
   }
@@ -222,18 +222,26 @@ function renderBody(
 const BODY_START_DELAY_MS = 150
 const LINE_STAGGER_MS = 220
 
-function FaberBody({ state, onResumeJob }: { state: ModeState; onResumeJob: (jobSlug: string) => void }) {
-  const jobs = state.jobs ?? []
-  if (jobs.length === 0) {
-    return (
-      <p className="idle-note">
-        <Typewriter text="no dams under construction. the pond is calm." startDelayMs={BODY_START_DELAY_MS} />
-      </p>
-    )
-  }
+// Shared across every mode that can hold jobs (dev/learn/research/settings —
+// the four whose Failure Behavior text promises stale-and-flagged tracking,
+// see backend/staleness.py's FLAGGABLE_MODES). Renders nothing when empty so
+// modes without an in-flight job look exactly as they did before this
+// existed; flagged jobs need to actually be visible somewhere, not just
+// tracked server-side, or the backend flag has no interface to land in.
+function JobList({
+  jobs,
+  mode,
+  onResumeJob,
+}: {
+  jobs: ModeState['jobs']
+  mode: Mode
+  onResumeJob: (jobSlug: string) => void
+}) {
+  const list = jobs ?? []
+  if (list.length === 0) return null
   return (
     <>
-      {jobs.map((job, i) => (
+      {list.map((job, i) => (
         <div className={`job-row${job.flagged ? ' flagged' : ''}`} key={job.slug}>
           <div>
             <span className="name">
@@ -243,7 +251,7 @@ function FaberBody({ state, onResumeJob }: { state: ModeState; onResumeJob: (job
             <span className="job-status">
               <Typewriter text={job.status} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS + 80} />
             </span>
-            <ActionFeedLine mode="dev" slug={job.slug} />
+            <ActionFeedLine mode={mode} slug={job.slug} />
           </div>
           <div className="job-actions">
             <span className="phase-badge">{job.stage}</span>
@@ -255,6 +263,18 @@ function FaberBody({ state, onResumeJob }: { state: ModeState; onResumeJob: (job
       ))}
     </>
   )
+}
+
+function FaberBody({ state, onResumeJob }: { state: ModeState; onResumeJob: (jobSlug: string) => void }) {
+  const jobs = state.jobs ?? []
+  if (jobs.length === 0) {
+    return (
+      <p className="idle-note">
+        <Typewriter text="no dams under construction. the pond is calm." startDelayMs={BODY_START_DELAY_MS} />
+      </p>
+    )
+  }
+  return <JobList jobs={jobs} mode="dev" onResumeJob={onResumeJob} />
 }
 
 // The locked entrance style from card-design mockup iteration (Interface.md
@@ -324,32 +344,35 @@ function ActionFeedLine({ mode, slug }: { mode: Mode; slug: string }) {
   return <span className="action-feed-line">{lastLine}</span>
 }
 
-function NoctuaBody({ state }: { state: ModeState }) {
+function NoctuaBody({ state, onResumeJob }: { state: ModeState; onResumeJob: (jobSlug: string) => void }) {
   const deepDue = typeof state.deep_due === 'number' ? state.deep_due : 0
   const deepRetained = typeof state.deep_retained === 'number' ? state.deep_retained : 0
   const shallowDone = typeof state.shallow_done === 'number' ? state.shallow_done : 0
   return (
-    <div className="stat-blocks">
-      <div className="stat-block">
-        <span className="stat-label">DEEP</span>
-        <span className="stat-main">
-          <Typewriter text={`${deepDue} due`} startDelayMs={BODY_START_DELAY_MS} />
-        </span>
-        <span className="stat-sub">
-          <Typewriter text={`${deepRetained} retained`} startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS} />
-        </span>
+    <>
+      <JobList jobs={state.jobs} mode="learn" onResumeJob={onResumeJob} />
+      <div className="stat-blocks">
+        <div className="stat-block">
+          <span className="stat-label">DEEP</span>
+          <span className="stat-main">
+            <Typewriter text={`${deepDue} due`} startDelayMs={BODY_START_DELAY_MS} />
+          </span>
+          <span className="stat-sub">
+            <Typewriter text={`${deepRetained} retained`} startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS} />
+          </span>
+        </div>
+        <div className="stat-block">
+          <span className="stat-label">SHALLOW</span>
+          <span className="stat-main">
+            <Typewriter text={`${shallowDone} done`} startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS * 2} />
+          </span>
+        </div>
       </div>
-      <div className="stat-block">
-        <span className="stat-label">SHALLOW</span>
-        <span className="stat-main">
-          <Typewriter text={`${shallowDone} done`} startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS * 2} />
-        </span>
-      </div>
-    </div>
+    </>
   )
 }
 
-function VesperBody({ state }: { state: ModeState }) {
+function VesperBody({ state, onResumeJob }: { state: ModeState; onResumeJob: (jobSlug: string) => void }) {
   const adopt = (state.adopt_counts as Record<string, number> | undefined) ?? {}
   const inquiry = (state.inquiry_counts as Record<string, number> | undefined) ?? {}
   const adoptBadges = [
@@ -364,32 +387,35 @@ function VesperBody({ state }: { state: ModeState }) {
     { cls: 'bad', text: `hype ${inquiry.hype ?? 0}` },
   ]
   return (
-    <div className="stat-blocks">
-      <div className="stat-block">
-        <span className="stat-label">ADOPT</span>
-        <div className="verdict-badges">
-          {adoptBadges.map((badge, i) => (
-            <span className={`verdict ${badge.cls}`} key={badge.text}>
-              <Typewriter text={badge.text} startDelayMs={BODY_START_DELAY_MS + i * 90} speedMs={10} />
-            </span>
-          ))}
+    <>
+      <JobList jobs={state.jobs} mode="research" onResumeJob={onResumeJob} />
+      <div className="stat-blocks">
+        <div className="stat-block">
+          <span className="stat-label">ADOPT</span>
+          <div className="verdict-badges">
+            {adoptBadges.map((badge, i) => (
+              <span className={`verdict ${badge.cls}`} key={badge.text}>
+                <Typewriter text={badge.text} startDelayMs={BODY_START_DELAY_MS + i * 90} speedMs={10} />
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="stat-block">
+          <span className="stat-label">INQUIRY</span>
+          <div className="verdict-badges">
+            {inquiryBadges.map((badge, i) => (
+              <span className={`verdict ${badge.cls}`} key={badge.text}>
+                <Typewriter
+                  text={badge.text}
+                  startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS + i * 90}
+                  speedMs={10}
+                />
+              </span>
+            ))}
+          </div>
         </div>
       </div>
-      <div className="stat-block">
-        <span className="stat-label">INQUIRY</span>
-        <div className="verdict-badges">
-          {inquiryBadges.map((badge, i) => (
-            <span className={`verdict ${badge.cls}`} key={badge.text}>
-              <Typewriter
-                text={badge.text}
-                startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS + i * 90}
-                speedMs={10}
-              />
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
+    </>
   )
 }
 
@@ -412,12 +438,15 @@ const COMPLETENESS_CHECK_NOTES =
 function CustosBody({
   state,
   onStartTask,
+  onResumeJob,
 }: {
   state: ModeState
   onStartTask: (taskSlug: string, name: string, notes: string) => void
+  onResumeJob: (jobSlug: string) => void
 }) {
   const triggers = (state.triggers as Record<string, boolean> | undefined) ?? {}
   const diffsAwaiting = typeof state.diffs_awaiting_review === 'number' ? state.diffs_awaiting_review : 0
+  const jobs = state.jobs ?? []
   const hasTriggers = triggers.friction || triggers.accumulation || triggers.suspicion
 
   const completenessCheckRow = (
@@ -430,7 +459,7 @@ function CustosBody({
     </button>
   )
 
-  if (!hasTriggers && diffsAwaiting === 0) {
+  if (!hasTriggers && diffsAwaiting === 0 && jobs.length === 0) {
     return (
       <>
         <p className="idle-note">
@@ -442,6 +471,7 @@ function CustosBody({
   }
   return (
     <>
+      <JobList jobs={jobs} mode="settings" onResumeJob={onResumeJob} />
       <div className="trigger-list">
         {(['friction', 'accumulation', 'suspicion'] as const).map((trigger, i) => (
           <div className="trigger-row" key={trigger}>

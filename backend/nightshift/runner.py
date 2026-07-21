@@ -100,7 +100,11 @@ Required proposal format:
 Task: {item.context}. Read the relevant lessons.md file(s) under modes/,
 identify the specific pattern, and write ONE proposal file to exactly this
 path: {inbox_path}
-Follow the three-part format above (Rationale, Diff, Evidence) exactly.
+Follow the four-part format above (Rationale, Diff, Evidence, Confidence)
+exactly. For Confidence: write "high" if multiple independent lessons
+entries clearly support the same pattern, or "low" if you're inferring
+from a single entry or a weaker signal -- then one sentence on why. This
+is a genuine self-assessment, not a formality; judge it honestly.
 Do not write anywhere else. Do not run any other tool besides Read/Grep/Write.
 """
 
@@ -174,12 +178,18 @@ def run() -> list[str]:
             if not inbox_path.exists():
                 continue  # advance failed to produce a draft -- stage nothing, no partial write
 
-            rationale = _extract_rationale(inbox_path.read_text(encoding="utf-8"))
+            proposal_text = inbox_path.read_text(encoding="utf-8")
+            rationale = _extract_rationale(proposal_text)
             if not rationale:
                 inbox_path.unlink()  # malformed draft, doesn't meet the mandatory-rationale contract
                 continue
 
-            _stage(item, slug, rationale)
+            confidence = _confidence_for(item, proposal_text)
+            if not confidence:
+                inbox_path.unlink()  # malformed draft, doesn't meet the mandatory-confidence contract
+                continue
+
+            _stage(item, slug, rationale, confidence)
             staged_slugs.append(slug)
 
     return staged_slugs
@@ -203,7 +213,39 @@ def _extract_rationale(proposal_text: str) -> str | None:
     return None
 
 
-def _stage(item: SlackItem, slug: str, rationale: str) -> None:
+def _extract_confidence(proposal_text: str) -> str | None:
+    """Reads the distiller's own self-assessment back out of its `##
+    Confidence` section (inbox/README.md's fourth, judgment-only section).
+    First word must be high/low -- anything else is a malformed draft.
+    """
+    lines = proposal_text.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower() == "## confidence":
+            for follow in lines[i + 1 :]:
+                if follow.startswith("##"):
+                    return None
+                word = follow.strip().split()[:1]
+                if word and word[0].lower() in ("high", "low"):
+                    return word[0].lower()
+                if follow.strip():
+                    return None
+            return None
+    return None
+
+
+def _confidence_for(item: SlackItem, proposal_text: str) -> str | None:
+    """Dev's flagged-job note is templated, read-only, no judgment call
+    ever made (dev.md's Failure Behavior) -- always high, never asked of
+    the mechanical drafter. Settings' distillation genuinely involves
+    judgment (pattern identification from lessons.md), so its confidence
+    is a real self-assessment parsed out of the proposal itself.
+    """
+    if item.kind == "flagged-job":
+        return "high"
+    return _extract_confidence(proposal_text)
+
+
+def _stage(item: SlackItem, slug: str, rationale: str, confidence: str) -> None:
     state, content = vault_io.read_frontmatter(STATE_PATH)
     inbox = state.get("inbox", [])
     inbox.append(
@@ -212,7 +254,7 @@ def _stage(item: SlackItem, slug: str, rationale: str) -> None:
             "origin_mode": item.mode,
             "description": item.description,
             "rationale": rationale,
-            "confidence": None,
+            "confidence": confidence,
             "staged_at": datetime.now(timezone.utc).isoformat(),
         }
     )
