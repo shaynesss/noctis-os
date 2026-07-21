@@ -52,6 +52,7 @@ class JobCreate(BaseModel):
     slug: str
     name: str
     project_path: str | None = None
+    notes: str = ""
 
 
 @router.post("/{name}/jobs")
@@ -61,6 +62,12 @@ def create_job(name: str, job: JobCreate):
     now nothing ever created a job, so Faber's card stayed idle regardless
     of real work happening, and dev's slack-surface scan had nothing to
     ever find flagged.
+
+    `notes` becomes the job context.md's prose body — the part
+    POST /session/launch actually injects into the launch prompt
+    (job-context frontmatter is metadata, not prompt content). Without
+    it, a scoped launch (e.g. Custos "address this trigger") would open a
+    session with no more direction than a bare methodology dump.
     """
     if name not in VALID_MODES:
         raise HTTPException(status_code=404, detail=f"Unknown mode: {name}")
@@ -80,7 +87,7 @@ def create_job(name: str, job: JobCreate):
     if job.project_path:
         metadata["project_path"] = job.project_path
 
-    vault_io.write_frontmatter(job_path, metadata, "")
+    vault_io.write_frontmatter(job_path, metadata, job.notes)
     _sync_state_job_entry(name, job.slug, metadata)
     return {"slug": job.slug, **metadata}
 

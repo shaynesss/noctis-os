@@ -37,6 +37,21 @@ def test_create_job_writes_context_and_syncs_state(client, auth_headers, vault):
     assert state_meta["jobs"][0]["flagged"] is False
 
 
+def test_create_job_notes_become_context_prose(client, auth_headers, vault):
+    """notes is what POST /session/launch actually injects into the launch
+    prompt -- a scoped launch (e.g. Custos "address this trigger") needs
+    real task direction here, not just a job name."""
+    response = client.post(
+        "/mode/settings/jobs",
+        json={"slug": "address-friction", "name": "Address friction", "notes": "Read modes/*/lessons.md for FRICTION: entries."},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+
+    _, content = vault_io.read_frontmatter("modes/settings/jobs/address-friction/context.md")
+    assert content.strip() == "Read modes/*/lessons.md for FRICTION: entries."
+
+
 def test_create_job_conflicts_on_existing_slug(client, auth_headers, vault):
     client.post("/mode/dev/jobs", json={"slug": "dup", "name": "Dup"}, headers=auth_headers)
     response = client.post("/mode/dev/jobs", json={"slug": "dup", "name": "Dup again"}, headers=auth_headers)
