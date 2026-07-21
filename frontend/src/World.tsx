@@ -83,11 +83,13 @@ export default function World({ onSelect, activeMode }: WorldProps) {
         const footing = FOOTING[mode]
         const state = states[mode]
         const badge = ambientBadge(mode, state)
+        const busy = state?.busy ?? false
+        const sprite = busy ? meta.busySprite : meta.idleSprite
         return (
           <button
             key={mode}
             type="button"
-            className={`character${state?.busy ? ' busy' : ''}${activeMode === mode ? ' active' : ''}`}
+            className={`character${busy ? ' busy' : ''}${activeMode === mode ? ' active' : ''}`}
             style={{
               left: `${footing.leftPct}%`,
               top: `${footing.topPct}%`,
@@ -97,8 +99,10 @@ export default function World({ onSelect, activeMode }: WorldProps) {
           >
             <span className="sprite-wrap">
               {badge !== null && badge > 0 && <span className="badge">{badge}</span>}
-              <img src={`/assets/characters/${meta.sprite}.png`} alt={`${meta.name}, ${mode} mode`} />
-              <span className="state-dot" />
+              <img
+                src={`/assets/characters/${sprite}.png`}
+                alt={`${meta.name}, ${mode} mode, ${busy ? 'active' : 'idle'}`}
+              />
             </span>
             <span className="label">
               {meta.name.toUpperCase()} · {mode.toUpperCase()}

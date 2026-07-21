@@ -36,7 +36,7 @@ If this file and the wiki ever disagree, the wiki wins for *why* a decision was 
 
 ### Core features (must-haves)
 
-- **Persistent world screen** — single scene, no routing, five character sprites idling in fixed designated spots on a locked peak-dusk cloud-bed backdrop (see Design Brief).
+- **Persistent world screen** — single scene, no routing, five character sprites idling in fixed designated spots on a locked peak-dusk cloud-bed backdrop (see Design Brief). **Fixed canvas, not responsive (locked 2026-07-21):** the world renders at the backdrop's native 1376×768 resolution always, centered in the viewport, letterboxed/cropped at the edges on a smaller window rather than scaling contents to fit — two earlier passes tried making the scene reflow with window size and both were solving a problem Shayne didn't have; the large-window layout is the only layout.
 - **Ambient state per character** — each sprite reflects its mode's live state at a glance (busy/idle, count badges where relevant). Sourced from each mode's `state.md` (see EDD's new "State files and the state-schema contract" section) — no new data, a rendering of state already tracked.
 - **Profile overlay** — click a character → panel opens over the world, world stays mounted underneath. Full card content design locked — see `wiki/Noctis OS/Interface.md`.
 - **Session launch from profile** — the only way a Claude Code session starts. Launcher injects that mode's methodology file + lessons file + working context into the session. Launch button always present, permanently tinted in the character's own color. Launch surface is mode-specific — four modes open Terminal.app with a character-tinted background, Dev opens VS Code.
@@ -71,7 +71,7 @@ If this file and the wiki ever disagree, the wiki wins for *why* a decision was 
 
 - Career mode
 - Full PTY terminal mirroring (v2 reference exists via octogent, not built)
-- Idle roaming/movement and the full expression library (v2)
+- Idle roaming/movement and the full expression library (v2) — **partially superseded 2026-07-21**: busy/idle status is now told through swapping which extracted expression is showing (a "sleepy" vs. an "active/working" sprite per character) instead of a separate status-dot indicator, Shayne's direct call. Idle *roaming* (characters moving around the scene) and the rest of the expression set beyond one busy/idle pair per character stay v2.
 - Noctis-as-MCP-server (parked; concrete trigger not yet named — see Open Questions)
 - Tauri desktop wrap
 - Any deployment — local-only
