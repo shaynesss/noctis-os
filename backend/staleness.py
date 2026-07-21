@@ -1,9 +1,14 @@
-"""Deterministic staleness -> flagged mechanism for dev jobs (CLAUDE.md's
-"Deterministic-where-possible" rule: staleness checks are backend code,
-never left to session judgment). This is dev mode's own domain, not
-nightshift's -- nightshift only ever *reads* the `flagged` field (see
-modes/dev/state.md's frontmatter docs); this module is what actually sets
-it.
+"""Deterministic staleness -> flagged mechanism for job-holding modes
+(CLAUDE.md's "Deterministic-where-possible" rule: staleness checks are
+backend code, never left to session judgment). Applies to dev, learn,
+research, and settings -- every mode whose own methodology file states
+"Session death marks the job context stale-and-flagged in the interface"
+(dev.md/learn.md/research.md/settings.md's Failure Behavior sections).
+Nightshift is deliberately excluded: its own Failure Behavior is stateless
+re-derivation (a dead run just leaves nothing in the inbox; the next
+scheduled Scan re-derives from scratch), so it has no job to flag and only
+ever *reads* other modes' `flagged` field (see modes/dev/state.md's
+frontmatter docs) via its flagged-job slack check.
 
 A job is flagged when it looks like a session died mid-build: no activity
 (runtime log or last_touched) for longer than STALE_THRESHOLD, and no
@@ -65,15 +70,20 @@ def _job_last_activity(mode: str, slug: str, last_touched: str | None) -> tuple[
     return last_activity, closed_cleanly
 
 
-def flag_stale_dev_jobs(now: datetime | None = None) -> list[str]:
-    """Scans modes/dev/state.md's jobs, flags any that look abandoned
+# The four modes whose own Failure Behavior text promises stale-and-flagged
+# job tracking. Nightshift is excluded by design (see module docstring).
+FLAGGABLE_MODES = ("dev", "learn", "research", "settings")
+
+
+def flag_stale_jobs(mode: str, now: datetime | None = None) -> list[str]:
+    """Scans modes/<mode>/state.md's jobs, flags any that look abandoned
     mid-session. Returns the slugs newly flagged this pass. Mutates both
     the job's own context.md and the mirrored entry in state.md -- the
     two must never drift (see mode.py's _sync_state_job_entry, which this
     reuses).
     """
     now = now or datetime.now(timezone.utc)
-    state, _ = vault_io.read_frontmatter("modes/dev/state.md")
+    state, _ = vault_io.read_frontmatter(f"modes/{mode}/state.md")
     newly_flagged = []
 
     for job in state.get("jobs", []):
@@ -81,13 +91,13 @@ def flag_stale_dev_jobs(now: datetime | None = None) -> list[str]:
         if not slug or job.get("flagged"):
             continue
 
-        last_activity, closed_cleanly = _job_last_activity("dev", slug, job.get("last_touched"))
+        last_activity, closed_cleanly = _job_last_activity(mode, slug, job.get("last_touched"))
         if closed_cleanly or last_activity is None:
             continue
         if now - last_activity <= STALE_THRESHOLD:
             continue
 
-        job_path = f"modes/dev/jobs/{slug}/context.md"
+        job_path = f"modes/{mode}/jobs/{slug}/context.md"
         if not vault_io.file_exists(job_path):
             continue
 
@@ -97,14 +107,15 @@ def flag_stale_dev_jobs(now: datetime | None = None) -> list[str]:
         newly_flagged.append(slug)
 
     if newly_flagged:
-        _sync_flags_into_state(newly_flagged)
+        _sync_flags_into_state(mode, newly_flagged)
 
     return newly_flagged
 
 
-def _sync_flags_into_state(flagged_slugs: list[str]) -> None:
-    state, content = vault_io.read_frontmatter("modes/dev/state.md")
+def _sync_flags_into_state(mode: str, flagged_slugs: list[str]) -> None:
+    state_path = f"modes/{mode}/state.md"
+    state, content = vault_io.read_frontmatter(state_path)
     for job in state.get("jobs", []):
         if job.get("slug") in flagged_slugs:
             job["flagged"] = True
-    vault_io.write_frontmatter("modes/dev/state.md", state, content)
+    vault_io.write_frontmatter(state_path, state, content)

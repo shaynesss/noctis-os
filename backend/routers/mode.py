@@ -23,13 +23,15 @@ def get_mode_state(name: str):
     if name not in VALID_MODES:
         raise HTTPException(status_code=404, detail=f"Unknown mode: {name}")
 
-    if name == "dev":
+    if name in staleness.FLAGGABLE_MODES:
         # Deterministic staleness -> flagged check runs inline here rather
         # than only in a nightly sweep -- this endpoint is already polled
         # every 15s by the World screen, so a dead session shows up live
         # instead of waiting for nightshift's 03:00 run (staleness.py:
-        # "Deterministic-where-possible", dev's own domain, not nightshift's).
-        staleness.flag_stale_dev_jobs()
+        # "Deterministic-where-possible"). Applies to every mode whose own
+        # Failure Behavior text promises this (dev/learn/research/settings);
+        # nightshift is excluded by design, see staleness.py's docstring.
+        staleness.flag_stale_jobs(name)
 
     # state.md is the lightweight index the profile overlay and world ambient
     # badges read — not every job file individually (SPEC.md EDD "State files
