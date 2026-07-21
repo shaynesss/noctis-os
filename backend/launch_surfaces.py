@@ -57,6 +57,13 @@ def _merge_hook(settings_path: Path, event: str, command: str, script_path: Path
     getting fresh activity/SESSION_END writes forever, permanently
     defeating staleness.py's flagging for that job. Found in the
     2026-07-21 ship-gate review; at most one hook per script per event now.
+
+    Also purges the same script from every *other* event bucket, not just
+    `event` — each hook script here is meant to be bound to exactly one
+    event. Without this, moving mark_session_end.py from Stop to SessionEnd
+    (found live: Stop fires per-turn, not on real session termination)
+    would have left the stale Stop registration firing forever alongside
+    the new correct one on any settings.json that predated the fix.
     """
     settings: dict = {}
     if settings_path.exists():
@@ -66,12 +73,22 @@ def _merge_hook(settings_path: Path, event: str, command: str, script_path: Path
             settings = {}
 
     script_prefix = f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(script_path))}"
-    entries = settings.setdefault("hooks", {}).setdefault(event, [])
+    hooks_by_event = settings.setdefault("hooks", {})
+    entries = hooks_by_event.setdefault(event, [])
 
     for entry in entries:
         for hook in entry.get("hooks", []):
             if hook.get("command") == command:
                 return  # already registered exactly as-is
+
+    for other_event, other_entries in hooks_by_event.items():
+        if other_event == event:
+            continue
+        other_entries[:] = [
+            entry
+            for entry in other_entries
+            if not any(hook.get("command", "").startswith(script_prefix) for hook in entry.get("hooks", []))
+        ]
 
     entries[:] = [
         entry
@@ -88,14 +105,21 @@ def _ensure_nondev_hooks() -> None:
     identity from NOCTIS_MODE/NOCTIS_JOB_ID env vars set per-launch in the
     exported shell command (see launch_terminal), so concurrent Terminal.app
     sessions sharing this one settings.json never race on whose job gets
-    logged/closed. Stop registers mark_session_end.py -- the other half of
-    staleness.py's flagging mechanism (a job that closes cleanly must never
-    get flagged, however old it later gets).
+    logged/closed. SessionEnd registers mark_session_end.py -- the other
+    half of staleness.py's flagging mechanism (a job that closes cleanly
+    must never get flagged, however old it later gets). Deliberately
+    SessionEnd, not Stop: Stop fires after every single agent turn (Claude
+    finishes responding, waits for the next prompt), not on session
+    termination -- registering there cleared `busy` and wrote the
+    SESSION_END sentinel after the *first* response in a session, while
+    the terminal was still open and very much in use. Found live: busy
+    expressions were turning back to idle mid-session. SessionEnd only
+    fires once, when the CLI process itself actually exits.
     """
     log_command = f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(HOOK_SCRIPT))}"
     _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "PostToolUse", log_command, HOOK_SCRIPT)
     end_command = f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(SESSION_END_HOOK_SCRIPT))}"
-    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "Stop", end_command, SESSION_END_HOOK_SCRIPT)
+    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "SessionEnd", end_command, SESSION_END_HOOK_SCRIPT)
 
 
 def _ensure_dev_hooks(project_path: str, job_slug: str | None) -> None:
@@ -115,7 +139,8 @@ def _ensure_dev_hooks(project_path: str, job_slug: str | None) -> None:
         f"{shlex.quote(str(PYTHON_BIN))} {shlex.quote(str(SESSION_END_HOOK_SCRIPT))} "
         f"--mode dev --job-id {shlex.quote(job_slug or 'general')}"
     )
-    _merge_hook(settings_path, "Stop", end_command, SESSION_END_HOOK_SCRIPT)
+    # SessionEnd, not Stop -- see _ensure_nondev_hooks' docstring for why.
+    _merge_hook(settings_path, "SessionEnd", end_command, SESSION_END_HOOK_SCRIPT)
 
 
 def _darken_hex(hex_color: str, lightness: float = 0.175) -> tuple[int, int, int]:

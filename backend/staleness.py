@@ -12,7 +12,9 @@ frontmatter docs) via its flagged-job slack check.
 
 A job is flagged when it looks like a session died mid-build: no activity
 (runtime log or last_touched) for longer than STALE_THRESHOLD, and no
-SESSION_END sentinel (backend/hooks/mark_session_end.py, a Stop hook) ever
+SESSION_END sentinel (backend/hooks/mark_session_end.py, a SessionEnd hook --
+deliberately not Stop, which fires after every turn rather than on real
+session termination) ever
 closed it cleanly. A job someone just paused on purpose for a day is not
 "stale" in this sense as long as it closed cleanly last time -- only an
 abrupt, never-closed session counts.
