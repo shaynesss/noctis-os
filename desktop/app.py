@@ -21,6 +21,7 @@ up a code change without quitting and relaunching the whole app.
 
 import atexit
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -37,11 +38,52 @@ BACKEND_DIR = REPO_ROOT / "backend"
 FRONTEND_DIR = REPO_ROOT / "frontend"
 BACKEND_URL = "http://localhost:8000/health"
 FRONTEND_URL = "http://localhost:5173/"
-# Faber, standing in for real app art -- a placeholder, not a final icon
-# (Shayne's call: something real now, actual art later). Both create_window
-# and start()'s own `icon` params are documented GTK/QT-only, so on macOS
-# this needs to go through AppKit directly instead -- see _set_dock_icon.
-ICON_PATH = REPO_ROOT / "assets" / "characters" / "faber.png"
+# Faber-building (the tree expression), matching desktop/NoctisOS.app's
+# bundled AppIcon.icns -- Shayne's pick over the plain idle sprite. Both
+# create_window and start()'s own `icon` params are documented GTK/QT-only,
+# so on macOS this needs to go through AppKit directly instead -- see
+# _set_dock_icon.
+ICON_PATH = REPO_ROOT / "assets" / "characters" / "expressions" / "faber-building.png"
+
+
+def _resolve_npm() -> str:
+    """Bare "npm" resolves via PATH -- fine for `make app`/`make dev` from
+    a terminal (full shell PATH, Homebrew's bin dir included), but
+    desktop/NoctisOS.app is launched through LaunchServices (double-click,
+    Spotlight), which hands the process a minimal launchd PATH that does
+    NOT include Homebrew. Same root cause class as launch_surfaces.py's
+    PYTHON_BIN fix -- a bare command name silently resolving differently
+    depending on how the process was launched. Found live: two failed
+    Spotlight launches both logged `FileNotFoundError: 'npm'` in
+    backend/runtime/desktop.log, while a terminal-launched `make app`
+    worked fine right before that.
+    """
+    found = shutil.which("npm")
+    if found:
+        return found
+    for candidate in ("/opt/homebrew/bin/npm", "/usr/local/bin/npm"):
+        if Path(candidate).exists():
+            return candidate
+    return "npm"  # last resort -- fails the same way as before if truly absent
+
+
+NPM_BIN = _resolve_npm()
+
+
+def _npm_env() -> dict[str, str]:
+    """Resolving NPM_BIN's own absolute path isn't enough on its own: npm's
+    shebang is `#!/usr/bin/env node`, so *running* it does its own PATH
+    lookup for `node` in the child's environment -- under the same
+    impoverished LaunchServices PATH that made bare "npm" fail to resolve
+    in the first place, that lookup fails too. Prepend NPM_BIN's own
+    directory (where `node` lives alongside it in a Homebrew/nvm install)
+    to a copy of the current environment's PATH.
+    """
+    env = os.environ.copy()
+    npm_dir = str(Path(NPM_BIN).parent)
+    env["PATH"] = f"{npm_dir}{os.pathsep}{env.get('PATH', '')}"
+    return env
+
 
 _procs: list[subprocess.Popen] = []
 _cleaned_up = False
@@ -58,14 +100,14 @@ def _wait_for(url: str, timeout: float = 20.0) -> bool:
     return False
 
 
-def _start(cmd: list[str], cwd: Path) -> subprocess.Popen:
+def _start(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> subprocess.Popen:
     # start_new_session=True (setsid) puts each process in its own group --
     # `npm run dev` doesn't run the Vite server itself, it spawns a *child*
     # process that does, and Popen.terminate() only signals the immediate
     # child. Without this, closing the window left the real Vite process
     # (and its bound port) running invisibly in the background forever --
     # found by actually closing the window and checking `lsof`, not assumed.
-    proc = subprocess.Popen(cmd, cwd=cwd, start_new_session=True)
+    proc = subprocess.Popen(cmd, cwd=cwd, start_new_session=True, env=env)
     _procs.append(proc)
     return proc
 
@@ -134,7 +176,7 @@ def main() -> None:
         [str(BACKEND_DIR / ".venv" / "bin" / "uvicorn"), "main:app", "--reload", "--port", "8000"],
         BACKEND_DIR,
     )
-    _start(["npm", "run", "dev"], FRONTEND_DIR)
+    _start([NPM_BIN, "run", "dev"], FRONTEND_DIR, env=_npm_env())
 
     if not _wait_for(BACKEND_URL):
         print("desktop/app.py: backend never became ready, exiting", file=sys.stderr)
