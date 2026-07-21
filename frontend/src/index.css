@@ -74,30 +74,23 @@ button {
 /* ---------- world scene ---------- */
 
 .world {
-  /* Locked to the backdrop's native ratio (1376x768) rather than
-     width:100% + height:100vh -- with background-size:cover, a container
-     whose aspect ratio doesn't match the image crops differently at every
-     window size, so the percentage-positioned characters (footing spots
-     locked to specific image pixels, see assets/world/README.md) drift
-     off their footing as the window resizes. Fixed 2026-07-21. Letterboxes
-     against #root's --sky-deep background outside this ratio instead. */
+  /* Fixed canvas at the backdrop's native resolution (1376x768) --
+     deliberately NOT responsive. Two earlier passes tried to make the
+     scene scale with the window (aspect-ratio lock, then container
+     queries for sprite size) -- both were solving the wrong problem.
+     Shayne's actual call (2026-07-21): the layout at a large/fullscreen
+     window is the only layout: fixed pixel positions and sizes, centered
+     in the viewport, letterboxed/cropped at the edges on a smaller
+     window rather than reflowing. This is what the footing-spot
+     fractions and the sprite-size clamp's own max (84px) were already
+     designed against, so fixing to exactly this size is pixel-accurate,
+     not a new guess. */
   position: relative;
-  aspect-ratio: 1376 / 768;
-  width: min(100vw, 100vh * 1.791667);
+  width: 1376px;
+  height: 768px;
+  flex: none;
   background: url('/assets/world/world-backdrop.jpeg') center 38% / cover no-repeat, var(--sky);
-  /* Everything inside sizes off the container's own width (cqw), not the
-     viewport's (vw) -- sprite position was fixed to the backdrop by the
-     earlier aspect-ratio lock, but size wasn't: vw tracks the viewport
-     directly, while .world's own width only equals the viewport in one
-     dimension at a time (min(100vw, 100vh*ratio)), so sprites grew/shrank
-     out of proportion to the scene whenever letterboxing changed which
-     dimension was the limiting one. Fixed 2026-07-21. */
-  container-type: inline-size;
-  container-name: world;
-  /* cqw (container query width), not vw -- must be defined here rather
-     than :root so it resolves against .world's own width, the actual
-     scaling reference, not the viewport's. */
-  --sprite-w: clamp(46px, 6cqw, 84px);
+  --sprite-w: 84px;
 }
 
 .world::after {
@@ -116,8 +109,8 @@ button {
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: clamp(14px, 2cqw, 28px);
-  padding: 10px clamp(14px, 3cqw, 32px);
+  gap: 24px;
+  padding: 10px 28px;
   font-size: 10px;
   letter-spacing: 0.02em;
 }
@@ -175,18 +168,20 @@ button {
 
 .character .label {
   margin-top: 8px;
-  font-family: var(--font-pixel);
-  font-size: 8px;
-  letter-spacing: 0.05em;
+  /* Switched from the pixel font to mono (2026-07-21) -- Press Start 2P
+     is a display face, not built to stay legible at label-copy sizes;
+     every glyph turns into an ambiguous block under ~10px. JetBrains
+     Mono already carries the game-ish, monospaced feel everywhere else
+     in the UI at small sizes and actually resolves at this size. */
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.03em;
   color: #fff;
   background: rgba(16, 11, 36, 0.55);
   padding: 5px 7px;
   border-radius: 3px;
   white-space: nowrap;
-  /* Kept transparent (Shayne's call, reverted from an opaque fill) --
-     legibility instead comes from a crisp text-shadow doing the contrast
-     work the fill isn't allowed to, plus pure white instead of --cloud-lt
-     for a harder edge against bright cloud backgrounds. */
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 4px rgba(0, 0, 0, 0.6);
 }
 
@@ -211,24 +206,6 @@ button {
   text-align: center;
   font-variant-numeric: tabular-nums;
   box-shadow: 0 0 0 2px var(--sky-deep);
-}
-
-.character .state-dot {
-  /* Anchored to the sprite wrapper's own corner now, not the whole
-     character block (image + label stacked) -- it was positioned
-     relative to the full button before, landing near the label's bottom
-     edge and overlapping the pill instead of sitting on the sprite. */
-  position: absolute;
-  bottom: -2px;
-  right: -4px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--cloud-dk);
-  box-shadow: 0 0 0 2px var(--sky-deep);
-}
-.character.busy .state-dot {
-  background: #6bd08a;
 }
 
 .character:hover img {
