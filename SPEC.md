@@ -73,7 +73,7 @@ If this file and the wiki ever disagree, the wiki wins for *why* a decision was 
 - Full PTY terminal mirroring (v2 reference exists via octogent, not built)
 - Idle roaming/movement and the full expression library (v2) — **partially superseded 2026-07-21**: busy/idle status is now told through swapping which extracted expression is showing (a "sleepy" vs. an "active/working" sprite per character) instead of a separate status-dot indicator, Shayne's direct call. Idle *roaming* (characters moving around the scene) and the rest of the expression set beyond one busy/idle pair per character stay v2.
 - Noctis-as-MCP-server (parked; concrete trigger not yet named — see Open Questions)
-- Tauri desktop wrap
+- Tauri desktop wrap — **superseded 2026-07-21, moved into v1, built with pywebview instead of Tauri.** Shayne's direct call: a native window matters, but Tauri's Rust toolchain doesn't buy anything for a single-user local tool with no distribution need. `make app` opens a frameless pywebview window wrapping the same backend/frontend, hot-reloading from the same dev servers `make dev` starts. See `desktop/README.md` for the real bug this surfaced (subprocess-tree cleanup) and how it was fixed and verified. Custom app icon needs a bundler pass (`py2app`/`PyInstaller`) — that part is still a follow-up, not done yet.
 - Any deployment — local-only
 - Multi-user/auth of any kind
 - A separate global cross-mode inbox view
@@ -201,7 +201,7 @@ Vault side (not this repo): `second-brain/modes/<name>/` per mode — `<name>.md
 
 ### External dependencies
 
-Claude Code CLI, the Claude Code VS Code extension, PIL, a Python frontmatter/YAML library, Google Fonts, macOS `osascript`, Impeccable (global). No shadcn currently declared. No other services, no MCP servers at runtime.
+Claude Code CLI, the Claude Code VS Code extension, PIL, a Python frontmatter/YAML library, Google Fonts, macOS `osascript`, Impeccable (global), pywebview (native desktop window, added 2026-07-21). No shadcn currently declared. No other services, no MCP servers at runtime.
 
 ### Prerequisite — done (2026-07-20)
 
