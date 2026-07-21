@@ -1,4 +1,4 @@
-> **Status: see STATUS.md.** Spec (Definition/PRD/EDD/Design Brief) locked below. Phase 3 (mode-folder build-out) is in progress — per the dev-mode gate, folder scaffolding, `.env.example`, and repo setup happen after the spec closes.
+> **Status: see STATUS.md.** Spec (Definition/PRD/EDD/Design Brief) locked. Phase 3 (the full build order — mode folders, backend, frontend tracker, telemetry hooks, nightshift infra, dev job lifecycle) is **complete**. Everything below actually runs.
 
 # Noctis OS
 
@@ -10,9 +10,18 @@ Full scoping and design history lives in the vault at `second-brain/wiki/Noctis 
 
 Modes as spaces with distinct personalities, characters as the way you enter them, and the Obsidian vault as shared ground truth underneath everything.
 
+## Running it
+
+```
+make setup   # installs backend + frontend deps, copies .env.example -> .env
+make dev     # starts backend (FastAPI, :8000) + frontend (Vite, :5173) together
+```
+
+Fill in `.env` first (`VAULT_PATH`, `NOCTIS_API_TOKEN`) — see `SETUP.md` for the full one-time machine checklist (Claude Code login, VS Code setting, nightshift's launchd job).
+
 ## Current state
 
-Definition, PRD, and EDD locked (2026-07-19). Design Brief not started. See `SPEC.md` for full detail and `STATUS.md` for the live state.
+Full spec locked, full build order complete: mode folders, FastAPI backend (auth, vault I/O, session launcher, telemetry hooks, dev job lifecycle), React frontend (world screen, profile overlay cards), and nightshift's launchd-scheduled propose-only inbox. See `SPEC.md` for full detail and `STATUS.md` for the live state — what's built, what's smoke-tested, what's still open.
 
 ## Where the real process docs live
 
@@ -20,3 +29,5 @@ Definition, PRD, and EDD locked (2026-07-19). Design Brief not started. See `SPE
 - `second-brain/wiki/Noctis OS/Modes.md` — all five modes designed in full via the seven-part frame
 - `second-brain/wiki/Noctis OS/Decision Log.md` — chronological decision record
 - `SPEC.md` (this repo) — the compiled Definition / PRD / EDD / Design Brief
+- `STATUS.md` (this repo) — live build state, not aspirational
+- `SETUP.md` (this repo) — one-time machine setup checklist

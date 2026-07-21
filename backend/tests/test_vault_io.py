@@ -27,3 +27,40 @@ def test_missing_vault_path_raises(monkeypatch):
         assert False, "expected RuntimeError"
     except RuntimeError:
         pass
+
+
+def test_write_frontmatter_rejects_path_escaping_the_vault(vault):
+    try:
+        vault_io.write_frontmatter("../../../../tmp/pwned/context.md", {"a": 1}, "")
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_read_file_rejects_path_escaping_the_vault(vault):
+    try:
+        vault_io.read_file("../outside.md")
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_file_exists_rejects_path_escaping_the_vault(vault):
+    try:
+        vault_io.file_exists("../../etc/passwd")
+        assert False, "expected ValueError"
+    except ValueError:
+        pass
+
+
+def test_is_safe_slug():
+    assert vault_io.is_safe_slug("noctis-build")
+    assert vault_io.is_safe_slug("a")
+    assert vault_io.is_safe_slug("a1-b2")
+    assert not vault_io.is_safe_slug("../../etc/passwd")
+    assert not vault_io.is_safe_slug("..")
+    assert not vault_io.is_safe_slug("has/slash")
+    assert not vault_io.is_safe_slug("")
+    assert not vault_io.is_safe_slug("Has-Upper")
+    assert not vault_io.is_safe_slug("-leading-hyphen")
+    assert not vault_io.is_safe_slug("trailing-hyphen-")

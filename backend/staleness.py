@@ -45,7 +45,15 @@ def _job_last_activity(mode: str, slug: str, last_touched: str | None) -> tuple[
         lines = log_path.read_text(encoding="utf-8").splitlines()
         if lines:
             last_line = lines[-1]
-            closed_cleanly = "SESSION_END" in last_line
+            # Anchored, not a bare substring match: a real tool-call line
+            # is "<timestamp> <tool_name> <summary...>", where <summary>
+            # could itself happen to contain the literal text "SESSION_END"
+            # (e.g. editing mark_session_end.py) and would previously have
+            # been misread as a clean close. The sentinel mark_session_end.py
+            # actually writes is exactly two tokens: "<timestamp> SESSION_END".
+            # Found in the 2026-07-21 ship-gate review.
+            parts = last_line.split(" ")
+            closed_cleanly = len(parts) == 2 and parts[1] == "SESSION_END"
             timestamp_str = last_line.split(" ", 1)[0]
             try:
                 log_time = datetime.fromisoformat(timestamp_str)

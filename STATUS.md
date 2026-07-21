@@ -4,7 +4,7 @@ Last updated: 2026-07-21
 
 ## Current state
 
-Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` verified. Pushed to `origin/main`. **Phase 3 complete** — mode-folder build-out, backend, frontend tracker, telemetry hooks, and nightshift infra all done and smoke-tested live. All items on the locked build order (mode folders → backend → frontend tracker → telemetry → nightshift) are built.
+Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` verified. Pushed to `origin/main`. **Phase 3 complete** — mode-folder build-out, backend, frontend tracker, telemetry hooks, and nightshift infra all done and smoke-tested live. All items on the locked build order (mode folders → backend → frontend tracker → telemetry → nightshift) are built. **First full ship-gate pass run 2026-07-21** — README/CHANGELOG staleness fixed, dependency audits clean, and a security-focused code review caught and fixed real path-traversal and correctness bugs (see below). Deploy decision: stays local, per the locked EDD ("Any deployment — local-only," single-user single-machine).
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 
@@ -75,6 +75,21 @@ Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` veri
 - Frontend: per-job "resume" launch on Faber's job rows, idle-state button starts a new build (creates the job, then launches) — `window.prompt`-based placeholder, not a designed input yet. Bottom button relabels "+ NEW BUILD" once jobs exist.
 - This repo's own build registered as a real job (`noctis-os`, stage Build) — Faber's card now genuinely reflects the work instead of showing idle all session.
 - 8 new pytest tests (staleness checker, Stop hook, create-job endpoint) — 57 passing total. Verified live: created and corrected the real job via the live API, screenshotted the actual card showing the phase badge, resume button, and relabeled launch button.
+
+## Done this pass (ship-gate security review — first full ship gate for the project)
+
+Ran dev.md's 9-step FINISH checklist for real (test suite, diff review, doc accuracy, secrets scan, dependency audit, security-lens code review). Fixed two stale docs (README claimed Phase 3 was still in progress; CHANGELOG was missing the mode-folder/backend/frontend-tracker milestones and several bugfixes). Dependency audits clean (`npm audit`, `pip-audit` — the latter's initial 6 findings were a stray leftover `setuptools` metadata dir in the local `.venv`, not a real dependency issue, and `.venv/` is gitignored regardless).
+
+An 8-angle security-focused code review (3 correctness + 3 cleanup + altitude + conventions, cross-verified) found and fixed real issues, all in code from this session's own earlier milestones:
+
+- **Path traversal, confirmed:** `job.slug`/`job_slug` reached filesystem paths (vault writes via `POST /mode/{name}/jobs`, runtime-log paths via the telemetry hooks) with no character validation — a crafted slug could write outside the vault or `backend/runtime/`. Fixed at two layers: `vault_io.py` now verifies every resolved path stays inside the vault root (`_resolve_within_vault`), and a new `vault_io.is_safe_slug()` validates slugs at every API boundary (`POST`/`PATCH /mode/{name}/jobs*`, `POST /session/launch`) for a clean 400 instead of a low-level error. Verified live against the running backend with real attack payloads — both rejected, nothing written.
+- **Hook accumulation, confirmed:** `_merge_hook` matched on exact command string, so a new job in the same `project_path` added a hook entry without removing the previous job's — every prior job's hooks kept firing on every future session in that project, permanently defeating `staleness.py`'s flagging. Fixed: `_merge_hook` now replaces any existing entry for the same script rather than appending, so at most one hook per script per event ever exists.
+- **No per-item fault isolation, confirmed:** nightshift's `run()` had no exception handling around each item's Advance step — one failing/timing-out `claude -p` call would silently abort the whole run, dropping every other independent item. Fixed: each item's advance is now wrapped, logging the failure and continuing to the next item.
+- **Unlocked concurrent writes, confirmed:** `state.md`/job `context.md` writes had no lock (the project's own write-lock was scoped to `log.md`/`index.md` only, an assumption this session's own staleness-check-on-every-poll + PATCH combination falsified). Fixed: `vault_io`'s write lock now covers every write, not just the two special-cased files (full read-modify-write atomicity across the read step remains an open, lower-priority gap — noted, not solved, as disproportionate to this app's actual concurrency).
+- **Unanchored sentinel match, plausible → fixed:** `"SESSION_END" in last_line` would misread a tool-call summary that happens to contain that literal text as a clean session close. Fixed to check the log line is exactly the two-token sentinel format.
+- **One claim verified live and refuted:** the distiller's `--allowedTools "Write(path)"` scoping was flagged as possibly unenforced by the CLI. Tested for real (a live headless call instructed to write off-target) — confirmed the CLI's permission system genuinely blocks it (`permission_denials` in the response). Not a vulnerability.
+
+12 new/updated pytest tests, 69 passing total. All fixes verified live against the running backend, not just unit-tested.
 
 ## Not started
 

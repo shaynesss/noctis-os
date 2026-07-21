@@ -28,6 +28,15 @@ def test_dev_launch_requires_project_path(client, auth_headers, vault):
     assert response.status_code == 400
 
 
+def test_launch_rejects_path_traversal_job_slug(client, auth_headers, vault):
+    response = client.post(
+        "/session/launch",
+        json={"mode": "learn", "job_slug": "../../../../tmp/evil"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+
+
 def test_dev_launch_opens_vscode(client, auth_headers, vault, monkeypatch):
     job_dir = vault / "modes" / "dev" / "jobs" / "noctis-build"
     job_dir.mkdir(parents=True)
