@@ -1,0 +1,16 @@
+#!/bin/bash
+# Thin wrapper, not a py2app/PyInstaller freeze -- this bundle only exists
+# to be double-clickable (Dock/Applications icon, no more `make app` in a
+# terminal). It always runs desktop/app.py straight from the live repo, so
+# a code change just needs the app's own Refresh command (Cmd+R or the
+# Noctis OS > Refresh menu item), never a rebuild of this bundle.
+#
+# Path resolved relative to this script's own location (4 levels up:
+# MacOS -> Contents -> NoctisOS.app -> desktop -> repo root) rather than
+# hardcoded, so it keeps working if the checkout is ever moved, as long as
+# this bundle stays inside desktop/ of that checkout.
+DIR="$(cd "$(dirname "$0")/../../../.." && pwd)"
+LOG="$DIR/backend/runtime/desktop.log"
+mkdir -p "$(dirname "$LOG")"
+
+exec "$DIR/backend/.venv/bin/python" "$DIR/desktop/app.py" >>"$LOG" 2>&1
