@@ -4,7 +4,7 @@ Last updated: 2026-07-21
 
 ## Current state
 
-Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` verified. Pushed to `origin/main`. Phase 3 underway — mode-folder build-out, backend, frontend tracker, and telemetry hooks milestones all done and smoke-tested live; nightshift infra is next.
+Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` verified. Pushed to `origin/main`. **Phase 3 complete** — mode-folder build-out, backend, frontend tracker, telemetry hooks, and nightshift infra all done and smoke-tested live. All items on the locked build order (mode folders → backend → frontend tracker → telemetry → nightshift) are built.
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 
@@ -59,14 +59,23 @@ Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` veri
 - 14 new pytest tests (hook script, launch-surface hook merging, new mode-router endpoints) — 37 passing total
 - Smoke-tested live: real backend run, seeded a job, PATCHed its stage, piped a fake tool-call through the hook script, confirmed the log endpoint and synced `state.md` both reflected it, then cleaned the vault back to its pre-test state
 
+## Done this pass (Phase 3, nightshift infra milestone)
+
+- `backend/nightshift/slack_surface.py` — the deterministic Scan step, one checker function per mode (`SLACK_CHECKS` registry, nightshift.md's "tap-in contract": no hardcoded per-mode knowledge in nightshift itself). Real checkers for dev (`flagged: true` jobs, a new optional field on job-context frontmatter) and settings (undistilled lessons, via a `lessons_distilled_through` line-count cursor on `modes/settings/state.md`). Learn and research are registered but return an honest empty list — no real due-recall-item/parked-trigger data model exists yet, and nightshift.md is explicit that a quiet surface is a correct outcome, not a gap to fake.
+- `backend/nightshift/runner.py` — Advance + Stage. Dev's advance stays fully mechanical (templated status note, matching dev's deliberately near-empty, code/branch-free slack surface). Settings' advance genuinely borrows the distiller subagent at reduced permission via a real headless `claude -p` call (`--allowedTools`/`--disallowedTools` scoped to Read/Grep + Write on exactly one inbox file, no Bash/network). Stage writes the proposal file and the mirrored `state.md` index entry, parsing `rationale` out of the drafted `## Rationale` section rather than drafting it twice. Idempotent against already-pending items (matches on the slug's stable prefix, not the date-stamped full slug, so a second run on a later day doesn't restage the same slack).
+- `scripts/nightshift_run.sh` rewritten (was a TODO stub) to actually invoke the runner; `launchd/com.noctis-os.nightshift.plist` (nightly 03:00) + `SETUP.md` load/unload instructions.
+- Same `load_dotenv()` fix as main.py applied to the runner — launchd runs with no shell env at all, would otherwise fail on `VAULT_PATH` exactly like the earlier `make dev` bug.
+- 11 new pytest tests (slack-surface checkers, runner dedup/rationale-parsing/staging) — 48 passing total.
+- **Smoke-tested live, real cost incurred on purpose:** seeded a flagged dev job, ran the actual launchd script end-to-end, confirmed a correctly-shaped inbox item + index entry, confirmed a second run doesn't duplicate it. Also ran the real distiller headless call against the live (boilerplate-only) `lessons.md` files — it correctly judged there was nothing to distill and declined to write a proposal rather than fabricating one. That run surfaced a real bug in the deterministic cursor check (an empty `{}` cursor treats every mode's still-boilerplate lessons.md as "undistilled," which would have cost a real API call every night for nothing) — fixed by seeding the cursor to each file's actual current line count (12) instead of 0. All smoke-test vault writes cleaned up before committing.
+
 ## Not started
 
-- Nightshift infra (launchd scheduler)
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
 - Custos's trigger thresholds (backend logic)
-- Mode-specific proposal apply logic for nightshift's accept flow (currently archives only)
+- Mode-specific proposal apply logic for nightshift's accept flow (currently archives only) — this now includes advancing the `lessons_distilled_through` cursor on accept, a known follow-up from the nightshift milestone above
+- What actually sets a dev job's `flagged: true` on session death (nightshift's runner only reads the field, doesn't set it)
 - Exact character hex palette (now sampled from real sprites rather than guessed, but still interim until the grid-data pass locks final production values)
 
 ## Blocking
 
-Nothing. Mode folders, backend, frontend tracker, and telemetry hooks all done and verified live. Ready for nightshift infra.
+Nothing. All Phase 3 build-order milestones (mode folders, backend, frontend tracker, telemetry hooks, nightshift infra) are done and verified live.

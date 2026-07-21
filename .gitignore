@@ -28,8 +28,15 @@ backend/runtime/*.log
 # CLAUDE_CONFIG_DIR for a non-dev launch (see session.py) -- only CLAUDE.md
 # is source, everything else is generated session/cache state.
 backend/launch_config/nondev/.claude.json
+backend/launch_config/nondev/.last-cleanup
+backend/launch_config/nondev/.last-update-result.json
 backend/launch_config/nondev/backups/
 backend/launch_config/nondev/cache/
+backend/launch_config/nondev/history.jsonl
+backend/launch_config/nondev/mcp-needs-auth-cache.json
+backend/launch_config/nondev/plugins/
+backend/launch_config/nondev/projects/
+backend/launch_config/nondev/sessions/
 backend/launch_config/nondev/settings.json
 
 # OS

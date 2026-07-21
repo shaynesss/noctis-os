@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 # launchd target for Nightshift's unattended runs (see SPEC.md EDD:
 # "Nightshift execution mechanism: launchd"). Propose-never-commit: writes
-# only to the staging inbox, never live vault pages or code.
+# only to the staging inbox, never live vault pages or code -- see
+# backend/nightshift/runner.py for the actual Scan -> Advance -> Stage loop.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-# TODO: invoke the nightshift subagent roster against each mode's declared
-# "slack surface" per SPEC.md EDD, with the tool allowlist (staging-inbox
-# writes only, minimal bash, no network by default). Not a scaffolding task.
-echo "nightshift_run.sh: not yet implemented"
+exec backend/.venv/bin/python3 backend/nightshift/runner.py
