@@ -53,6 +53,8 @@ def create_job(name: str, job: JobCreate):
     """
     if name not in VALID_MODES:
         raise HTTPException(status_code=404, detail=f"Unknown mode: {name}")
+    if not vault_io.is_safe_slug(job.slug):
+        raise HTTPException(status_code=400, detail=f"Invalid slug: {job.slug!r}")
 
     job_path = f"modes/{name}/jobs/{job.slug}/context.md"
     if vault_io.file_exists(job_path):
@@ -86,6 +88,8 @@ def update_job(name: str, slug: str, update: JobUpdate):
     """
     if name not in VALID_MODES:
         raise HTTPException(status_code=404, detail=f"Unknown mode: {name}")
+    if not vault_io.is_safe_slug(slug):
+        raise HTTPException(status_code=400, detail=f"Invalid slug: {slug!r}")
 
     job_path = f"modes/{name}/jobs/{slug}/context.md"
     if not vault_io.file_exists(job_path):
@@ -133,6 +137,8 @@ def get_job_log(name: str, slug: str, lines: int = 50):
     """
     if name not in VALID_MODES:
         raise HTTPException(status_code=404, detail=f"Unknown mode: {name}")
+    if not vault_io.is_safe_slug(slug):
+        raise HTTPException(status_code=400, detail=f"Invalid slug: {slug!r}")
 
     log_path = RUNTIME_DIR / f"{name}__{slug}.log"
     if not log_path.exists():

@@ -43,6 +43,31 @@ def test_create_job_conflicts_on_existing_slug(client, auth_headers, vault):
     assert response.status_code == 409
 
 
+def test_create_job_rejects_path_traversal_slug(client, auth_headers, vault):
+    response = client.post(
+        "/mode/dev/jobs",
+        json={"slug": "../../../../tmp/pwned", "name": "evil"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 400
+    assert not (vault.parent.parent.parent.parent / "tmp" / "pwned").exists()
+
+
+def test_update_job_rejects_invalid_slug(client, auth_headers, vault):
+    # httpx normalizes ".." out of the URL before the request is even
+    # sent, so it can't reach the handler this way -- is_safe_slug is
+    # still the correct backstop regardless of a given client's URL
+    # normalization behavior. Use an unambiguous single-segment value
+    # that can't be normalized away but still fails validation.
+    response = client.patch("/mode/dev/jobs/UPPERCASE", json={"stage": "Ship"}, headers=auth_headers)
+    assert response.status_code == 400
+
+
+def test_get_job_log_rejects_invalid_slug(client, auth_headers, vault):
+    response = client.get("/mode/dev/jobs/UPPERCASE/log", headers=auth_headers)
+    assert response.status_code == 400
+
+
 def _seed_job(vault, mode="dev", slug="noctis-build"):
     job_dir = vault / "modes" / mode / "jobs" / slug
     job_dir.mkdir(parents=True)

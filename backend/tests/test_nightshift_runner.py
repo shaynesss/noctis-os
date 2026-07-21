@@ -69,3 +69,22 @@ def test_run_is_idempotent_against_already_pending_item(vault, monkeypatch):
 def test_identity_prefix_ignores_date_for_dedup():
     item = SlackItem(mode="dev", kind="flagged-job", slug_hint="x", description="d", context="c")
     assert runner._identity_prefix(item) == "flagged-job-x-"
+
+
+def test_one_failing_item_does_not_drop_other_items(vault, monkeypatch):
+    """A single failing/timing-out advance step (e.g. a claude subprocess
+    call) must not abort the whole run and silently drop every other
+    independent item -- 2026-07-21 ship-gate finding: this loop had no
+    exception handling at all."""
+    bad_item = SlackItem(mode="dev", kind="unregistered-kind", slug_hint="a", description="bad", context="c")
+    good_item = SlackItem(mode="dev", kind="flagged-job", slug_hint="b", description="good", context="c")
+
+    monkeypatch.setitem(runner.SLACK_CHECKS, "dev", lambda: [])
+    monkeypatch.setitem(runner.SLACK_CHECKS, "learn", lambda: [bad_item])
+    monkeypatch.setitem(runner.SLACK_CHECKS, "research", lambda: [good_item])
+    monkeypatch.setitem(runner.SLACK_CHECKS, "settings", lambda: [])
+
+    slugs = runner.run()
+
+    assert len(slugs) == 1
+    assert slugs[0].startswith("flagged-job-b-")

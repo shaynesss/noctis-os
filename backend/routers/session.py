@@ -19,6 +19,12 @@ class LaunchRequest(BaseModel):
 def launch_session(request: LaunchRequest):
     if request.mode not in VALID_MODES:
         raise HTTPException(status_code=404, detail=f"Unknown mode: {request.mode}")
+    if request.job_slug is not None and not vault_io.is_safe_slug(request.job_slug):
+        # job_slug flows into hook scripts' runtime-log filenames
+        # (NOCTIS_JOB_ID / --job-id) -- an unsanitized value here was a path
+        # traversal into arbitrary log writes, found in the 2026-07-21
+        # ship-gate security review.
+        raise HTTPException(status_code=400, detail=f"Invalid job_slug: {request.job_slug!r}")
 
     methodology = vault_io.read_file(f"modes/{request.mode}/{request.mode}.md")
     lessons = vault_io.read_file(f"modes/{request.mode}/lessons.md")

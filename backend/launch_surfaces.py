@@ -34,13 +34,23 @@ HOOK_SCRIPT = Path(__file__).parent / "hooks" / "log_action.py"
 SESSION_END_HOOK_SCRIPT = Path(__file__).parent / "hooks" / "mark_session_end.py"
 
 
-def _merge_hook(settings_path: Path, event: str, command: str) -> None:
+def _merge_hook(settings_path: Path, event: str, command: str, script_path: Path) -> None:
     """Idempotently register `command` for `event` in a Claude Code
     settings.json, preserving whatever else Claude Code has already written
     there. The nondev settings.json is gitignored/CC-managed (see that
     dir's gitignore note), so this is the only place that guarantees our
     telemetry hook is actually present each launch, rather than committing
     a static file CC would just mutate around.
+
+    Replaces any existing entry for the same script (matched by its command
+    prefix) rather than appending alongside it. Dev's hooks bake a job_slug
+    into the command, so without this, every new job in the same project
+    would add a new hook entry and never remove the previous job's — with
+    an unconditional matcher (""), *all* of them keep firing on every
+    future session in that project, so an old job's runtime log keeps
+    getting fresh activity/SESSION_END writes forever, permanently
+    defeating staleness.py's flagging for that job. Found in the
+    2026-07-21 ship-gate review; at most one hook per script per event now.
     """
     settings: dict = {}
     if settings_path.exists():
@@ -49,12 +59,19 @@ def _merge_hook(settings_path: Path, event: str, command: str) -> None:
         except json.JSONDecodeError:
             settings = {}
 
+    script_prefix = f"python3 {shlex.quote(str(script_path))}"
     entries = settings.setdefault("hooks", {}).setdefault(event, [])
+
     for entry in entries:
         for hook in entry.get("hooks", []):
             if hook.get("command") == command:
-                return  # already registered
+                return  # already registered exactly as-is
 
+    entries[:] = [
+        entry
+        for entry in entries
+        if not any(hook.get("command", "").startswith(script_prefix) for hook in entry.get("hooks", []))
+    ]
     entries.append({"matcher": "", "hooks": [{"type": "command", "command": command}]})
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
@@ -70,27 +87,29 @@ def _ensure_nondev_hooks() -> None:
     get flagged, however old it later gets).
     """
     log_command = f"python3 {shlex.quote(str(HOOK_SCRIPT))}"
-    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "PostToolUse", log_command)
+    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "PostToolUse", log_command, HOOK_SCRIPT)
     end_command = f"python3 {shlex.quote(str(SESSION_END_HOOK_SCRIPT))}"
-    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "Stop", end_command)
+    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "Stop", end_command, SESSION_END_HOOK_SCRIPT)
 
 
 def _ensure_dev_hooks(project_path: str, job_slug: str | None) -> None:
     """VS Code's URI handler doesn't carry shell env, so job identity is
     baked directly into both hook commands and registered in this project's
-    own local settings — scoped per project, no cross-job race.
+    own local settings — scoped per project. _merge_hook replaces rather
+    than accumulates, so this always reflects the most recently launched
+    job for this project_path, not every job that ever ran here.
     """
     settings_path = Path(project_path) / ".claude" / "settings.local.json"
     log_command = (
         f"python3 {shlex.quote(str(HOOK_SCRIPT))} "
         f"--mode dev --job-id {shlex.quote(job_slug or 'general')}"
     )
-    _merge_hook(settings_path, "PostToolUse", log_command)
+    _merge_hook(settings_path, "PostToolUse", log_command, HOOK_SCRIPT)
     end_command = (
         f"python3 {shlex.quote(str(SESSION_END_HOOK_SCRIPT))} "
         f"--mode dev --job-id {shlex.quote(job_slug or 'general')}"
     )
-    _merge_hook(settings_path, "Stop", end_command)
+    _merge_hook(settings_path, "Stop", end_command, SESSION_END_HOOK_SCRIPT)
 
 
 def _darken_hex(hex_color: str, lightness: float = 0.175) -> tuple[int, int, int]:

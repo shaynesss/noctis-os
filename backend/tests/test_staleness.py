@@ -79,3 +79,24 @@ def test_job_with_no_last_touched_and_no_log_is_not_flagged(vault, monkeypatch, 
     flagged = staleness.flag_stale_dev_jobs()
 
     assert flagged == []
+
+
+def test_session_end_substring_in_a_summary_does_not_count_as_clean_close(vault, monkeypatch, tmp_path):
+    """A tool-call summary that happens to contain the literal text
+    "SESSION_END" (e.g. editing mark_session_end.py itself) must not be
+    misread as the clean-close sentinel -- 2026-07-21 ship-gate finding."""
+    runtime_dir = tmp_path / "runtime"
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", runtime_dir)
+    old = (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat()
+    _seed_job(vault, last_touched=old)
+
+    runtime_dir.mkdir(parents=True)
+    # Three tokens, not the real two-token sentinel -- old unanchored code
+    # (`"SESSION_END" in last_line`) would have wrongly matched this.
+    (runtime_dir / "dev__noctis-build.log").write_text(
+        f"{old} Read SESSION_END.md\n", encoding="utf-8"
+    )
+
+    flagged = staleness.flag_stale_dev_jobs()
+
+    assert flagged == ["noctis-build"]

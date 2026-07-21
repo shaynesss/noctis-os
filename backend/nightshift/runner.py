@@ -150,7 +150,16 @@ def run() -> list[str]:
             slug = _slug_for(item)
 
             inbox_path = inbox_dir / f"{slug}.md"
-            ADVANCE[item.kind](item, vault_path, inbox_path)
+            try:
+                ADVANCE[item.kind](item, vault_path, inbox_path)
+            except Exception as exc:
+                # One failing/timing-out claude subprocess call (rate
+                # limit, network blip) must not drop every other
+                # independent item's proposal for the whole run -- found
+                # in the 2026-07-21 ship-gate review, where this had no
+                # exception handling at all.
+                print(f"nightshift: advance failed for {slug} ({item.kind}): {exc}", file=sys.stderr)
+                continue
 
             if not inbox_path.exists():
                 continue  # advance failed to produce a draft -- stage nothing, no partial write
