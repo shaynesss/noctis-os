@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix: `desktop/NoctisOS.app` failed to launch from Spotlight/Finder double-click (`FileNotFoundError: 'npm'`, confirmed live) — LaunchServices runs the app with a minimal PATH that excludes Homebrew, unlike a terminal-launched `make app`. Resolves npm's absolute path with Homebrew-path fallbacks and passes an augmented PATH to its subprocess (npm's own `env node` shebang needs it too). Icon switched to the faber-building expression (2026-07-21)
+
 - Desktop: `desktop/NoctisOS.app` is a real double-clickable app now (thin wrapper around `desktop/app.py`, always runs live source, not a frozen build) with a proper bundled icon — closes the "real .app bundle" follow-up flagged when the pywebview wrapper first shipped. Added a Refresh command (native menu item + Cmd+R/Ctrl+R) since a code change to this always-live-source bundle only needs a reload, never a rebuild. `make open-app` alongside the existing `make app` (2026-07-21)
 
 - Fix: the busy indicator (expression swap + new label-highlight) was dropping mid-session because `mark_session_end.py` was registered on Claude Code's `Stop` hook, which fires after every agent turn, not on real session termination. Moved to `SessionEnd`; `_merge_hook` now also purges a script from any other event bucket it's still registered under, so old settings.json files don't end up firing the hook on both events. Label now also stays accent-colored while a mode's session is running, independent of the profile overlay being open, using the same `busy` flag as the expression swap (2026-07-21)
