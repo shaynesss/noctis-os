@@ -96,6 +96,12 @@ class JobUpdate(BaseModel):
     stage: str | None = None
     status: str | None = None
     track: str | None = None
+    # staleness.py sets this true, but nothing could ever clear it -- found
+    # 2026-07-21 when a real job (this repo's own) got flagged because all
+    # the actual work happened via direct file edits rather than a launched
+    # session, so the telemetry hooks that would prove it alive never fired.
+    # Resuming a flagged job is the natural point to clear it (World.tsx).
+    flagged: bool | None = None
 
 
 @router.patch("/{name}/jobs/{slug}")
@@ -114,7 +120,7 @@ def update_job(name: str, slug: str, update: JobUpdate):
         raise HTTPException(status_code=404, detail=f"Unknown job: {slug}")
 
     metadata, content = vault_io.read_frontmatter(job_path)
-    for field in ("stage", "status", "track"):
+    for field in ("stage", "status", "track", "flagged"):
         value = getattr(update, field)
         if value is not None:
             metadata[field] = value

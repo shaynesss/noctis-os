@@ -125,6 +125,32 @@ def test_update_job_rewrites_context_and_syncs_state(client, auth_headers, vault
     ]
 
 
+def test_update_job_can_clear_flagged(client, auth_headers, vault):
+    """staleness.py can set flagged, but nothing could clear it -- found
+    2026-07-21 via a real flagged job. Resume is the natural place to clear
+    it (World.tsx), which needs update_job to actually accept the field."""
+    job_dir = vault / "modes" / "dev" / "jobs" / "flagged-job"
+    job_dir.mkdir(parents=True)
+    (job_dir / "context.md").write_text(
+        "---\nname: Flagged\nstage: Build\nstatus: stalled\nflagged: true\n---\n\nnotes\n",
+        encoding="utf-8",
+    )
+    vault_io.write_frontmatter(
+        "modes/dev/state.md",
+        {"mode": "dev", "busy": False, "jobs": [{"slug": "flagged-job", "flagged": True}]},
+        "",
+    )
+
+    response = client.patch("/mode/dev/jobs/flagged-job", json={"flagged": False}, headers=auth_headers)
+
+    assert response.status_code == 200
+    assert response.json()["flagged"] is False
+    metadata, _ = vault_io.read_frontmatter("modes/dev/jobs/flagged-job/context.md")
+    assert metadata["flagged"] is False
+    state_meta, _ = vault_io.read_frontmatter("modes/dev/state.md")
+    assert state_meta["jobs"][0]["flagged"] is False
+
+
 def test_get_job_log_empty_when_no_session_run(client, auth_headers, vault):
     response = client.get("/mode/dev/jobs/noctis-build/log", headers=auth_headers)
     assert response.status_code == 200

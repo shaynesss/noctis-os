@@ -13,12 +13,12 @@ backend's own venv.
 make app
 ```
 
-Starts the same two dev servers `make dev` does (backend uvicorn, frontend
-Vite), waits for both to answer, then opens a frameless native window
-pointed at the frontend. Hot reload works exactly like a browser tab, since
-it's the same Vite dev server underneath — this is a native window, not a
-snapshot. Quit with **Cmd+Q** (there's no visible close button by design —
-frameless means no OS chrome at all, matching "fully my interface").
+Starts the same two dev servers `make dev` does (backend `uvicorn --reload`,
+frontend Vite), waits for both to answer, then opens a frameless native
+window pointed at the frontend. Both backend and frontend hot-reload
+live — same as a browser tab, this is a native window, not a snapshot.
+Quit with **Cmd+Q** (there's no visible close button by design — frameless
+means no OS chrome at all, matching "fully my interface").
 
 ## Frameless, and why cleanup needed real fixing
 
@@ -36,11 +36,21 @@ window closed. Fixed by starting each process in its own group
 Cmd+Q keystroke (not just `.terminate()` from the launching script) — zero
 leftover processes, zero leftover bound ports.
 
-## Custom icon — not done yet, needs a bundler
+## Custom icon — placeholder now, real art and a bundle later
 
-pywebview's `icon` parameter only works on Linux/GTK. On macOS, a Dock icon
-comes from packaging into a real `.app` bundle with an `.icns` file, via
-`py2app` or `PyInstaller` — that's the next step, not done in this pass.
-Right now `make app` runs from source (shows up as "python" in the menu
-bar), which is correct for daily personal use but not yet a
-double-click-able bundled app.
+pywebview's `icon` parameter (on both `create_window` and `start`) is
+documented GTK/QT-only — doesn't do anything on macOS. Worked around by
+setting the Dock icon directly via AppKit (`NSApplication.setApplicationIconImage_`,
+called once the GUI loop is live via `webview.start(func=_set_dock_icon)`)
+using Faber's sprite as a placeholder — real per Shayne's request ("can be
+random for now, actual art down the line"), not final branding. Ran clean
+with no exception using the standard documented API; couldn't get a clean
+screenshot confirming it in this environment (auto-hiding Dock, synthetic
+mouse events didn't reliably trigger the reveal), so this one's worth a
+glance at the real Dock next run.
+
+Still not done: a proper double-click-able `.app` bundle with a bundled
+`.icns` (`py2app` or `PyInstaller`). Right now `make app` runs from source
+(shows up as "python" in the menu bar), correct for daily personal use but
+not yet something you'd hand to someone else or launch without the
+terminal.

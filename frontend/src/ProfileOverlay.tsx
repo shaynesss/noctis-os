@@ -10,6 +10,7 @@ import {
   getModeState,
   launchSession,
   rejectInboxItem,
+  updateJob,
   type InboxItem,
   type Mode,
   type ModeState,
@@ -49,7 +50,14 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
 
   async function handleResumeJob(jobSlug: string) {
     if (!mode) return
+    // Resuming is the natural point to clear a flagged job -- staleness.py
+    // can set the flag but nothing could ever clear it (found 2026-07-21
+    // when noctis-os's own job got flagged since all the real work
+    // happened via direct file edits, never a launched session, so the
+    // telemetry hooks that would prove it alive never fired).
+    await updateJob(mode, jobSlug, { flagged: false })
     await launchSession(mode, jobSlug)
+    setState(await getModeState(mode))
   }
 
   // Nothing could ever create a job before this -- Faber's card stayed

@@ -71,6 +71,17 @@ export function createJob(mode: Mode, slug: string, name: string, projectPath?: 
   })
 }
 
+export function updateJob(
+  mode: Mode,
+  slug: string,
+  update: { stage?: string; status?: string; track?: string; flagged?: boolean },
+) {
+  return request<Job>(`/mode/${mode}/jobs/${slug}`, {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  })
+}
+
 export function getInbox(): Promise<InboxItem[]> {
   return request('/nightshift/inbox')
 }
