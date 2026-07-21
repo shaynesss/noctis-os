@@ -133,10 +133,22 @@ def _merge_hook(settings_path: Path, event: str, command: str, script_path: Path
 
     entries = hooks_by_event.setdefault(event, [])
 
-    already_exact = any(hook.get("command") == command for entry in entries for hook in entry.get("hooks", []))
-    if not already_exact:
+    # Compare against *every* existing entry for this script, not just
+    # whether the correct command is present somewhere -- an early return
+    # keyed only on "already present" left a stale duplicate (e.g. from
+    # before PYTHON_BIN existed) sitting alongside the correct entry
+    # forever, since once the correct one existed the purge below never ran
+    # again. Found live 2026-07-22: every PostToolUse call was firing
+    # log_action.py twice. Now: strip anything for this script and
+    # re-append exactly once, unless the entries already are exactly that
+    # single correct entry (skip only to avoid a no-op file write).
+    correct_entry = {"matcher": "", "hooks": [{"type": "command", "command": command}]}
+    matching = [
+        entry for entry in entries if any(_same_script(hook.get("command", "")) for hook in entry.get("hooks", []))
+    ]
+    if matching != [correct_entry]:
         entries[:] = [entry for entry in entries if not any(_same_script(hook.get("command", "")) for hook in entry.get("hooks", []))]
-        entries.append({"matcher": "", "hooks": [{"type": "command", "command": command}]})
+        entries.append(correct_entry)
         changed = True
 
     if changed:
@@ -198,24 +210,64 @@ def _darken_hex(hex_color: str, lightness: float = 0.175) -> tuple[int, int, int
     return tuple(round(c * 65535) for c in (r, g, b))
 
 
+def _write_resume_task(project_path: str, prompt: str, model: str | None) -> None:
+    """Writes a VS Code task that runs the real `claude` CLI in the
+    integrated terminal, set to fire automatically when the folder opens.
+    Replaces the old vscode://anthropic.claude-code/open?prompt= URI
+    approach (found live 2026-07-22: that pre-filled the extension's own
+    chat panel, not a real terminal session -- Shayne wants the actual CLI,
+    same as every other mode gets in Terminal.app). No CLAUDE_CONFIG_DIR
+    override -- dev reads the default ~/.claude/CLAUDE.md -> modes/dev/dev.md.
+
+    Gitignored, same as _ensure_dev_hooks' settings.local.json -- this is
+    per-launch generated local config, not project source. Only covers the
+    genuine-folder-open case: if VS Code already has this project open,
+    `runOn: folderOpen` won't refire (VS Code only runs it on real open
+    events, not window focus) -- a known gap, not attempted to be papered
+    over here.
+    """
+    args = ["--model", model, prompt] if model else [prompt]
+    task = {
+        "version": "2.0.0",
+        "tasks": [
+            {
+                "label": "Resume Claude Code session",
+                "type": "shell",
+                "command": "claude",
+                "args": args,
+                "presentation": {"reveal": "always", "panel": "new", "focus": True},
+                "runOptions": {"runOn": "folderOpen"},
+            }
+        ],
+    }
+    vscode_dir = Path(project_path) / ".vscode"
+    vscode_dir.mkdir(parents=True, exist_ok=True)
+    (vscode_dir / "tasks.json").write_text(json.dumps(task, indent=2), encoding="utf-8")
+
+    # Without this, VS Code prompts "Do you want to allow automatic tasks in
+    # this folder?" the first time -- silent otherwise, since this project
+    # is only ever opened via our own launcher.
+    settings_path = vscode_dir / "settings.json"
+    settings: dict = {}
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            settings = {}
+    settings["task.allowAutomaticTasks"] = "on"
+    settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+
+
 def launch_dev(
     project_path: str, prompt: str, job_slug: str | None = None, model: str | None = None
 ) -> None:
-    """Two-step: `code <path>` opens/focuses VS Code on the project, then the
-    Claude Code extension's URI handler pre-fills the prompt (doesn't
-    auto-submit). No CLAUDE_CONFIG_DIR override — dev reads the default
-    ~/.claude/CLAUDE.md -> modes/dev/dev.md. Model override, if given, is
-    prepended to the pre-filled prompt text since the URI handler has no
-    separate model parameter.
+    """Two-step: write the resume task, then `code <path>` opens/focuses VS
+    Code on the project -- the folderOpen task fires and runs `claude` for
+    real in the integrated terminal.
     """
     _ensure_dev_hooks(project_path, job_slug)
+    _write_resume_task(project_path, prompt, model)
     subprocess.run([_find_code_binary(), project_path], check=True)
-    model_prefix = f"--model {model} " if model else ""
-    encoded = shlex.quote(f"{model_prefix}{prompt}")
-    subprocess.run(
-        ["open", f"vscode://anthropic.claude-code/open?prompt={encoded}"],
-        check=True,
-    )
 
 
 def launch_terminal(
