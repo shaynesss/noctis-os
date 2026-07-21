@@ -345,6 +345,46 @@ button {
   white-space: nowrap;
 }
 
+.job-row.flagged {
+  background: rgba(200, 40, 40, 0.06);
+}
+
+.job-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.flagged-badge {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #c22;
+  border: 1px solid #c22;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.resume-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.resume-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 .stat-blocks {
   display: flex;
   flex-direction: column;

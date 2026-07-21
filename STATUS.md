@@ -68,12 +68,20 @@ Phase 1 and Phase 2 both complete. Repo scaffolded, `make setup`/`make dev` veri
 - 11 new pytest tests (slack-surface checkers, runner dedup/rationale-parsing/staging) — 48 passing total.
 - **Smoke-tested live, real cost incurred on purpose:** seeded a flagged dev job, ran the actual launchd script end-to-end, confirmed a correctly-shaped inbox item + index entry, confirmed a second run doesn't duplicate it. Also ran the real distiller headless call against the live (boilerplate-only) `lessons.md` files — it correctly judged there was nothing to distill and declined to write a proposal rather than fabricating one. That run surfaced a real bug in the deterministic cursor check (an empty `{}` cursor treats every mode's still-boilerplate lessons.md as "undistilled," which would have cost a real API call every night for nothing) — fixed by seeding the cursor to each file's actual current line count (12) instead of 0. All smoke-test vault writes cleaned up before committing.
 
+## Done this pass (dev job lifecycle — closes the gaps nightshift's own build exposed)
+
+- `POST /mode/{name}/jobs` creates a job; `_sync_state_job_entry` fixed to mirror `flagged` into `state.md` (it was silently dropping the field, meaning nightshift could never actually see a flag even if one got set)
+- `backend/staleness.py`: deterministic flag_stale_dev_jobs, 6-hour no-activity threshold, skips jobs closed cleanly via a new `Stop` hook (`backend/hooks/mark_session_end.py`, SESSION_END sentinel in the runtime log). Runs inline on `GET /mode/dev` — live, not just nightly.
+- Frontend: per-job "resume" launch on Faber's job rows, idle-state button starts a new build (creates the job, then launches) — `window.prompt`-based placeholder, not a designed input yet. Bottom button relabels "+ NEW BUILD" once jobs exist.
+- This repo's own build registered as a real job (`noctis-os`, stage Build) — Faber's card now genuinely reflects the work instead of showing idle all session.
+- 8 new pytest tests (staleness checker, Stop hook, create-job endpoint) — 57 passing total. Verified live: created and corrected the real job via the live API, screenshotted the actual card showing the phase badge, resume button, and relabeled launch button.
+
 ## Not started
 
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets
 - Custos's trigger thresholds (backend logic)
 - Mode-specific proposal apply logic for nightshift's accept flow (currently archives only) — this now includes advancing the `lessons_distilled_through` cursor on accept, a known follow-up from the nightshift milestone above
-- What actually sets a dev job's `flagged: true` on session death (nightshift's runner only reads the field, doesn't set it)
+- A real designed "new build" input (name/path) — currently `window.prompt`, a functional placeholder, not the intended final UI
 - Exact character hex palette (now sampled from real sprites rather than guessed, but still interim until the grid-data pass locks final production values)
 
 ## Blocking

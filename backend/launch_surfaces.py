@@ -31,6 +31,7 @@ CHARACTER_HEX = {
 
 NONDEV_CONFIG_DIR = Path(__file__).parent / "launch_config" / "nondev"
 HOOK_SCRIPT = Path(__file__).parent / "hooks" / "log_action.py"
+SESSION_END_HOOK_SCRIPT = Path(__file__).parent / "hooks" / "mark_session_end.py"
 
 
 def _merge_hook(settings_path: Path, event: str, command: str) -> None:
@@ -60,26 +61,36 @@ def _merge_hook(settings_path: Path, event: str, command: str) -> None:
 
 
 def _ensure_nondev_hooks() -> None:
-    """Static hook command, no baked args — log_action.py reads job identity
-    from NOCTIS_MODE/NOCTIS_JOB_ID env vars set per-launch in the exported
-    shell command (see launch_terminal), so concurrent Terminal.app sessions
-    sharing this one settings.json never race on whose job gets logged.
+    """Static hook commands, no baked args — both hook scripts read job
+    identity from NOCTIS_MODE/NOCTIS_JOB_ID env vars set per-launch in the
+    exported shell command (see launch_terminal), so concurrent Terminal.app
+    sessions sharing this one settings.json never race on whose job gets
+    logged/closed. Stop registers mark_session_end.py -- the other half of
+    staleness.py's flagging mechanism (a job that closes cleanly must never
+    get flagged, however old it later gets).
     """
-    command = f"python3 {shlex.quote(str(HOOK_SCRIPT))}"
-    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "PostToolUse", command)
+    log_command = f"python3 {shlex.quote(str(HOOK_SCRIPT))}"
+    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "PostToolUse", log_command)
+    end_command = f"python3 {shlex.quote(str(SESSION_END_HOOK_SCRIPT))}"
+    _merge_hook(NONDEV_CONFIG_DIR / "settings.json", "Stop", end_command)
 
 
 def _ensure_dev_hooks(project_path: str, job_slug: str | None) -> None:
     """VS Code's URI handler doesn't carry shell env, so job identity is
-    baked directly into the hook command and registered in this project's
+    baked directly into both hook commands and registered in this project's
     own local settings — scoped per project, no cross-job race.
     """
-    command = (
+    settings_path = Path(project_path) / ".claude" / "settings.local.json"
+    log_command = (
         f"python3 {shlex.quote(str(HOOK_SCRIPT))} "
         f"--mode dev --job-id {shlex.quote(job_slug or 'general')}"
     )
-    settings_path = Path(project_path) / ".claude" / "settings.local.json"
-    _merge_hook(settings_path, "PostToolUse", command)
+    _merge_hook(settings_path, "PostToolUse", log_command)
+    end_command = (
+        f"python3 {shlex.quote(str(SESSION_END_HOOK_SCRIPT))} "
+        f"--mode dev --job-id {shlex.quote(job_slug or 'general')}"
+    )
+    _merge_hook(settings_path, "Stop", end_command)
 
 
 def _darken_hex(hex_color: str, lightness: float = 0.175) -> tuple[int, int, int]:
