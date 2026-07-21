@@ -24,6 +24,11 @@ backend/runtime/*.log
 # launch_surfaces._ensure_dev_hooks) -- local machine state, not source.
 .claude/settings.local.json
 
+# Same for the resume-task VS Code writes into on every Dev-mode launch (see
+# launch_surfaces._write_resume_task) -- regenerated per launch, not source.
+.vscode/tasks.json
+.vscode/settings.json
+
 # Claude Code's own runtime state accumulates here once this dir is used as
 # CLAUDE_CONFIG_DIR for a non-dev launch (see session.py) -- only CLAUDE.md
 # is source, everything else is generated session/cache state.
