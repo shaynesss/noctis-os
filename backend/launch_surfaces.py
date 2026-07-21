@@ -7,8 +7,36 @@ it never watches or controls the session afterward.
 import colorsys
 import json
 import shlex
+import shutil
 import subprocess
 from pathlib import Path
+
+# The desktop app (desktop/app.py) launches uvicorn via LaunchServices, not a
+# login shell -- that process's inherited PATH is the bare macOS default
+# (/usr/bin:/bin:/usr/sbin:/sbin), which doesn't include /usr/local/bin or
+# /opt/homebrew/bin. shutil.which("code") silently returns None in that
+# environment even though `code` works fine in every interactive terminal,
+# which made every dev-mode launch (new build and resume) 500 with no
+# indication why. Found live 2026-07-22 chasing a broken resume button.
+_CODE_BIN_FALLBACKS = [
+    "/usr/local/bin/code",
+    "/opt/homebrew/bin/code",
+    "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+]
+
+
+def _find_code_binary() -> str:
+    found = shutil.which("code")
+    if found:
+        return found
+    for candidate in _CODE_BIN_FALLBACKS:
+        if Path(candidate).exists():
+            return candidate
+    raise RuntimeError(
+        "Could not locate the `code` CLI (checked PATH and common install "
+        "locations). Install the 'code' command from VS Code's Command "
+        "Palette: 'Shell Command: Install code command in PATH'."
+    )
 
 MODE_CHARACTER = {
     "dev": "Faber",
@@ -181,7 +209,7 @@ def launch_dev(
     separate model parameter.
     """
     _ensure_dev_hooks(project_path, job_slug)
-    subprocess.run(["code", project_path], check=True)
+    subprocess.run([_find_code_binary(), project_path], check=True)
     model_prefix = f"--model {model} " if model else ""
     encoded = shlex.quote(f"{model_prefix}{prompt}")
     subprocess.run(
