@@ -36,7 +36,6 @@
   --custos: #da5b00;
   --echo: #293187;
 
-  --sprite-w: clamp(46px, 6vw, 84px);
   --font-pixel: 'Press Start 2P', monospace;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
@@ -86,6 +85,19 @@ button {
   aspect-ratio: 1376 / 768;
   width: min(100vw, 100vh * 1.791667);
   background: url('/assets/world/world-backdrop.jpeg') center 38% / cover no-repeat, var(--sky);
+  /* Everything inside sizes off the container's own width (cqw), not the
+     viewport's (vw) -- sprite position was fixed to the backdrop by the
+     earlier aspect-ratio lock, but size wasn't: vw tracks the viewport
+     directly, while .world's own width only equals the viewport in one
+     dimension at a time (min(100vw, 100vh*ratio)), so sprites grew/shrank
+     out of proportion to the scene whenever letterboxing changed which
+     dimension was the limiting one. Fixed 2026-07-21. */
+  container-type: inline-size;
+  container-name: world;
+  /* cqw (container query width), not vw -- must be defined here rather
+     than :root so it resolves against .world's own width, the actual
+     scaling reference, not the viewport's. */
+  --sprite-w: clamp(46px, 6cqw, 84px);
 }
 
 .world::after {
@@ -104,8 +116,8 @@ button {
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: clamp(14px, 2vw, 28px);
-  padding: 10px clamp(14px, 3vw, 32px);
+  gap: clamp(14px, 2cqw, 28px);
+  padding: 10px clamp(14px, 3cqw, 32px);
   font-size: 10px;
   letter-spacing: 0.02em;
 }
@@ -585,6 +597,107 @@ button {
 .launch-btn:active {
   transform: translateY(2px);
   box-shadow: none;
+}
+
+/* ---------- new-build modal ---------- */
+/* Replaces the original window.prompt placeholder -- same card language
+   as .overlay (paper background, accent border, pixel-font header) but a
+   smaller, form-shaped dialog rather than a state-display card. */
+
+.new-build-scrim {
+  z-index: 40;
+}
+
+.new-build-modal {
+  position: fixed;
+  z-index: 41;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, 88vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--paper);
+  color: var(--ink);
+  border: 6px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 24px 60px rgba(6, 4, 16, 0.55);
+  padding: 20px;
+  animation: card-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.new-build-modal h3 {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.new-build-modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: #55506a;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.new-build-modal input {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink);
+  background: #fff;
+  border: 2px solid rgba(16, 11, 36, 0.15);
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.new-build-modal input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.new-build-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.new-build-cancel {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+  opacity: 0.6;
+  background: none;
+  border: 2px solid rgba(16, 11, 36, 0.15);
+  border-radius: 6px;
+  padding: 10px;
+  cursor: pointer;
+}
+.new-build-cancel:hover {
+  opacity: 1;
+}
+
+.new-build-submit {
+  flex: 2;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  padding: 11px;
+  cursor: pointer;
+}
+.new-build-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 @media (prefers-reduced-motion: reduce) {
