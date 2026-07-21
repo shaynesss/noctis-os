@@ -80,6 +80,21 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
     setInbox((prev) => prev.filter((item) => item.slug !== itemId))
   }
 
+  // Settings triggers were previously detect-only -- nothing let you launch
+  // a session actually scoped to addressing one (or running a
+  // completeness check) versus just opening a bare methodology dump.
+  // `notes` becomes the job's context.md prose, which is what
+  // POST /session/launch actually injects into the launch prompt.
+  async function startScopedSettingsTask(taskSlug: string, name: string, notes: string) {
+    const slug = `${taskSlug}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`
+    try {
+      await createJob('settings', slug, name, undefined, notes)
+    } catch {
+      // job for today already exists (re-clicked) -- launch it as-is
+    }
+    await launchSession('settings', slug)
+  }
+
   return (
     <>
       <div className="scrim" onClick={onClose} />
@@ -98,7 +113,9 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
           </button>
         </div>
 
-        <div className="body">{state && renderBody(mode, state, inbox, handleDecision, handleResumeJob)}</div>
+        <div className="body">
+          {state && renderBody(mode, state, inbox, handleDecision, handleResumeJob, startScopedSettingsTask)}
+        </div>
 
         {mode !== 'nightshift' && (
           <div className="launch-row">
@@ -118,6 +135,7 @@ function renderBody(
   inbox: InboxItem[],
   onDecision: (itemId: string, decision: 'accept' | 'reject') => void,
   onResumeJob: (jobSlug: string) => void,
+  onStartSettingsTask: (taskSlug: string, name: string, notes: string) => void,
 ) {
   switch (mode) {
     case 'dev':
@@ -127,7 +145,7 @@ function renderBody(
     case 'research':
       return <VesperBody state={state} />
     case 'settings':
-      return <CustosBody state={state} />
+      return <CustosBody state={state} onStartTask={onStartSettingsTask} />
     case 'nightshift':
       return <EchoBody inbox={inbox} onDecision={onDecision} />
   }
@@ -307,24 +325,71 @@ function VesperBody({ state }: { state: ModeState }) {
   )
 }
 
-function CustosBody({ state }: { state: ModeState }) {
+// What "address this trigger" actually means, per settings.md's own
+// definitions -- the session reads the real specifics itself (it has vault
+// Read access once launched); this is the starting instruction, not a
+// pre-digested summary the interface would have to keep in sync separately.
+const TRIGGER_TASK_NOTES: Record<string, string> = {
+  friction:
+    "Address Custos's friction trigger: read modes/*/lessons.md for entries tagged FRICTION: since the last distillation pass (modes/settings/state.md's lessons_distilled_through cursor). Propose a methodology diff per settings.md's Propose stage, citing the specific entries as evidence.",
+  accumulation:
+    "Address Custos's accumulation trigger: modes/*/lessons.md have grown past their lessons_distilled_through cursor. Distill the new entries into proposed methodology diffs per settings.md's Propose stage.",
+  suspicion:
+    "Address Custos's suspicion trigger: at least one mode's state.md hasn't been modified in 7+ days. Audit for drift, staleness, or a vault smell per settings.md's Audit stage.",
+}
+
+const COMPLETENESS_CHECK_NOTES =
+  "Run a spec-completeness audit on Noctis OS itself: diff noctis-os/SPEC.md and noctis-os/CLAUDE.md against second-brain/wiki/Noctis OS/*.md. Flag anything discussed and locked in the wiki but never pulled into SPEC.md, and vice versa, per settings.md's Audit stage."
+
+function CustosBody({
+  state,
+  onStartTask,
+}: {
+  state: ModeState
+  onStartTask: (taskSlug: string, name: string, notes: string) => void
+}) {
   const triggers = (state.triggers as Record<string, boolean> | undefined) ?? {}
   const diffsAwaiting = typeof state.diffs_awaiting_review === 'number' ? state.diffs_awaiting_review : 0
   const hasTriggers = triggers.friction || triggers.accumulation || triggers.suspicion
+
+  const completenessCheckRow = (
+    <button
+      type="button"
+      className="resume-btn completeness-check-btn"
+      onClick={() => onStartTask('completeness-check', 'Completeness check', COMPLETENESS_CHECK_NOTES)}
+    >
+      run completeness check
+    </button>
+  )
+
   if (!hasTriggers && diffsAwaiting === 0) {
     return (
-      <p className="idle-note">
-        <Typewriter text="nothing to tend. the sett holds." startDelayMs={BODY_START_DELAY_MS} />
-      </p>
+      <>
+        <p className="idle-note">
+          <Typewriter text="nothing to tend. the sett holds." startDelayMs={BODY_START_DELAY_MS} />
+        </p>
+        <div className="settings-actions">{completenessCheckRow}</div>
+      </>
     )
   }
   return (
     <>
       <div className="trigger-list">
         {(['friction', 'accumulation', 'suspicion'] as const).map((trigger, i) => (
-          <span key={trigger} className={`trigger-badge${triggers[trigger] ? ' lit' : ''}`}>
-            <Typewriter text={trigger} startDelayMs={BODY_START_DELAY_MS + i * 90} speedMs={10} />
-          </span>
+          <div className="trigger-row" key={trigger}>
+            <span className={`trigger-badge${triggers[trigger] ? ' lit' : ''}`}>
+              <Typewriter text={trigger} startDelayMs={BODY_START_DELAY_MS + i * 90} speedMs={10} />
+            </span>
+            {triggers[trigger] && (
+              <button
+                type="button"
+                className="resume-btn"
+                onClick={() => onStartTask(`address-${trigger}`, `Address ${trigger}`, TRIGGER_TASK_NOTES[trigger])}
+              >
+                address
+              </button>
+            )}
+          </div>
         ))}
       </div>
       <div className="stat-block">
@@ -333,6 +398,7 @@ function CustosBody({ state }: { state: ModeState }) {
           <Typewriter text={String(diffsAwaiting)} startDelayMs={BODY_START_DELAY_MS + LINE_STAGGER_MS} />
         </span>
       </div>
+      <div className="settings-actions">{completenessCheckRow}</div>
     </>
   )
 }

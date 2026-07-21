@@ -97,6 +97,13 @@ An 8-angle security-focused code review (3 correctness + 3 cleanup + altitude + 
 - 6 new pytest tests — 75 passing total. Verified live end-to-end against the running backend: appended a real `FRICTION:`-tagged lessons entry, confirmed both badges lit via the API and a Playwright screenshot of Custos's actual card, then cleaned up and confirmed the badges correctly cleared.
 - Design Brief's last open item (`SPEC.md`: "Custos's trigger thresholds, backend-logic, not blocking") is now resolved.
 
+## Done this pass (Custos scoped-task launches — address a lit trigger, run a completeness check)
+
+- `POST /mode/{name}/jobs` gained a `notes` field, which becomes the job's `context.md` prose body — previously always empty, meaning a scoped launch had no more direction than a bare methodology dump (`POST /session/launch` injects that prose, not the frontmatter, into the actual prompt).
+- Frontend: each lit trigger badge on Custos's card gets an "address" button (creates a task-specific job with real starting instructions, then launches); an always-available "run completeness check" action does the same for Custos's spec-completeness audit capability, targeting Noctis OS's own `SPEC.md`/`CLAUDE.md` against the wiki (not a per-project picker — Shayne's call).
+- Custos itself still never runs on a schedule, by design (`settings.md`: "deliberately no calendar") — this only makes the on-demand path scoped instead of generic; nightshift's existing nightly borrow of the distiller subagent for undistilled lessons is the only automatic path, unchanged.
+- 2 new/updated pytest tests — 76 passing total. Verified live: confirmed via the running API that a job's `notes` field lands correctly in `context.md`'s prose, and via Playwright screenshots that address buttons appear only next to lit triggers and disappear when unlit.
+
 ## Not started
 
 - Composite scale test, two background-image touch-ups, sprite sheet split into individual assets

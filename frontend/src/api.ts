@@ -64,10 +64,10 @@ export function launchSession(mode: Mode, jobSlug?: string, model?: string) {
   })
 }
 
-export function createJob(mode: Mode, slug: string, name: string, projectPath?: string) {
+export function createJob(mode: Mode, slug: string, name: string, projectPath?: string, notes?: string) {
   return request<Job>(`/mode/${mode}/jobs`, {
     method: 'POST',
-    body: JSON.stringify({ slug, name, project_path: projectPath }),
+    body: JSON.stringify({ slug, name, project_path: projectPath, notes }),
   })
 }
 
