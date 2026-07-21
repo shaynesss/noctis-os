@@ -20,3 +20,7 @@ Manual, machine-level checklist only. Everything else is scripted by `make setup
 - **istefox plugin** — installed and running in Obsidian. Required for the Claude Desktop / claude.ai workflow to read the vault (Desktop can't speak HTTP directly and bridges through `mcp-remote`). Not a dependency of the Noctis OS backend itself — the backend reads the vault directly off disk.
 
 Nothing else. Repo scaffolding, dependency installs, and env file creation are all handled by `make setup`.
+
+## Native desktop window (optional, replaces the browser-tab workflow)
+
+`make app` opens Noctis OS as a frameless native window (pywebview, not Tauri — see `desktop/README.md` for why) instead of a browser tab or VS Code's Integrated Browser. `pywebview` is already in `backend/requirements.txt`, so `make setup` covers the dependency — nothing extra to install. Quit with Cmd+Q (no visible close button, by design). No custom app icon yet — that needs a bundler pass (`py2app`/`PyInstaller`), a deliberate follow-up, not done yet.

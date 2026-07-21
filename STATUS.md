@@ -134,6 +134,16 @@ An 8-angle security-focused code review (3 correctness + 3 cleanup + altitude + 
 - Verified live: idle state screenshot shows Noctua/Vesper/Custos in their sleepy variants; forced all five modes `busy: true` via the real API and re-screenshotted — Faber in hard-hat, Custos with the magnifier, Echo alert-eyed, confirmed correct per-character, then reset state back to idle.
 - Answered plainly: Tauri would wrap this exact backend/frontend unchanged into a native bundle, hot-reloading from the dev server exactly like now during development; only a packaged/distributed build snapshots the frontend, needing a rebuild for further changes, same as any desktop app. Shayne asked to move Tauri into v1 — scoping that as a distinct next step, not done in this pass (new toolchain, real architecture change, wants a plan first).
 
+## Done this pass (native desktop window — pywebview, not Tauri)
+
+Researched alternatives rather than defaulting to Tauri: compared pywebview, Tauri (+ FastAPI sidecar, a real documented pattern), and Electron. Recommended and built **pywebview** — stays 100% Python (no Rust toolchain), and Tauri's main advantage (tiny distributable bundle) doesn't matter for a single-user local tool nobody else downloads.
+
+- **`make app`** (`desktop/app.py`) starts the same two dev servers `make dev` does, waits for both to answer, opens a frameless native window (`frameless=True`, no OS chrome at all) pointed at the frontend. Hot reload works exactly like a browser tab, same dev server underneath.
+- **Confirmed both things Shayne asked for**: frameless (`frameless=True` + `easy_drag=True` since removing OS chrome also removes the normal drag-to-move behavior) and a path to a custom app icon (needs a bundler — `py2app`/`PyInstaller` — since pywebview's `icon` param only works on Linux/GTK; a deliberate next step, not done in this pass).
+- **A real bug found and fixed by actually closing the window, not by assuming `.terminate()` was enough**: `npm run dev` spawns a *child* process running the real Vite server; `Popen.terminate()` only signals the immediate `npm` process, so the actual server (and its bound port) kept running invisibly after the window closed. Fixed with process groups (`start_new_session=True` + `os.killpg` on cleanup), registered three ways (window-closed event, `atexit`, `SIGTERM`) for defense in depth.
+- **Verified live end-to-end**, not just code-reviewed: launched via `make app`, screenshotted the actual native window (confirmed genuinely frameless — content runs right to the window edge, no titlebar), confirmed the loaded app was making real live requests (continuous polling in the backend log). Closed it with a real simulated Cmd+Q keystroke (not the launching script's own cleanup call) and confirmed zero leftover processes and zero leftover bound ports via `ps`/`lsof`.
+- `pywebview` added to `backend/requirements.txt` (already covered by `make setup`, nothing extra to install), `SPEC.md`'s Tauri out-of-scope line updated to record the actual decision.
+
 ## Not started
 
 - Sprite sheet split into individual per-character assets (distinct from the expression extraction above — this is about the *idle* sprites' own source format)
