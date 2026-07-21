@@ -225,16 +225,26 @@ def _write_resume_task(project_path: str, prompt: str, model: str | None) -> Non
     `runOn: folderOpen` won't refire (VS Code only runs it on real open
     events, not window focus) -- a known gap, not attempted to be papered
     over here.
+
+    "type": "process" with an explicit `zsh -lc <one string>`, not "type":
+    "shell" with an args array -- found live 2026-07-22: the task failed to
+    launch (exit code 1) because VS Code's own automatic arg-quoting choked
+    on the prompt, which is markdown full of backticks, `$`, and apostrophe
+    contractions from the vault docs. "process" hands args straight to
+    execve with no extra quoting layer, so the one place doing any escaping
+    is our own shlex.quote() on the whole command string -- the exact
+    approach launch_terminal already uses successfully for Terminal.app.
     """
-    args = ["--model", model, prompt] if model else [prompt]
+    model_flag = f"--model {shlex.quote(model)} " if model else ""
+    command = f"claude {model_flag}{shlex.quote(prompt)}"
     task = {
         "version": "2.0.0",
         "tasks": [
             {
                 "label": "Resume Claude Code session",
-                "type": "shell",
-                "command": "claude",
-                "args": args,
+                "type": "process",
+                "command": "/bin/zsh",
+                "args": ["-lc", command],
                 "presentation": {"reveal": "always", "panel": "new", "focus": True},
                 "runOptions": {"runOn": "folderOpen"},
             }
