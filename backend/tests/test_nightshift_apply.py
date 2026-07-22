@@ -15,6 +15,23 @@ Testing a real diff apply.
 - test evidence
 """
 
+PROPOSAL_WITH_TWO_HUNKS = """## Rationale
+Testing a diff that touches two separate spots in the same file.
+
+## Diff
+--- modes/settings/settings.md
++++ modes/settings/settings.md
+@@
+- first old spot
++ first new spot
+@@
+- second old spot
++ second new spot
+
+## Evidence
+- test evidence
+"""
+
 PROPOSAL_NO_DIFF = """## Rationale
 Dev's flagged-job status note.
 
@@ -44,6 +61,21 @@ def test_apply_proposal_replaces_old_text_with_new(vault):
     assert "new text here" in updated
     assert "old text here" not in updated
     assert "before" in updated and "after" in updated
+
+
+def test_apply_proposal_applies_each_hunk_independently(vault):
+    vault_io.write_file(
+        "modes/settings/settings.md",
+        "before\nfirst old spot\nmiddle\nsecond old spot\nafter\n",
+    )
+
+    target = apply.apply_proposal(PROPOSAL_WITH_TWO_HUNKS)
+
+    assert target == "modes/settings/settings.md"
+    updated = vault_io.read_file("modes/settings/settings.md")
+    assert "first new spot" in updated and "second new spot" in updated
+    assert "first old spot" not in updated and "second old spot" not in updated
+    assert "middle" in updated
 
 
 def test_apply_proposal_raises_when_old_text_not_found(vault):

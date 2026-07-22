@@ -507,6 +507,21 @@ button {
   width: fit-content;
 }
 
+.inbox-notice {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+}
+.inbox-notice.error {
+  color: #b3261e;
+  background: rgba(179, 38, 30, 0.08);
+}
+.inbox-notice.success {
+  color: #1e7a3e;
+  background: rgba(30, 122, 62, 0.08);
+}
+
 .inbox-row {
   display: flex;
   align-items: center;
