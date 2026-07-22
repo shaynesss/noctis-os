@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
@@ -8,6 +9,15 @@ from nightshift import apply
 router = APIRouter(prefix="/nightshift", tags=["nightshift"])
 
 STATE_PATH = "modes/nightshift/state.md"
+
+# Matches _log_decision's own format below -- log.md is the durable record
+# (vault CLAUDE.md's write discipline), this is a read-back of exactly what
+# that function writes, not a separate schema to keep in sync by hand.
+_DECISION_LINE = re.compile(
+    r"^- (?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}) \[nightshift\] "
+    r"(?P<decision>accepted|rejected)(?: \((?P<detail>[^)]*)\))?: "
+    r"(?P<slug>\S+) \(from (?P<origin_mode>\S+)\) — (?P<description>.*)$"
+)
 
 
 def _find_item(inbox: list, item_id: str) -> dict:
@@ -85,6 +95,32 @@ def reject_inbox_item(item_id: str):
     _archive_proposal(item_id)
     _log_decision(item, "rejected")
     return {"rejected": True, "item": item}
+
+
+@router.get("/history")
+def get_decision_history(limit: int = 50):
+    """Past accept/reject decisions, most recent first -- read back out of
+    log.md rather than a separate store, since log.md already is the
+    durable record and _log_decision below already writes one line per
+    decision in a fixed, parseable shape. Echo's card had no way to see
+    what happened to an item after it left the inbox; this is that view.
+    """
+    lines = vault_io.read_file("log.md").splitlines()
+    entries = [m.groupdict() for line in lines if (m := _DECISION_LINE.match(line))]
+    entries.reverse()
+    return entries[:limit]
+
+
+@router.get("/archive/{item_id}")
+def get_archived_proposal(item_id: str):
+    """The full proposal text for a past decision -- accept/reject move the
+    file to archive/ rather than deleting it (see _archive_proposal),
+    specifically so this stays readable after the decision is made.
+    """
+    proposal_path = f"modes/nightshift/archive/{item_id}.md"
+    if not vault_io.file_exists(proposal_path):
+        raise HTTPException(status_code=404, detail=f"No archived proposal for: {item_id}")
+    return {"slug": item_id, "proposal": vault_io.read_file(proposal_path)}
 
 
 def _log_decision(item: dict, decision: str) -> None:

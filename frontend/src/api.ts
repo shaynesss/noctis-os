@@ -34,6 +34,15 @@ export interface InboxItem {
   staged_at: string
 }
 
+export interface HistoryEntry {
+  timestamp: string
+  decision: 'accepted' | 'rejected'
+  detail?: string | null
+  slug: string
+  origin_mode: Mode
+  description: string
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
@@ -96,4 +105,12 @@ export function acceptInboxItem(itemId: string) {
 
 export function rejectInboxItem(itemId: string) {
   return request(`/nightshift/inbox/${itemId}/reject`, { method: 'POST' })
+}
+
+export function getNightshiftHistory(limit = 50): Promise<HistoryEntry[]> {
+  return request(`/nightshift/history?limit=${limit}`)
+}
+
+export function getArchivedProposal(itemId: string): Promise<{ slug: string; proposal: string }> {
+  return request(`/nightshift/archive/${itemId}`)
 }

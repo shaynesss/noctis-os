@@ -49,6 +49,73 @@ def test_unknown_item_404(client, auth_headers, vault):
     assert response.status_code == 404
 
 
+def test_history_returns_past_decisions_most_recent_first(client, auth_headers, vault):
+    _seed_inbox(
+        vault,
+        [
+            {"slug": "a", "origin_mode": "learn", "description": "first one", "confidence": None},
+            {"slug": "b", "origin_mode": "research", "description": "second one", "confidence": "low"},
+        ],
+    )
+    client.post("/nightshift/inbox/a/accept", headers=auth_headers)
+    client.post("/nightshift/inbox/b/reject", headers=auth_headers)
+
+    response = client.get("/nightshift/history", headers=auth_headers)
+    assert response.status_code == 200
+    entries = response.json()
+    assert len(entries) == 2
+    # most recent (b, rejected) first -- log.md is append-only, history reverses it
+    assert entries[0]["slug"] == "b"
+    assert entries[0]["decision"] == "rejected"
+    assert entries[0]["origin_mode"] == "research"
+    assert entries[1]["slug"] == "a"
+    assert entries[1]["decision"] == "accepted"
+
+
+def test_history_respects_limit(client, auth_headers, vault):
+    _seed_inbox(
+        vault,
+        [{"slug": "a", "origin_mode": "learn", "description": "first one", "confidence": None}],
+    )
+    client.post("/nightshift/inbox/a/accept", headers=auth_headers)
+
+    response = client.get("/nightshift/history?limit=0", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_history_ignores_unrelated_log_lines(client, auth_headers, vault):
+    existing = vault_io.read_file("log.md")
+    vault_io.write_file("log.md", existing + "- 2026-07-22 09:00 some unrelated log entry\n")
+
+    response = client.get("/nightshift/history", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_archived_proposal_after_accept(client, auth_headers, vault):
+    _seed_inbox(
+        vault,
+        [{"slug": "a", "origin_mode": "learn", "description": "first one", "confidence": None}],
+    )
+    vault_io.write_file(
+        "modes/nightshift/inbox/a.md",
+        "## Rationale\nwhy\n\n## Diff\n(none)\n\n## Evidence\n- x\n",
+    )
+    client.post("/nightshift/inbox/a/accept", headers=auth_headers)
+
+    response = client.get("/nightshift/archive/a", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["slug"] == "a"
+    assert "## Rationale" in body["proposal"]
+
+
+def test_get_archived_proposal_missing_404(client, auth_headers, vault):
+    response = client.get("/nightshift/archive/nonexistent", headers=auth_headers)
+    assert response.status_code == 404
+
+
 def _seed_proposal(vault, slug, text="the full diff + cited lessons"):
     proposal_dir = vault / "modes" / "nightshift" / "inbox"
     proposal_dir.mkdir(parents=True, exist_ok=True)

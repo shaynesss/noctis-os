@@ -594,6 +594,90 @@ button {
   color: var(--accent);
 }
 
+.history-section {
+  margin-top: 12px;
+  border-top: 1px solid rgba(16, 11, 36, 0.08);
+  padding-top: 10px;
+}
+
+.history-toggle {
+  font-size: 11px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(16, 11, 36, 0.55);
+  cursor: pointer;
+}
+.history-toggle:hover {
+  color: rgba(16, 11, 36, 0.85);
+}
+
+.history-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-row {
+  border-bottom: 1px solid rgba(16, 11, 36, 0.06);
+  padding: 6px 0;
+}
+.history-row:last-child {
+  border-bottom: none;
+}
+
+.history-row-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.decision-badge {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.decision-badge.accepted {
+  color: #1a6b3d;
+  background: rgba(107, 208, 138, 0.25);
+}
+.decision-badge.rejected {
+  color: #b3261e;
+  background: rgba(179, 38, 30, 0.12);
+}
+
+.history-desc {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-timestamp {
+  flex: none;
+  font-size: 10px;
+  color: rgba(16, 11, 36, 0.45);
+}
+
+.history-proposal {
+  margin: 6px 0 0;
+  padding: 8px;
+  font-size: 10px;
+  line-height: 1.5;
+  background: rgba(16, 11, 36, 0.04);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
 .overlay .launch-row {
   padding: 14px 18px 18px;
   flex: none;
