@@ -40,9 +40,9 @@ def _strip_marker(line: str) -> str:
     return rest[1:] if rest.startswith(" ") else rest
 
 
-def _old_and_new_blocks(diff_text: str) -> tuple[str, str]:
+def _old_and_new_blocks(hunk_text: str) -> tuple[str, str]:
     old_lines, new_lines = [], []
-    for line in diff_text.splitlines():
+    for line in hunk_text.splitlines():
         if line.startswith(("+++", "---", "@@")):
             continue
         if line.startswith("-"):
@@ -50,6 +50,33 @@ def _old_and_new_blocks(diff_text: str) -> tuple[str, str]:
         elif line.startswith("+"):
             new_lines.append(_strip_marker(line))
     return "\n".join(old_lines), "\n".join(new_lines)
+
+
+def _hunks(diff_text: str) -> list[str]:
+    """Splits a diff's body on `@@` hunk markers. A proposal touching two
+    separate spots in the same file (research.md's Stage-2 list entry and
+    its Stage-3 prose, in one real proposal) produces two `@@` hunks --
+    flattening them into a single old/new block (the pre-fix behavior)
+    concatenates non-adjacent text that never appears contiguously in the
+    target file, so `apply_proposal` always raised "old text not found"
+    for any multi-hunk diff. One hunk's old/new block must stay separate
+    from the next.
+    """
+    hunks: list[str] = []
+    current: list[str] = []
+    started = False
+    for line in diff_text.splitlines():
+        if line.startswith("@@"):
+            if started:
+                hunks.append("\n".join(current))
+            current = []
+            started = True
+            continue
+        if started:
+            current.append(line)
+    if started:
+        hunks.append("\n".join(current))
+    return hunks
 
 
 def apply_proposal(proposal_text: str) -> str | None:
@@ -68,18 +95,27 @@ def apply_proposal(proposal_text: str) -> str | None:
         raise DiffApplyError("diff section has no '--- <path>' target file header")
     target = match.group(1)
 
-    old_block, new_block = _old_and_new_blocks(diff_text)
-    if not old_block:
-        raise DiffApplyError("diff has no removed lines to anchor the replacement")
+    hunks = _hunks(diff_text)
+    if not hunks:
+        raise DiffApplyError("diff has no '@@' hunks to apply")
 
     current = vault_io.read_file(target)
-    count = current.count(old_block)
-    if count == 0:
-        raise DiffApplyError(f"old text not found in {target} -- proposal may be stale")
-    if count > 1:
-        raise DiffApplyError(f"old text found {count} times in {target} -- ambiguous, refusing to guess")
+    for hunk_text in hunks:
+        old_block, new_block = _old_and_new_blocks(hunk_text)
+        if not old_block:
+            raise DiffApplyError("diff has no removed lines to anchor the replacement")
 
-    vault_io.write_file(target, current.replace(old_block, new_block, 1))
+        count = current.count(old_block)
+        if count == 0:
+            raise DiffApplyError(f"old text not found in {target} -- proposal may be stale")
+        if count > 1:
+            raise DiffApplyError(f"old text found {count} times in {target} -- ambiguous, refusing to guess")
+
+        current = current.replace(old_block, new_block, 1)
+
+    # Only written once every hunk has validated cleanly -- a later hunk's
+    # failure must not leave an earlier hunk's change partially applied.
+    vault_io.write_file(target, current)
     return target
 
 

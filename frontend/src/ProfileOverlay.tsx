@@ -1,7 +1,7 @@
 // Profile overlay — mounts over the world without unmounting it. Per-mode
 // content layout locked in wiki/Noctis OS/Interface.md's "Profile overlay
 // card system" section.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   acceptInboxItem,
   createJob,
@@ -22,10 +22,19 @@ interface ProfileOverlayProps {
   onClose: () => void
 }
 
+interface InboxNotice {
+  kind: 'success' | 'error'
+  text: string
+}
+
+const INBOX_NOTICE_TIMEOUT_MS = 2500
+
 export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
   const [state, setState] = useState<ModeState | null>(null)
   const [inbox, setInbox] = useState<InboxItem[]>([])
   const [newBuildOpen, setNewBuildOpen] = useState(false)
+  const [inboxNotice, setInboxNotice] = useState<InboxNotice | null>(null)
+  const inboxNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!mode) return
@@ -35,6 +44,12 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
       getInbox().then(setInbox)
     }
   }, [mode])
+
+  useEffect(() => {
+    return () => {
+      if (inboxNoticeTimer.current) clearTimeout(inboxNoticeTimer.current)
+    }
+  }, [])
 
   if (!mode) return null
   const meta = MODE_META[mode]
@@ -80,10 +95,31 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
     setNewBuildOpen(false)
   }
 
+  function showInboxNotice(notice: InboxNotice) {
+    if (inboxNoticeTimer.current) clearTimeout(inboxNoticeTimer.current)
+    setInboxNotice(notice)
+    inboxNoticeTimer.current = setTimeout(() => setInboxNotice(null), INBOX_NOTICE_TIMEOUT_MS)
+  }
+
   async function handleDecision(itemId: string, decision: 'accept' | 'reject') {
     const action = decision === 'accept' ? acceptInboxItem : rejectInboxItem
-    await action(itemId)
-    setInbox((prev) => prev.filter((item) => item.slug !== itemId))
+    try {
+      await action(itemId)
+      setInbox((prev) => prev.filter((item) => item.slug !== itemId))
+      // Accept/reject never open a session (apply.py's write is a
+      // deterministic backend edit, not a launch) -- the row vanishing was
+      // the only confirmation, indistinguishable from a silent no-op.
+      showInboxNotice({ kind: 'success', text: decision === 'accept' ? 'Accepted and applied.' : 'Rejected.' })
+    } catch (err) {
+      // Previously unhandled -- a failed request (e.g. accept's diff-apply
+      // 422 on a stale/malformed proposal) left the item sitting in the
+      // list with zero feedback, indistinguishable from the button doing
+      // nothing at all.
+      showInboxNotice({
+        kind: 'error',
+        text: err instanceof Error ? err.message : `Failed to ${decision} ${itemId}`,
+      })
+    }
   }
 
   // Settings triggers were previously detect-only -- nothing let you launch
@@ -120,7 +156,8 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
         </div>
 
         <div className="body">
-          {state && renderBody(mode, state, inbox, handleDecision, handleResumeJob, startScopedSettingsTask)}
+          {state &&
+            renderBody(mode, state, inbox, inboxNotice, handleDecision, handleResumeJob, startScopedSettingsTask)}
         </div>
 
         {mode !== 'nightshift' && (
@@ -201,6 +238,7 @@ function renderBody(
   mode: Mode,
   state: ModeState,
   inbox: InboxItem[],
+  inboxNotice: InboxNotice | null,
   onDecision: (itemId: string, decision: 'accept' | 'reject') => void,
   onResumeJob: (jobSlug: string) => void,
   onStartSettingsTask: (taskSlug: string, name: string, notes: string) => void,
@@ -215,12 +253,16 @@ function renderBody(
     case 'settings':
       return <CustosBody state={state} onStartTask={onStartSettingsTask} onResumeJob={onResumeJob} />
     case 'nightshift':
-      return <EchoBody inbox={inbox} onDecision={onDecision} />
+      return <EchoBody inbox={inbox} notice={inboxNotice} onDecision={onDecision} />
   }
 }
 
 const BODY_START_DELAY_MS = 150
 const LINE_STAGGER_MS = 220
+// Echo's inbox rows carry a full description + rationale sentence, easily
+// 3-4x longer than any other card's text -- the default 16ms/char made
+// reading a staged proposal feel sluggish, so these get a faster reveal.
+const INBOX_TEXT_SPEED_MS = 6
 
 // Shared across every mode that can hold jobs (dev/learn/research/settings —
 // the four whose Failure Behavior text promises stale-and-flagged tracking,
@@ -503,20 +545,30 @@ function CustosBody({
 
 function EchoBody({
   inbox,
+  notice,
   onDecision,
 }: {
   inbox: InboxItem[]
+  notice: InboxNotice | null
   onDecision: (itemId: string, decision: 'accept' | 'reject') => void
 }) {
+  const noticeRow = notice && <p className={`inbox-notice ${notice.kind}`}>{notice.text}</p>
   if (inbox.length === 0) {
+    // Notice still needs to render here -- accepting/rejecting the last
+    // remaining item drops inbox to empty in the same render, and this
+    // branch used to bail before the confirmation ever showed.
     return (
-      <p className="idle-note">
-        <Typewriter text="inbox empty." startDelayMs={BODY_START_DELAY_MS} />
-      </p>
+      <>
+        {noticeRow}
+        <p className="idle-note">
+          <Typewriter text="inbox empty." startDelayMs={BODY_START_DELAY_MS} />
+        </p>
+      </>
     )
   }
   return (
     <>
+      {noticeRow}
       {inbox.map((item, i) => (
         <div className="inbox-row" key={item.slug}>
           <span
@@ -526,11 +578,16 @@ function EchoBody({
             {MODE_META[item.origin_mode].name}
           </span>
           <span className="inbox-desc">
-            <Typewriter text={item.description} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS} />
+            <Typewriter
+              text={item.description}
+              startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS}
+              speedMs={INBOX_TEXT_SPEED_MS}
+            />
             <span className="inbox-rationale">
               <Typewriter
                 text={item.rationale}
                 startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS + 120}
+                speedMs={INBOX_TEXT_SPEED_MS}
               />
             </span>
           </span>
