@@ -45,6 +45,22 @@ def launch_session(request: LaunchRequest):
                 status_code=400,
                 detail="Dev launches require a job context with a project_path field",
             )
+        # Job-context frontmatter (stage/status) never reaches the prompt --
+        # only the freeform prose body does (see create_job's docstring).
+        # But whether a job's already shipped is exactly a `stage` check,
+        # and per this project's own deterministic-where-possible rule that
+        # shouldn't be left to the session to infer from prose that's often
+        # empty (found live 2026-07-22: portfolio-platform's job context has
+        # stage: Ship but zero prose, so dev.md's Patch/Overhaul callout had
+        # nothing to condition on and silently skipped). Stamping this one
+        # deterministic fact onto the prompt lets the mode file's callout
+        # branch on a literal marker instead of guessing from text.
+        if job_metadata.get("stage") in ("Ship", "Done"):
+            marker = (
+                f"[RESUMED-SHIPPED-BUILD stage={job_metadata['stage']} "
+                f"status={job_metadata.get('status', '')!r}]"
+            )
+            prompt = f"{marker}\n\n{prompt}"
         launch_surfaces.launch_dev(
             project_path, prompt, job_slug=request.job_slug, model=request.model
         )
