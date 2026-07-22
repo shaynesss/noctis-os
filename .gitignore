@@ -37,13 +37,16 @@ backend/launch_config/nondev/.last-cleanup
 backend/launch_config/nondev/.last-update-result.json
 backend/launch_config/nondev/backups/
 backend/launch_config/nondev/cache/
+backend/launch_config/nondev/file-history/
 backend/launch_config/nondev/history.jsonl
+backend/launch_config/nondev/image-cache/
 backend/launch_config/nondev/mcp-needs-auth-cache.json
 backend/launch_config/nondev/paste-cache/
 backend/launch_config/nondev/plugins/
 backend/launch_config/nondev/projects/
 backend/launch_config/nondev/sessions/
 backend/launch_config/nondev/settings.json
+backend/launch_config/nondev/shell-snapshots/
 
 # OS
 .DS_Store
