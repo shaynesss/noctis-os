@@ -14,6 +14,7 @@ Flagged in STATUS.md as a real follow-up rather than rushed in here.
 """
 
 import re
+from datetime import datetime, timezone
 
 import vault_io
 
@@ -143,3 +144,56 @@ def advance_lessons_cursor(mode: str, through: int) -> None:
     cursor[mode] = through
     state["lessons_distilled_through"] = cursor
     vault_io.write_frontmatter("modes/settings/state.md", state, content)
+
+
+_JOB_ORIGIN_MARKER = re.compile(r"<!--\s*job-origin:\s*([\w-]+)/([\w-]+)\s*-->")
+
+
+def parse_job_origin(proposal_text: str) -> tuple[str, str] | None:
+    """A proposal staged on behalf of a live job (settings.md's Propose
+    stage: "address the trigger" sessions, not nightshift's own automatic
+    distiller run, which has no job to link back to) leaves a
+    machine-readable marker recording which job to close once this
+    proposal is accepted -- same shape as `parse_cursor_advance` above.
+    """
+    match = _JOB_ORIGIN_MARKER.search(proposal_text)
+    if not match:
+        return None
+    return match.group(1), match.group(2)
+
+
+def close_job(mode: str, slug: str, resolution: str) -> None:
+    """Collapses what settings.md's Apply + verify stage used to defer to
+    "the next settings session" into the same deterministic accept action
+    as the diff apply and cursor advance above -- confirming a
+    deterministic write landed is not a judgment call, so no session needs
+    re-launching just to close the job out. Found 2026-07-22: the deferred
+    design left a resolved job visibly stuck on Custos's card (still
+    "awaiting accept" after the accept had already happened) until some
+    future session happened to re-audit it.
+
+    Marks the job `Done` in both its own context.md and the mode's
+    `state.md` jobs list -- kept visible (not removed) so the card shows
+    the resolution rather than the job just vanishing with no confirmation
+    it actually passed. The frontend collapses Done rows to a single line
+    (ProfileOverlay.tsx's JobRow) so this doesn't pile up as clutter.
+    """
+    job_path = f"modes/{mode}/jobs/{slug}/context.md"
+    if vault_io.file_exists(job_path):
+        job_meta, job_content = vault_io.read_frontmatter(job_path)
+        job_meta["stage"] = "Done"
+        job_meta["status"] = resolution
+        job_meta["last_touched"] = datetime.now(timezone.utc).isoformat()
+        vault_io.write_frontmatter(job_path, job_meta, job_content)
+
+    state_path = f"modes/{mode}/state.md"
+    state_meta, state_content = vault_io.read_frontmatter(state_path)
+    jobs = state_meta.get("jobs", []) or []
+    for job in jobs:
+        if job.get("slug") == slug:
+            job["stage"] = "Done"
+            job["status"] = resolution
+            job["last_touched"] = datetime.now(timezone.utc).isoformat()
+            break
+    state_meta["jobs"] = jobs
+    vault_io.write_frontmatter(state_path, state_meta, state_content)

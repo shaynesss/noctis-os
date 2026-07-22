@@ -358,26 +358,63 @@ function JobList({
   return (
     <>
       {list.map((job, i) => (
-        <div className={`job-row${job.flagged ? ' flagged' : ''}`} key={job.slug}>
-          <div>
-            <span className="name">
-              <Typewriter text={job.name} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS} />
-              {job.flagged && <span className="flagged-badge">flagged</span>}
-            </span>
-            <span className="job-status">
-              <Typewriter text={job.status} startDelayMs={BODY_START_DELAY_MS + i * LINE_STAGGER_MS + 80} />
-            </span>
+        <JobRow key={job.slug} job={job} mode={mode} index={i} onResumeJob={onResumeJob} />
+      ))}
+    </>
+  )
+}
+
+// One job's row — collapsed to name + stage by default (the full status
+// paragraph, e.g. a closed job's "verified: diff landed in research.md,
+// cursor advanced..." resolution text, was rendered at all times and read
+// as clutter). Click the caret to expand it. `Done` jobs (apply.py's
+// close_job) stay visible rather than disappearing from the list -- a job
+// silently vanishing on accept reads as "did this actually happen?", not
+// resolution -- but get a distinct checkmark badge and no resume button
+// since there's nothing left to resume.
+function JobRow({
+  job,
+  mode,
+  index,
+  onResumeJob,
+}: {
+  job: NonNullable<ModeState['jobs']>[number]
+  mode: Mode
+  index: number
+  onResumeJob: (jobSlug: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const isDone = job.stage === 'Done'
+  return (
+    <div className={`job-row${job.flagged ? ' flagged' : ''}`}>
+      <div className="job-info">
+        <button type="button" className="job-toggle" onClick={() => setExpanded((prev) => !prev)}>
+          <span className={`job-caret${expanded ? ' open' : ''}`}>▸</span>
+          <span className="name">
+            <Typewriter text={job.name} startDelayMs={BODY_START_DELAY_MS + index * LINE_STAGGER_MS} />
+            {job.flagged && <span className="flagged-badge">flagged</span>}
+          </span>
+        </button>
+        {expanded && (
+          <>
+            <span className="job-status">{job.status}</span>
             <ActionFeedLine mode={mode} slug={job.slug} />
-          </div>
-          <div className="job-actions">
+          </>
+        )}
+      </div>
+      <div className="job-actions">
+        {isDone ? (
+          <span className="phase-badge done">✓ done</span>
+        ) : (
+          <>
             <span className="phase-badge">{job.stage}</span>
             <button type="button" className="resume-btn" onClick={() => onResumeJob(job.slug)}>
               resume
             </button>
-          </div>
-        </div>
-      ))}
-    </>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -561,6 +598,7 @@ function CustosBody({
   onResumeJob: (jobSlug: string) => void
 }) {
   const triggers = (state.triggers as Record<string, boolean> | undefined) ?? {}
+  const triggerModes = (state.trigger_modes as Record<string, string[]> | undefined) ?? {}
   const diffsAwaiting = typeof state.diffs_awaiting_review === 'number' ? state.diffs_awaiting_review : 0
   const jobs = state.jobs ?? []
   const hasTriggers = triggers.friction || triggers.accumulation || triggers.suspicion
@@ -594,6 +632,17 @@ function CustosBody({
             <span className={`trigger-badge${triggers[trigger] ? ' lit' : ''}`}>
               <Typewriter text={trigger} startDelayMs={BODY_START_DELAY_MS + i * 90} speedMs={10} />
             </span>
+            {triggers[trigger] && (triggerModes[trigger]?.length ?? 0) > 0 && (
+              // Which mode(s) actually fired this -- a re-lit badge right
+              // after closing a job for a different mode reads as
+              // "didn't I already fix this?" without this label. Shown as
+              // character names (Custos, Vesper, ...), not raw mode slugs
+              // ("settings") -- the backend's internal identifiers mean
+              // nothing on a card whose whole vocabulary is character names.
+              <span className="trigger-modes">
+                {triggerModes[trigger].map((m) => MODE_META[m as Mode]?.name ?? m).join(', ')}
+              </span>
+            )}
             {triggers[trigger] && (
               <button
                 type="button"

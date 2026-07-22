@@ -83,6 +83,13 @@ def accept_inbox_item(item_id: str):
     if cursor_advance:
         apply.advance_lessons_cursor(*cursor_advance)
 
+    job_origin = apply.parse_job_origin(proposal_text)
+    if job_origin:
+        resolution = f"Resolved: {item.get('description', item_id)} accepted" + (
+            f" and applied to {applied_target}." if applied_target else "."
+        )
+        apply.close_job(*job_origin, resolution=resolution)
+
     _remove_from_inbox(item_id)
     _archive_proposal(item_id)
     _log_decision(item, "accepted" + (f" (applied to {applied_target})" if applied_target else ""))
