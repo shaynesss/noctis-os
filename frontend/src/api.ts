@@ -34,6 +34,16 @@ export interface InboxItem {
   staged_at: string
 }
 
+export interface HealthItem {
+  status: 'ok' | 'stale' | 'unknown'
+  [key: string]: unknown
+}
+
+export interface HealthStrip {
+  lint: HealthItem
+  istefox: HealthItem
+}
+
 export interface HistoryEntry {
   timestamp: string
   decision: 'accepted' | 'rejected'
@@ -89,6 +99,10 @@ export function updateJob(
     method: 'PATCH',
     body: JSON.stringify(update),
   })
+}
+
+export function getHealthStrip(): Promise<HealthStrip> {
+  return request('/health/strip')
 }
 
 export function getInbox(): Promise<InboxItem[]> {

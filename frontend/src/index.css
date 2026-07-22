@@ -146,6 +146,16 @@ button {
   flex: none;
 }
 
+/* Same green/red used by .verdict.good/.verdict.bad elsewhere, so the
+   health strip reads as the same status vocabulary as the rest of the
+   app rather than inventing a second color language. */
+.health-item .dot-ok {
+  background: #1a6b3d;
+}
+.health-item .dot-stale {
+  background: #9c2b1f;
+}
+
 .health-item b {
   color: var(--cloud-lt);
   font-weight: 600;

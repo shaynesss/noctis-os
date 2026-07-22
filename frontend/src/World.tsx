@@ -2,7 +2,7 @@
 // idling on the locked peak-dusk cloud-bed backdrop. See SPEC.md PRD
 // "Persistent world screen" / assets/world/README.md for footing coordinates.
 import { useEffect, useState } from 'react'
-import { getModeState, type Mode, type ModeState } from './api'
+import { getHealthStrip, getModeState, type HealthStrip, type Mode, type ModeState } from './api'
 import { MODE_META, MODE_ORDER } from './modes'
 
 // Footing coordinates locked in assets/world/README.md (x-frac / y-frac).
@@ -15,6 +15,17 @@ const FOOTING: Record<Mode, { leftPct: number; topPct: number }> = {
 }
 
 const POLL_INTERVAL_MS = 15_000
+
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const deltaMs = Date.now() - new Date(iso).getTime()
+  const minutes = Math.floor(deltaMs / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.floor(hours / 24)}d ago`
+}
 
 // Ambient world badges are intentionally minimal per Interface.md's Views
 // section: "busy/idle, count badges where relevant (due reviews for Noctua,
@@ -35,6 +46,7 @@ interface WorldProps {
 
 export default function World({ onSelect, activeMode }: WorldProps) {
   const [states, setStates] = useState<Partial<Record<Mode, ModeState>>>({})
+  const [health, setHealth] = useState<HealthStrip | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -61,20 +73,39 @@ export default function World({ onSelect, activeMode }: WorldProps) {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function poll() {
+      try {
+        const result = await getHealthStrip()
+        if (!cancelled) setHealth(result)
+      } catch {
+        // Health strip is ambient chrome, not a mode -- a failed poll
+        // just leaves the last-known value (or the '—' placeholder)
+        // showing rather than surfacing an error to the whole screen.
+      }
+    }
+
+    poll()
+    const id = setInterval(poll, POLL_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [])
+
   return (
     <div id="world" className="world">
       <div className="health-strip">
         <span className="brand">NOCTIS OS</span>
-        {/* TODO: wire to a real backend health endpoint (lint/orphan/istefox/
-            nightshift-run status) once Settings mode's audit capabilities
-            expose one — static for now, not fabricated live data. */}
         <span className="health-item">
-          <span className="dot" />
-          lint <b>—</b>
+          <span className={`dot dot-${health?.lint.status ?? 'unknown'}`} />
+          lint <b>{(health?.lint.last_run as string | undefined) ?? '—'}</b>
         </span>
         <span className="health-item">
-          <span className="dot" />
-          istefox <b>—</b>
+          <span className={`dot dot-${health?.istefox.status ?? 'unknown'}`} />
+          istefox <b>{relativeTime(health?.istefox.last_write as string | undefined)}</b>
         </span>
       </div>
 
