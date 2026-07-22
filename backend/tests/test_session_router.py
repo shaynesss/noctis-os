@@ -9,12 +9,21 @@ def test_unknown_mode_404(client, auth_headers):
 
 def test_nondev_launch_opens_terminal(client, auth_headers, vault, tmp_path, monkeypatch):
     monkeypatch.setattr(busy_marker, "RUNTIME_DIR", tmp_path)
+    # conftest's default learn.md is bare scaffolding with no real callout --
+    # write a realistic one so the system_prompt extraction has something
+    # to actually find (this test also covers session.py's routing of it).
+    (vault / "modes" / "learn" / "learn.md").write_text(
+        '> **SESSION START:** the first message must be exactly this:\n'
+        '>\n'
+        '> "Shallow or deep track? Which is this?"\n',
+        encoding="utf-8",
+    )
     calls = []
     monkeypatch.setattr(
         launch_surfaces,
         "launch_terminal",
-        lambda mode, job_label, prompt, job_slug=None, model=None: calls.append(
-            (mode, job_label, job_slug, model)
+        lambda mode, job_label, prompt, job_slug=None, model=None, system_prompt=None: calls.append(
+            (mode, job_label, job_slug, model, system_prompt)
         ),
     )
 
@@ -22,7 +31,13 @@ def test_nondev_launch_opens_terminal(client, auth_headers, vault, tmp_path, mon
 
     assert response.status_code == 200
     assert response.json() == {"launched": True, "mode": "learn", "surface": "terminal"}
-    assert calls == [("learn", "no active job", None, None)]
+    mode, job_label, job_slug, model, system_prompt = calls[0]
+    assert (mode, job_label, job_slug, model) == ("learn", "no active job", None, None)
+    # learn.md has a real session-start callout -- extracted and passed
+    # through as its own system_prompt, not just embedded in the big
+    # methodology/lessons prompt (see session_prompt.py).
+    assert system_prompt is not None
+    assert "Shallow or deep track?" in system_prompt
 
     # Nothing in the system ever set this before -- found live when
     # launching Noctua's session didn't update its card at all. A runtime

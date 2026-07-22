@@ -313,6 +313,7 @@ def launch_terminal(
     prompt: str,
     job_slug: str | None = None,
     model: str | None = None,
+    system_prompt: str | None = None,
 ) -> None:
     """Opens a new Terminal.app window, tinted to the character's darkened
     hex, titled "{character} — {mode} — {job/topic}", with CLAUDE_CONFIG_DIR
@@ -323,6 +324,14 @@ def launch_terminal(
     comment) -- both the shared settings.json hook merge and the actual
     osascript dispatch are real races when two non-dev modes are launched
     close together, not just the hook merge alone.
+
+    `system_prompt` (a mode's session-start callout, see session_prompt.py)
+    goes in via --append-system-prompt, a separate channel from `prompt` --
+    delivered as a genuine system-level instruction rather than relying on
+    it sitting at the top of the huge first user-turn message, which
+    doesn't reliably carry the same instruction-following weight (found
+    live 2026-07-22, Noctua's track question landing only about half the
+    time despite the callout being present and correct in `prompt`).
     """
     with _terminal_launch_lock:
         _ensure_nondev_hooks()
@@ -331,11 +340,14 @@ def launch_terminal(
         title = f"{character} — {mode} — {job_label}"
 
         model_flag = f"--model {shlex.quote(model)} " if model else ""
+        system_prompt_flag = (
+            f"--append-system-prompt {shlex.quote(system_prompt)} " if system_prompt else ""
+        )
         command = (
             f"export NOCTIS_MODE={shlex.quote(mode)} "
             f"NOCTIS_JOB_ID={shlex.quote(job_slug or 'general')} "
             f"CLAUDE_CONFIG_DIR={shlex.quote(str(NONDEV_CONFIG_DIR))} && "
-            f"claude {model_flag}{shlex.quote(prompt)}"
+            f"claude {system_prompt_flag}{model_flag}{shlex.quote(prompt)}"
         )
 
         script = f"""
