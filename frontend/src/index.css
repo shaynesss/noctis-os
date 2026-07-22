@@ -308,6 +308,7 @@ button {
   padding: 6px 18px;
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -336,16 +337,47 @@ button {
   border-bottom: none;
 }
 
+.job-info {
+  /* Flex children default to min-width:auto (their content's intrinsic
+     width), so a long status string forces the row wider than the card
+     instead of wrapping -- min-width:0 lets it shrink and wrap normally. */
+  min-width: 0;
+}
+
 .job-row .name {
   font-weight: 600;
   font-size: 13px;
 }
 
+.job-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.job-caret {
+  font-size: 9px;
+  color: #78728c;
+  transition: transform 0.15s ease;
+  flex: none;
+}
+.job-caret.open {
+  transform: rotate(90deg);
+}
+
 .job-status {
   display: block;
-  margin-top: 2px;
+  margin-top: 4px;
   font-size: 11px;
   color: #55506a;
+  line-height: 1.4;
 }
 
 .action-feed-line {
@@ -361,16 +393,24 @@ button {
 }
 
 .phase-badge {
+  /* Status label, not a button -- no onClick anywhere in ProfileOverlay.tsx.
+     Deliberately un-button-like (no solid fill, no border) so it doesn't
+     invite a click the way .resume-btn's pill shape does. */
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #fff;
-  background: var(--accent);
-  padding: 3px 7px;
-  border-radius: 4px;
+  color: var(--accent);
   white-space: nowrap;
+}
+
+.phase-badge.done {
+  /* Distinct from an in-progress stage -- reads as passed, not just a
+     different stage name (same green used by .verdict.good elsewhere). */
+  color: #1a6b3d;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .job-row.flagged {
@@ -497,6 +537,12 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.trigger-modes {
+  font-size: 10px;
+  color: #78728c;
+  font-style: italic;
 }
 
 .settings-actions {

@@ -118,3 +118,62 @@ def test_advance_lessons_cursor_updates_settings_state(vault):
 
     state, _ = vault_io.read_frontmatter("modes/settings/state.md")
     assert state["lessons_distilled_through"]["dev"] == 20
+
+
+def test_parse_job_origin_extracts_mode_and_slug():
+    text = "## Rationale\nx\n\n<!-- job-origin: settings/address-accumulation-20260722 -->\n"
+    assert apply.parse_job_origin(text) == ("settings", "address-accumulation-20260722")
+
+
+def test_parse_job_origin_missing_marker_returns_none():
+    assert apply.parse_job_origin("no marker here") is None
+
+
+def test_close_job_marks_context_and_state_entry_done(vault):
+    vault_io.write_frontmatter(
+        "modes/settings/jobs/address-accumulation-20260722/context.md",
+        {"name": "Address accumulation", "stage": "Propose", "status": "1 diff staged"},
+        "some prose",
+    )
+    vault_io.write_frontmatter(
+        "modes/settings/state.md",
+        {
+            "mode": "settings",
+            "busy": False,
+            "jobs": [
+                {"slug": "address-accumulation-20260722", "name": "Address accumulation", "stage": "Propose"},
+                {"slug": "other-job", "name": "Other job", "stage": "Audit"},
+            ],
+        },
+        "",
+    )
+
+    apply.close_job("settings", "address-accumulation-20260722", "Resolved: test.")
+
+    job_meta, job_content = vault_io.read_frontmatter(
+        "modes/settings/jobs/address-accumulation-20260722/context.md"
+    )
+    assert job_meta["stage"] == "Done"
+    assert job_meta["status"] == "Resolved: test."
+    assert job_content == "some prose"
+
+    # Stays visible in state.md's jobs list, marked Done -- not removed --
+    # so the card shows the resolution instead of the job just vanishing.
+    state, _ = vault_io.read_frontmatter("modes/settings/state.md")
+    jobs_by_slug = {j["slug"]: j for j in state["jobs"]}
+    assert jobs_by_slug["address-accumulation-20260722"]["stage"] == "Done"
+    assert jobs_by_slug["address-accumulation-20260722"]["status"] == "Resolved: test."
+    assert jobs_by_slug["other-job"]["stage"] == "Audit"
+
+
+def test_close_job_is_a_noop_when_job_context_missing(vault):
+    vault_io.write_frontmatter(
+        "modes/settings/state.md",
+        {"mode": "settings", "busy": False, "jobs": []},
+        "",
+    )
+
+    apply.close_job("settings", "never-existed", "Resolved: test.")
+
+    state, _ = vault_io.read_frontmatter("modes/settings/state.md")
+    assert state["jobs"] == []

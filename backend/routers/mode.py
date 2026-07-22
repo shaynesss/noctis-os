@@ -43,8 +43,16 @@ def get_mode_state(name: str):
         # settings.md itself flagged trigger thresholds as an open
         # backend-logic question until this pass (triggers.py).
         computed = triggers.compute_triggers()
-        if metadata.get("triggers") != computed:
+        computed_modes = triggers.compute_trigger_modes()
+        computed_diffs = triggers.compute_diffs_awaiting_review()
+        if (
+            metadata.get("triggers") != computed
+            or metadata.get("trigger_modes") != computed_modes
+            or metadata.get("diffs_awaiting_review") != computed_diffs
+        ):
             metadata["triggers"] = computed
+            metadata["trigger_modes"] = computed_modes
+            metadata["diffs_awaiting_review"] = computed_diffs
             vault_io.write_frontmatter(f"modes/{name}/state.md", metadata, content)
 
     return metadata
