@@ -5,12 +5,15 @@ import { useEffect, useRef, useState } from 'react'
 import {
   acceptInboxItem,
   createJob,
+  getArchivedProposal,
   getInbox,
   getJobLog,
   getModeState,
+  getNightshiftHistory,
   launchSession,
   rejectInboxItem,
   updateJob,
+  type HistoryEntry,
   type InboxItem,
   type Mode,
   type ModeState,
@@ -35,6 +38,10 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
   const [newBuildOpen, setNewBuildOpen] = useState(false)
   const [inboxNotice, setInboxNotice] = useState<InboxNotice | null>(null)
   const inboxNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [history, setHistory] = useState<HistoryEntry[] | null>(null)
+  const [expandedHistorySlug, setExpandedHistorySlug] = useState<string | null>(null)
+  const [expandedProposals, setExpandedProposals] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!mode) return
@@ -42,6 +49,13 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
     getModeState(mode).then(setState)
     if (mode === 'nightshift') {
       getInbox().then(setInbox)
+      // History is lazy-loaded on demand (below), not here -- it only
+      // grows, and most opens of Echo's card are to review the inbox, not
+      // to look back.
+      setHistoryOpen(false)
+      setHistory(null)
+      setExpandedHistorySlug(null)
+      setExpandedProposals({})
     }
   }, [mode])
 
@@ -119,6 +133,36 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
         kind: 'error',
         text: err instanceof Error ? err.message : `Failed to ${decision} ${itemId}`,
       })
+      return
+    }
+    // Keep an already-open history list in sync with the decision that
+    // just happened, rather than leaving it stale until the card is
+    // reopened.
+    if (historyOpen) {
+      getNightshiftHistory().then(setHistory)
+    }
+  }
+
+  async function toggleHistory() {
+    if (!historyOpen && history === null) {
+      setHistory(await getNightshiftHistory())
+    }
+    setHistoryOpen((prev) => !prev)
+  }
+
+  async function toggleHistoryItem(slug: string) {
+    if (expandedHistorySlug === slug) {
+      setExpandedHistorySlug(null)
+      return
+    }
+    setExpandedHistorySlug(slug)
+    if (!(slug in expandedProposals)) {
+      try {
+        const { proposal } = await getArchivedProposal(slug)
+        setExpandedProposals((prev) => ({ ...prev, [slug]: proposal }))
+      } catch {
+        setExpandedProposals((prev) => ({ ...prev, [slug]: '(proposal file no longer available)' }))
+      }
     }
   }
 
@@ -157,7 +201,18 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
 
         <div className="body">
           {state &&
-            renderBody(mode, state, inbox, inboxNotice, handleDecision, handleResumeJob, startScopedSettingsTask)}
+            renderBody(
+              mode,
+              state,
+              inbox,
+              inboxNotice,
+              { open: historyOpen, entries: history, expandedSlug: expandedHistorySlug, expandedProposals },
+              handleDecision,
+              handleResumeJob,
+              startScopedSettingsTask,
+              toggleHistory,
+              toggleHistoryItem,
+            )}
         </div>
 
         {mode !== 'nightshift' && (
@@ -234,14 +289,24 @@ function NewBuildModal({
   )
 }
 
+interface EchoHistoryState {
+  open: boolean
+  entries: HistoryEntry[] | null
+  expandedSlug: string | null
+  expandedProposals: Record<string, string>
+}
+
 function renderBody(
   mode: Mode,
   state: ModeState,
   inbox: InboxItem[],
   inboxNotice: InboxNotice | null,
+  historyState: EchoHistoryState,
   onDecision: (itemId: string, decision: 'accept' | 'reject') => void,
   onResumeJob: (jobSlug: string) => void,
   onStartSettingsTask: (taskSlug: string, name: string, notes: string) => void,
+  onToggleHistory: () => void,
+  onToggleHistoryItem: (slug: string) => void,
 ) {
   switch (mode) {
     case 'dev':
@@ -253,7 +318,16 @@ function renderBody(
     case 'settings':
       return <CustosBody state={state} onStartTask={onStartSettingsTask} onResumeJob={onResumeJob} />
     case 'nightshift':
-      return <EchoBody inbox={inbox} notice={inboxNotice} onDecision={onDecision} />
+      return (
+        <EchoBody
+          inbox={inbox}
+          notice={inboxNotice}
+          onDecision={onDecision}
+          history={historyState}
+          onToggleHistory={onToggleHistory}
+          onToggleHistoryItem={onToggleHistoryItem}
+        />
+      )
   }
 }
 
@@ -547,12 +621,21 @@ function EchoBody({
   inbox,
   notice,
   onDecision,
+  history,
+  onToggleHistory,
+  onToggleHistoryItem,
 }: {
   inbox: InboxItem[]
   notice: InboxNotice | null
   onDecision: (itemId: string, decision: 'accept' | 'reject') => void
+  history: EchoHistoryState
+  onToggleHistory: () => void
+  onToggleHistoryItem: (slug: string) => void
 }) {
   const noticeRow = notice && <p className={`inbox-notice ${notice.kind}`}>{notice.text}</p>
+  const historySection = (
+    <EchoHistorySection history={history} onToggle={onToggleHistory} onToggleItem={onToggleHistoryItem} />
+  )
   if (inbox.length === 0) {
     // Notice still needs to render here -- accepting/rejecting the last
     // remaining item drops inbox to empty in the same render, and this
@@ -563,6 +646,7 @@ function EchoBody({
         <p className="idle-note">
           <Typewriter text="inbox empty." startDelayMs={BODY_START_DELAY_MS} />
         </p>
+        {historySection}
       </>
     )
   }
@@ -602,6 +686,55 @@ function EchoBody({
           </span>
         </div>
       ))}
+      {historySection}
     </>
+  )
+}
+
+function EchoHistorySection({
+  history,
+  onToggle,
+  onToggleItem,
+}: {
+  history: EchoHistoryState
+  onToggle: () => void
+  onToggleItem: (slug: string) => void
+}) {
+  return (
+    <div className="history-section">
+      <button type="button" className="history-toggle" onClick={onToggle}>
+        {history.open ? '▾ Hide history' : '▸ History'}
+      </button>
+      {history.open && (
+        <div className="history-list">
+          {history.entries === null || history.entries.length === 0 ? (
+            <p className="idle-note">
+              {history.entries === null ? 'loading…' : 'no past decisions yet.'}
+            </p>
+          ) : (
+            history.entries.map((entry) => (
+              <div className="history-row" key={`${entry.slug}-${entry.timestamp}`}>
+                <div className="history-row-summary" onClick={() => onToggleItem(entry.slug)}>
+                  <span
+                    className="origin-tag"
+                    style={{ ['--accent' as string]: `var(${MODE_META[entry.origin_mode].accentVar})` }}
+                  >
+                    {MODE_META[entry.origin_mode].name}
+                  </span>
+                  <span className={`decision-badge ${entry.decision}`}>{entry.decision}</span>
+                  <span className="history-desc">{entry.description}</span>
+                  <span className="history-timestamp">{entry.timestamp}</span>
+                </div>
+                {history.expandedSlug === entry.slug && (
+                  <pre className="history-proposal">
+                    {history.expandedProposals[entry.slug] ?? 'loading…'}
+                  </pre>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
   )
 }
