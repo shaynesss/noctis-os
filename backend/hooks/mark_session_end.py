@@ -20,10 +20,12 @@ process itself exits.
    that nothing in the system ever set `busy` at all: POST /session/launch
    sets it true (deterministic, the backend just performed the launch),
    and this is the other end, the one place that actually knows the
-   session ended. Needs vault_io, hence launch_surfaces.py now invokes
-   this hook with the venv's own python3 rather than bare `python3` (which
-   resolves to whatever's on PATH in the launched shell, not necessarily
-   anything with python-frontmatter installed).
+   session ended. Originally a state.md frontmatter write; moved to a
+   runtime marker file (`busy_marker.py`, 2026-07-22) after a running
+   session's own direct edits to its state.md silently dropped the field
+   at least once in practice. `.venv`'s own python3 is still needed here
+   (not bare `python3`, which resolves to whatever's on PATH in the
+   launched shell) for `python-dotenv`, used below to load VAULT_PATH.
 
 Gated on the payload's `reason` field (found live 2026-07-22, chasing
 Custos showing idle mid-session): SessionEnd fires with reason "clear" or
@@ -79,11 +81,9 @@ def mark_session_end(mode: str | None, job_id: str | None, reason: str | None) -
     with log_path.open("a", encoding="utf-8") as f:
         f.write(f"{datetime.now(timezone.utc).isoformat()} SESSION_END\n")
 
-    import vault_io
+    import busy_marker
 
-    state, content = vault_io.read_frontmatter(f"modes/{mode}/state.md")
-    state["busy"] = False
-    vault_io.write_frontmatter(f"modes/{mode}/state.md", state, content)
+    busy_marker.clear_busy(mode)
 
 
 def main() -> None:

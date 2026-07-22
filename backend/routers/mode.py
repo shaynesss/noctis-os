@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+import busy_marker
 import staleness
 import triggers
 import vault_io
@@ -37,6 +38,14 @@ def get_mode_state(name: str):
     # badges read — not every job file individually (SPEC.md EDD "State files
     # and the state-schema contract").
     metadata, content = vault_io.read_frontmatter(f"modes/{name}/state.md")
+
+    # `busy` is a runtime marker (busy_marker.py), not vault content -- always
+    # overridden here regardless of whatever value happens to be sitting in
+    # state.md's frontmatter, since a session's own direct edits to that file
+    # have no way to know the field exists and can silently drop it (found
+    # 2026-07-22). This is the only source of truth for busy from this point
+    # on; any stale `busy` key still present in a state.md file is inert.
+    metadata["busy"] = busy_marker.is_busy(name)
 
     if name == "settings":
         # Same live-on-every-poll pattern as dev's staleness check --
@@ -168,6 +177,19 @@ def get_job_log(name: str, slug: str, lines: int = 50):
     """The interface's poll target for a job's live action feed — one line
     per tool call, written by backend/hooks/log_action.py. Not vault
     content; returns [] rather than 404 for a job with no session run yet.
+
+    Falls back to `{name}__general.log` when the job's own log doesn't
+    exist: a session launched with no job bound yet (NOCTIS_JOB_ID defaults
+    to "general") logs there, but if it then creates a job mid-session
+    (POST /mode/{name}/jobs, e.g. Vesper filing a question as a job partway
+    through), the terminal is already running and can't retroactively bind
+    to the new slug -- its activity keeps landing in general.log even
+    though a job row with a different slug now exists for it. Without this
+    fallback that job's action-feed line is permanently empty despite a
+    session actively working on it (found 2026-07-22, Vesper's
+    brunei-ai-smb-consulting job). Only used when the job-specific log is
+    entirely absent, not merged with it, so a job that DOES have its own
+    log (a fresh launch with the slug already bound) is unaffected.
     """
     if name not in VALID_MODES:
         raise HTTPException(status_code=404, detail=f"Unknown mode: {name}")
@@ -175,6 +197,8 @@ def get_job_log(name: str, slug: str, lines: int = 50):
         raise HTTPException(status_code=400, detail=f"Invalid slug: {slug!r}")
 
     log_path = RUNTIME_DIR / f"{name}__{slug}.log"
+    if not log_path.exists():
+        log_path = RUNTIME_DIR / f"{name}__general.log"
     if not log_path.exists():
         return {"lines": []}
     content = log_path.read_text(encoding="utf-8").splitlines()
