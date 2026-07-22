@@ -98,26 +98,33 @@ def test_apply_proposal_raises_when_old_text_ambiguous(vault):
         pass
 
 
-def test_parse_cursor_advance_extracts_mode_and_count():
+def test_parse_cursor_advance_extracts_mode():
     text = "## Rationale\nx\n\n<!-- cursor-advance: dev=17 -->\n"
-    assert apply.parse_cursor_advance(text) == ("dev", 17)
+    assert apply.parse_cursor_advance(text) == "dev"
 
 
 def test_parse_cursor_advance_missing_marker_returns_none():
     assert apply.parse_cursor_advance("no marker here") is None
 
 
-def test_advance_lessons_cursor_updates_settings_state(vault):
+def test_advance_lessons_cursor_uses_live_lessons_line_count_not_marker_number(vault):
+    """A session-supplied count is untrusted by design (settings.md's own
+    lessons.md growing past a proposal-drafted number by the time the
+    session appends its closing retro is the exact bug this guards
+    against) -- advance_lessons_cursor must read the live file, not accept
+    a count argument that could already be stale.
+    """
     vault_io.write_frontmatter(
         "modes/settings/state.md",
         {"mode": "settings", "busy": False, "lessons_distilled_through": {"dev": 12}},
         "",
     )
+    vault_io.write_file("modes/dev/lessons.md", "line one\nline two\nline three\n")
 
-    apply.advance_lessons_cursor("dev", 20)
+    apply.advance_lessons_cursor("dev")
 
     state, _ = vault_io.read_frontmatter("modes/settings/state.md")
-    assert state["lessons_distilled_through"]["dev"] == 20
+    assert state["lessons_distilled_through"]["dev"] == 3
 
 
 def test_parse_job_origin_extracts_mode_and_slug():

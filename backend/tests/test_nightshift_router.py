@@ -185,12 +185,17 @@ def test_accept_applies_a_real_diff(client, auth_headers, vault):
     assert "new rule text" in vault_io.read_file("modes/settings/settings.md")
 
 
-def test_accept_advances_lessons_cursor_for_distillation_proposals(client, auth_headers, vault):
+def test_accept_advances_lessons_cursor_to_live_line_count_not_marker_number(client, auth_headers, vault):
+    """The marker's own number (dev=20 below) is deliberately ignored --
+    advance_lessons_cursor reads modes/dev/lessons.md's actual line count
+    at accept time instead, since a session-drafted number can go stale
+    between proposal and accept (the bug this guards against)."""
     vault_io.write_frontmatter(
         "modes/settings/state.md",
         {"mode": "settings", "busy": False, "inbox": [], "lessons_distilled_through": {"dev": 12}},
         "",
     )
+    vault_io.write_file("modes/dev/lessons.md", "\n".join(f"line {i}" for i in range(25)) + "\n")
     _seed_inbox(
         vault,
         [{"slug": "a", "origin_mode": "settings", "description": "distill", "rationale": "why", "confidence": None}],
@@ -205,7 +210,7 @@ def test_accept_advances_lessons_cursor_for_distillation_proposals(client, auth_
 
     assert response.status_code == 200
     state, _ = vault_io.read_frontmatter("modes/settings/state.md")
-    assert state["lessons_distilled_through"]["dev"] == 20
+    assert state["lessons_distilled_through"]["dev"] == 25
 
 
 def test_accept_leaves_item_pending_when_diff_apply_fails(client, auth_headers, vault):

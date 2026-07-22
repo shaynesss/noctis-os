@@ -79,9 +79,9 @@ def accept_inbox_item(item_id: str):
     except apply.DiffApplyError as exc:
         raise HTTPException(status_code=422, detail=f"Diff apply failed, item still pending: {exc}") from exc
 
-    cursor_advance = apply.parse_cursor_advance(proposal_text)
-    if cursor_advance:
-        apply.advance_lessons_cursor(*cursor_advance)
+    cursor_mode = apply.parse_cursor_advance(proposal_text)
+    if cursor_mode:
+        apply.advance_lessons_cursor(cursor_mode)
 
     job_origin = apply.parse_job_origin(proposal_text)
     if job_origin:
