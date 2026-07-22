@@ -9,7 +9,23 @@ import json
 import shlex
 import shutil
 import subprocess
+import threading
 from pathlib import Path
+
+# Serializes the two real races in launch_terminal (found 2026-07-22,
+# chasing a report that Noctua's session-start callout worked reliably
+# launched alone but not launched alongside Vesper): FastAPI runs each
+# POST /session/launch on a plain sync `def` in its thread pool, so two
+# near-simultaneous launches genuinely execute in parallel threads. (1)
+# _ensure_nondev_hooks does an unlocked read-modify-write on the *shared*
+# NONDEV_CONFIG_DIR/settings.json -- every non-dev mode launches through
+# this one file, so two concurrent merges can interleave. (2) two
+# concurrent `osascript ... do script` calls telling Terminal.app to
+# activate + type a command is a known-flaky pattern -- the second
+# window's keystrokes can land in the wrong place while Terminal is still
+# processing the first. Neither failure is specific to Noctua; it's
+# whichever launch loses the race, which is why it read as "sometimes."
+_terminal_launch_lock = threading.Lock()
 
 # The desktop app (desktop/app.py) launches uvicorn via LaunchServices, not a
 # login shell -- that process's inherited PATH is the bare macOS default
@@ -302,29 +318,35 @@ def launch_terminal(
     hex, titled "{character} — {mode} — {job/topic}", with CLAUDE_CONFIG_DIR
     pointed at the minimal non-dev config so this session doesn't inherit
     Faber's build-phase methodology.
-    """
-    _ensure_nondev_hooks()
-    character = MODE_CHARACTER[mode]
-    r, g, b = _darken_hex(CHARACTER_HEX[mode])
-    title = f"{character} — {mode} — {job_label}"
 
-    model_flag = f"--model {shlex.quote(model)} " if model else ""
-    command = (
-        f"export NOCTIS_MODE={shlex.quote(mode)} "
-        f"NOCTIS_JOB_ID={shlex.quote(job_slug or 'general')} "
-        f"CLAUDE_CONFIG_DIR={shlex.quote(str(NONDEV_CONFIG_DIR))} && "
-        f"claude {model_flag}{shlex.quote(prompt)}"
-    )
-
-    script = f"""
-    tell application "Terminal"
-        activate
-        set newWindow to do script {_applescript_string(command)}
-        set background color of newWindow to {{{r}, {g}, {b}}}
-        set custom title of newWindow to {_applescript_string(title)}
-    end tell
+    Serialized end-to-end (see `_terminal_launch_lock`'s module-level
+    comment) -- both the shared settings.json hook merge and the actual
+    osascript dispatch are real races when two non-dev modes are launched
+    close together, not just the hook merge alone.
     """
-    subprocess.run(["osascript", "-e", script], check=True)
+    with _terminal_launch_lock:
+        _ensure_nondev_hooks()
+        character = MODE_CHARACTER[mode]
+        r, g, b = _darken_hex(CHARACTER_HEX[mode])
+        title = f"{character} — {mode} — {job_label}"
+
+        model_flag = f"--model {shlex.quote(model)} " if model else ""
+        command = (
+            f"export NOCTIS_MODE={shlex.quote(mode)} "
+            f"NOCTIS_JOB_ID={shlex.quote(job_slug or 'general')} "
+            f"CLAUDE_CONFIG_DIR={shlex.quote(str(NONDEV_CONFIG_DIR))} && "
+            f"claude {model_flag}{shlex.quote(prompt)}"
+        )
+
+        script = f"""
+        tell application "Terminal"
+            activate
+            set newWindow to do script {_applescript_string(command)}
+            set background color of newWindow to {{{r}, {g}, {b}}}
+            set custom title of newWindow to {_applescript_string(title)}
+        end tell
+        """
+        subprocess.run(["osascript", "-e", script], check=True)
 
 
 def _applescript_string(value: str) -> str:

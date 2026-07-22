@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 
 import launch_surfaces
@@ -167,3 +168,41 @@ def test_mark_session_end_registers_on_session_end_not_stop(tmp_path, monkeypatc
     assert "mark_session_end.py" in command
     assert "--mode dev" in command
     assert "--job-id noctis-build" in command
+
+
+def test_launch_terminal_serializes_concurrent_calls(monkeypatch):
+    """Regression test for a real race: two non-dev modes launched close
+    together (e.g. Vesper + Noctua from the world screen) run
+    launch_terminal on separate FastAPI thread-pool threads. Without a
+    lock, both the shared settings.json hook merge and the osascript
+    dispatch can interleave -- found live 2026-07-22 chasing a report that
+    Noctua's session-start callout worked launched alone but not alongside
+    Vesper."""
+    import time
+
+    in_critical_section = threading.Event()
+    overlap_detected = threading.Event()
+
+    def fake_ensure_hooks():
+        if in_critical_section.is_set():
+            overlap_detected.set()
+        in_critical_section.set()
+        time.sleep(0.05)  # hold the section long enough for a race to show
+        in_critical_section.clear()
+
+    monkeypatch.setattr(launch_surfaces, "_ensure_nondev_hooks", fake_ensure_hooks)
+    monkeypatch.setattr(launch_surfaces.subprocess, "run", lambda *a, **k: None)
+
+    threads = [
+        threading.Thread(target=launch_surfaces.launch_terminal, args=("research", "job", "prompt"))
+        for _ in range(2)
+    ] + [
+        threading.Thread(target=launch_surfaces.launch_terminal, args=("learn", "job", "prompt"))
+        for _ in range(2)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert not overlap_detected.is_set()
