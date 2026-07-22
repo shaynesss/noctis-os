@@ -8,27 +8,27 @@ HOOK_SCRIPT = Path("/fake/hook.py")
 
 def test_merge_hook_creates_settings_file(tmp_path):
     settings_path = tmp_path / "settings.json"
-    launch_surfaces._merge_hook(settings_path, "PostToolUse", "python3 hook.py", HOOK_SCRIPT)
+    launch_surfaces._merge_hook(settings_path, "PostToolUse", "python3 /fake/hook.py", HOOK_SCRIPT)
 
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
-    assert settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"] == "python3 hook.py"
+    assert settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"] == "python3 /fake/hook.py"
 
 
 def test_merge_hook_preserves_existing_keys(tmp_path):
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"theme": "auto"}), encoding="utf-8")
 
-    launch_surfaces._merge_hook(settings_path, "PostToolUse", "python3 hook.py", HOOK_SCRIPT)
+    launch_surfaces._merge_hook(settings_path, "PostToolUse", "python3 /fake/hook.py", HOOK_SCRIPT)
 
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     assert settings["theme"] == "auto"
-    assert settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"] == "python3 hook.py"
+    assert settings["hooks"]["PostToolUse"][0]["hooks"][0]["command"] == "python3 /fake/hook.py"
 
 
 def test_merge_hook_is_idempotent(tmp_path):
     settings_path = tmp_path / "settings.json"
-    launch_surfaces._merge_hook(settings_path, "PostToolUse", "python3 hook.py", HOOK_SCRIPT)
-    launch_surfaces._merge_hook(settings_path, "PostToolUse", "python3 hook.py", HOOK_SCRIPT)
+    launch_surfaces._merge_hook(settings_path, "PostToolUse", "python3 /fake/hook.py", HOOK_SCRIPT)
+    launch_surfaces._merge_hook(settings_path, "PostToolUse", "python3 /fake/hook.py", HOOK_SCRIPT)
 
     settings = json.loads(settings_path.read_text(encoding="utf-8"))
     assert len(settings["hooks"]["PostToolUse"]) == 1

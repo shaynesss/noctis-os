@@ -166,3 +166,33 @@ def test_get_job_log_returns_tailed_lines(client, auth_headers, vault, monkeypat
 
     response = client.get("/mode/dev/jobs/noctis-build/log?lines=2", headers=auth_headers)
     assert response.json() == {"lines": ["line2", "line3"]}
+
+
+def test_get_job_log_falls_back_to_general_log(client, auth_headers, vault, monkeypatch):
+    """A job created mid-session by a generically-launched terminal
+    (NOCTIS_JOB_ID defaults to "general") has no log of its own -- its
+    activity is all sitting in general.log. Found 2026-07-22 via a real
+    research job (brunei-ai-smb-consulting) whose action-feed line was
+    permanently empty despite an active session."""
+    import routers.mode as mode_router
+
+    monkeypatch.setattr(mode_router, "RUNTIME_DIR", vault / "runtime")
+    (vault / "runtime").mkdir()
+    (vault / "runtime" / "research__general.log").write_text("line1\nline2\n", encoding="utf-8")
+
+    response = client.get("/mode/research/jobs/brunei-ai-smb-consulting/log", headers=auth_headers)
+
+    assert response.json() == {"lines": ["line1", "line2"]}
+
+
+def test_get_job_log_prefers_own_log_over_general_fallback(client, auth_headers, vault, monkeypatch):
+    import routers.mode as mode_router
+
+    monkeypatch.setattr(mode_router, "RUNTIME_DIR", vault / "runtime")
+    (vault / "runtime").mkdir()
+    (vault / "runtime" / "research__general.log").write_text("general line\n", encoding="utf-8")
+    (vault / "runtime" / "research__brunei-ai-smb-consulting.log").write_text("own line\n", encoding="utf-8")
+
+    response = client.get("/mode/research/jobs/brunei-ai-smb-consulting/log", headers=auth_headers)
+
+    assert response.json() == {"lines": ["own line"]}

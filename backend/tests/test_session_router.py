@@ -1,5 +1,5 @@
+import busy_marker
 import launch_surfaces
-import vault_io
 
 
 def test_unknown_mode_404(client, auth_headers):
@@ -7,7 +7,8 @@ def test_unknown_mode_404(client, auth_headers):
     assert response.status_code == 404
 
 
-def test_nondev_launch_opens_terminal(client, auth_headers, vault, monkeypatch):
+def test_nondev_launch_opens_terminal(client, auth_headers, vault, tmp_path, monkeypatch):
+    monkeypatch.setattr(busy_marker, "RUNTIME_DIR", tmp_path)
     calls = []
     monkeypatch.setattr(
         launch_surfaces,
@@ -24,9 +25,9 @@ def test_nondev_launch_opens_terminal(client, auth_headers, vault, monkeypatch):
     assert calls == [("learn", "no active job", None, None)]
 
     # Nothing in the system ever set this before -- found live when
-    # launching Noctua's session didn't update its card at all.
-    state, _ = vault_io.read_frontmatter("modes/learn/state.md")
-    assert state["busy"] is True
+    # launching Noctua's session didn't update its card at all. A runtime
+    # marker, not state.md, since 2026-07-22 (see busy_marker.py).
+    assert busy_marker.is_busy("learn") is True
 
 
 def test_dev_launch_requires_project_path(client, auth_headers, vault):

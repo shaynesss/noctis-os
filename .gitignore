@@ -20,6 +20,11 @@ dist-ssr/
 # ephemeral, explicitly NOT vault content. See SPEC.md EDD "State files".
 backend/runtime/*.log
 
+# busy_marker.py's per-mode marker files -- same category as the logs
+# above (local runtime state, not project source), just a different
+# extension. Added 2026-07-22 when busy tracking moved off state.md.
+backend/runtime/*.busy
+
 # A Dev-mode launch writes a per-project local hook registration here (see
 # launch_surfaces._ensure_dev_hooks) -- local machine state, not source.
 .claude/settings.local.json
