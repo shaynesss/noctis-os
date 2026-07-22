@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import busy_marker
 import launch_surfaces
 import vault_io
+from session_prompt import extract_session_start_callout
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -68,8 +69,22 @@ def launch_session(request: LaunchRequest):
         surface = "vscode"
     else:
         job_label = request.job_slug or "no active job"
+        # Delivered as a genuine system-level instruction (--append-system-
+        # prompt), not just relying on it sitting at the top of the huge
+        # user-turn message below -- found live 2026-07-22 that an ordinary
+        # message, however explicit, doesn't reliably carry the same
+        # instruction-following weight once thousands more characters of
+        # reference material follow it (see session_prompt.py). The full
+        # methodology text (callout included) still goes into `prompt`
+        # unchanged, for context and the in-doc cross-references to it.
+        system_prompt = extract_session_start_callout(methodology)
         launch_surfaces.launch_terminal(
-            request.mode, job_label, prompt, job_slug=request.job_slug, model=request.model
+            request.mode,
+            job_label,
+            prompt,
+            job_slug=request.job_slug,
+            model=request.model,
+            system_prompt=system_prompt,
         )
         surface = "terminal"
 

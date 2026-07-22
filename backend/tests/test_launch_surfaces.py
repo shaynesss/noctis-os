@@ -206,3 +206,28 @@ def test_launch_terminal_serializes_concurrent_calls(monkeypatch):
         t.join(timeout=5)
 
     assert not overlap_detected.is_set()
+
+
+def test_launch_terminal_includes_append_system_prompt_when_given(monkeypatch):
+    calls = []
+    monkeypatch.setattr(launch_surfaces.subprocess, "run", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(launch_surfaces, "_ensure_nondev_hooks", lambda: None)
+
+    launch_surfaces.launch_terminal(
+        "learn", "no active job", "prompt text", system_prompt="Shallow or deep track?"
+    )
+
+    script = calls[0][0][2]
+    assert "--append-system-prompt" in script
+    assert "Shallow or deep track?" in script
+
+
+def test_launch_terminal_omits_append_system_prompt_when_absent(monkeypatch):
+    calls = []
+    monkeypatch.setattr(launch_surfaces.subprocess, "run", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(launch_surfaces, "_ensure_nondev_hooks", lambda: None)
+
+    launch_surfaces.launch_terminal("settings", "no active job", "prompt text")
+
+    script = calls[0][0][2]
+    assert "--append-system-prompt" not in script
