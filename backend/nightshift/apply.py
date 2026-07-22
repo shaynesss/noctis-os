@@ -42,6 +42,13 @@ def _strip_marker(line: str) -> str:
 
 
 def _old_and_new_blocks(hunk_text: str) -> tuple[str, str]:
+    """Context lines (leading-space, unified-diff convention) anchor the
+    match on both sides -- a pure-insertion hunk (no removed lines, just a
+    context line followed by `+` additions) has nothing else to anchor on.
+    Previously only `+`/`-` lines were handled, so a context-only anchor
+    was silently dropped and any insertion-only proposal raised "no
+    removed lines to anchor the replacement" instead of applying.
+    """
     old_lines, new_lines = [], []
     for line in hunk_text.splitlines():
         if line.startswith(("+++", "---", "@@")):
@@ -50,6 +57,10 @@ def _old_and_new_blocks(hunk_text: str) -> tuple[str, str]:
             old_lines.append(_strip_marker(line))
         elif line.startswith("+"):
             new_lines.append(_strip_marker(line))
+        else:
+            context = _strip_marker(line) if line.startswith(" ") else line
+            old_lines.append(context)
+            new_lines.append(context)
     return "\n".join(old_lines), "\n".join(new_lines)
 
 
@@ -123,22 +134,40 @@ def apply_proposal(proposal_text: str) -> str | None:
 _CURSOR_MARKER = re.compile(r"<!--\s*cursor-advance:\s*(\S+)=(\d+)\s*-->")
 
 
-def parse_cursor_advance(proposal_text: str) -> tuple[str, int] | None:
+def parse_cursor_advance(proposal_text: str) -> str | None:
     """A distillation proposal (runner.py's _draft_distillation) leaves a
-    machine-readable marker recording which mode's lessons_distilled_through
-    cursor to advance and to what line count -- computed deterministically
-    at draft time, not re-derived from the slug (kind/slug_hint aren't a
-    reliable place to recover this: check_settings builds slug_hint as
+    machine-readable marker naming which mode's lessons_distilled_through
+    cursor to advance -- not re-derived from the slug (kind/slug_hint aren't
+    a reliable place to recover this: check_settings builds slug_hint as
     f"undistilled-{mode}", and reconstructing "mode" by string-splitting
     the final slug back apart is exactly the fragile parsing this avoids).
+
+    Only the mode name is trusted from the marker -- the line-count half
+    (still written for human readability, e.g. "settings=19") is deliberately
+    ignored. Found 2026-07-22: a session-close append to a mode's own
+    lessons.md happens *after* a proposal's cursor value is drafted, so any
+    number a session types into the marker is stale by construction the
+    moment it writes its own closing retro. Advancing to a session-supplied
+    number reproduced this every time; advancing to the live line count at
+    accept time (see advance_lessons_cursor below) cannot be stale, since
+    accept always happens after every write that could still be pending.
     """
     match = _CURSOR_MARKER.search(proposal_text)
     if not match:
         return None
-    return match.group(1), int(match.group(2))
+    return match.group(1)
 
 
-def advance_lessons_cursor(mode: str, through: int) -> None:
+def advance_lessons_cursor(mode: str) -> None:
+    """Sets the cursor to the target mode's lessons.md live line count at
+    accept time, not to a number carried in the proposal -- see
+    parse_cursor_advance's docstring for why a session-supplied number is
+    structurally unreliable here. Same self-heal pattern as triggers.py
+    computing badges live instead of trusting stored state.
+    """
+    lessons_path = f"modes/{mode}/lessons.md"
+    through = len(vault_io.read_file(lessons_path).splitlines()) if vault_io.file_exists(lessons_path) else 0
+
     state, content = vault_io.read_frontmatter("modes/settings/state.md")
     cursor = state.get("lessons_distilled_through", {}) or {}
     cursor[mode] = through
