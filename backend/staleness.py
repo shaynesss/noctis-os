@@ -20,7 +20,7 @@ closed it cleanly. A job someone just paused on purpose for a day is not
 abrupt, never-closed session counts.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import vault_io
@@ -33,19 +33,41 @@ RUNTIME_DIR = Path(__file__).parent / "runtime"
 STALE_THRESHOLD = timedelta(hours=6)
 
 
-def _job_last_activity(mode: str, slug: str, last_touched: str | None) -> tuple[datetime | None, bool]:
+def _parse_last_touched(last_touched: object) -> datetime | None:
+    """`last_touched` is vault-authored YAML -- a session writing a job's
+    frontmatter by hand (via its own Edit/Write tool calls, not through
+    vault_io's typed API) can leave it as a bare, unquoted date (`2026-07-22`,
+    which PyYAML resolves to a `date` object) or an unquoted full timestamp
+    (which PyYAML's implicit timestamp resolver turns into a `datetime`
+    directly), not just the quoted ISO string every hand-written example so
+    far has used. `datetime.fromisoformat` raises TypeError (not ValueError)
+    on a non-str input, which previously crashed this function -- and every
+    GET /mode/<name> poll for that mode -- the moment such a value landed
+    (found 2026-07-22 via a research job's `last_touched: 2026-07-22`).
+    Normalizing every real type PyYAML can hand back here, rather than
+    trusting the file to always match the convention, closes the class
+    rather than just this one instance.
+    """
+    if last_touched is None:
+        return None
+    if isinstance(last_touched, datetime):
+        return last_touched
+    if isinstance(last_touched, date):
+        return datetime(last_touched.year, last_touched.month, last_touched.day, tzinfo=timezone.utc)
+    try:
+        return datetime.fromisoformat(str(last_touched))
+    except ValueError:
+        return None
+
+
+def _job_last_activity(mode: str, slug: str, last_touched: object) -> tuple[datetime | None, bool]:
     """Returns (last_activity_time, closed_cleanly). Runtime log activity
     (if present) is a more precise signal than last_touched -- it reflects
     real tool calls, not just whenever the job context happened to be
     written.
     """
     closed_cleanly = False
-    last_activity = None
-    if last_touched:
-        try:
-            last_activity = datetime.fromisoformat(last_touched)
-        except ValueError:
-            last_activity = None
+    last_activity = _parse_last_touched(last_touched)
 
     log_path = RUNTIME_DIR / f"{mode}__{slug}.log"
     if log_path.exists():

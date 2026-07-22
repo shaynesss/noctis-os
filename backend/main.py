@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from auth import ALLOWED_ORIGIN, require_auth  # noqa: E402
-from routers import mode, nightshift, session  # noqa: E402
+from routers import health, mode, nightshift, session  # noqa: E402
 
 app = FastAPI(title="Noctis OS backend")
 
@@ -26,6 +26,7 @@ app.add_middleware(
 app.include_router(mode.router, dependencies=[Depends(require_auth)])
 app.include_router(session.router, dependencies=[Depends(require_auth)])
 app.include_router(nightshift.router, dependencies=[Depends(require_auth)])
+app.include_router(health.router, dependencies=[Depends(require_auth)])
 
 
 @app.get("/health")

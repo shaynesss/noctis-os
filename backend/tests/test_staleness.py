@@ -123,3 +123,46 @@ def test_session_end_substring_in_a_summary_does_not_count_as_clean_close(vault,
     flagged = staleness.flag_stale_jobs("dev")
 
     assert flagged == ["noctis-build"]
+
+
+def test_parse_last_touched_handles_bare_yaml_date():
+    """A job's last_touched written as an unquoted `2026-07-22` (not the
+    usual quoted ISO string) is parsed by PyYAML as a `date` object, not a
+    str -- previously crashed every GET /mode/<name> poll for that mode via
+    a TypeError inside datetime.fromisoformat. Found 2026-07-22 via a real
+    research job entry."""
+    from datetime import date
+
+    result = staleness._parse_last_touched(date(2026, 7, 22))
+
+    assert result == datetime(2026, 7, 22, tzinfo=timezone.utc)
+
+
+def test_parse_last_touched_handles_datetime_object():
+    value = datetime(2026, 7, 22, 12, 30, tzinfo=timezone.utc)
+
+    assert staleness._parse_last_touched(value) == value
+
+
+def test_parse_last_touched_handles_string():
+    result = staleness._parse_last_touched("2026-07-22T12:30:00+00:00")
+
+    assert result == datetime(2026, 7, 22, 12, 30, tzinfo=timezone.utc)
+
+
+def test_parse_last_touched_handles_none():
+    assert staleness._parse_last_touched(None) is None
+
+
+def test_flag_stale_jobs_does_not_crash_on_bare_date_last_touched(vault, monkeypatch, tmp_path):
+    """Regression test for the actual crash: GET /mode/research 500ing
+    because a job's last_touched was a bare YAML date, not a quoted string."""
+    from datetime import date
+
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
+    _seed_job(vault, mode="research", slug="bare-date-job", last_touched=date(2026, 7, 22))
+
+    # Must not raise.
+    flagged = staleness.flag_stale_jobs("research")
+
+    assert isinstance(flagged, list)

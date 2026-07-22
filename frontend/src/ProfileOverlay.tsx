@@ -348,12 +348,23 @@ function JobList({
   jobs,
   mode,
   onResumeJob,
+  maxVisible,
 }: {
   jobs: ModeState['jobs']
   mode: Mode
   onResumeJob: (jobSlug: string) => void
+  maxVisible?: number
 }) {
-  const list = jobs ?? []
+  const all = jobs ?? []
+  // state.md's jobs array is insertion-ordered, not recency-ordered --
+  // _sync_state_job_entry (mode.py) appends new jobs and updates existing
+  // ones in place, so an old job touched most recently can still sit
+  // earlier in the array. Sort by last_touched before capping so "3 most
+  // recent" is actually true rather than "first 3 written".
+  const sorted = maxVisible
+    ? [...all].sort((a, b) => (b.last_touched ?? '').localeCompare(a.last_touched ?? ''))
+    : all
+  const list = maxVisible ? sorted.slice(0, maxVisible) : sorted
   if (list.length === 0) return null
   return (
     <>
@@ -625,7 +636,7 @@ function CustosBody({
   }
   return (
     <>
-      <JobList jobs={jobs} mode="settings" onResumeJob={onResumeJob} />
+      <JobList jobs={jobs} mode="settings" onResumeJob={onResumeJob} maxVisible={3} />
       <div className="trigger-list">
         {(['friction', 'accumulation', 'suspicion'] as const).map((trigger, i) => (
           <div className="trigger-row" key={trigger}>
