@@ -271,13 +271,24 @@ def _write_resume_task(project_path: str, prompt: str, model: str | None) -> Non
 def launch_dev(
     project_path: str, prompt: str, job_slug: str | None = None, model: str | None = None
 ) -> None:
-    """Two-step: write the resume task, then `code <path>` opens/focuses VS
-    Code on the project -- the folderOpen task fires and runs `claude` for
+    """Two-step: write the resume task, then `code --new-window <path>` opens
+    VS Code on the project -- the folderOpen task fires and runs `claude` for
     real in the integrated terminal.
+
+    `--new-window` is required, not cosmetic: the folderOpen task only fires
+    on a genuine open event. Plain `code <path>` just focuses an
+    already-open window for that folder without generating one, so if
+    Shayne (or a prior launch) already had the project open in VS Code,
+    Resume silently did nothing -- no claude process ever started, so
+    there was no session to receive the prompt at all. Found live
+    2026-07-22 chasing a "the session never asked the track question"
+    report that turned out to have no session running the prompt in the
+    first place. Trade-off: this can open a duplicate window if one was
+    already open for this project, which beats the previous silent no-op.
     """
     _ensure_dev_hooks(project_path, job_slug)
     _write_resume_task(project_path, prompt, model)
-    subprocess.run([_find_code_binary(), project_path], check=True)
+    subprocess.run([_find_code_binary(), "--new-window", project_path], check=True)
 
 
 def launch_terminal(

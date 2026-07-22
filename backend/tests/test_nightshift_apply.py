@@ -32,6 +32,21 @@ Testing a diff that touches two separate spots in the same file.
 - test evidence
 """
 
+PROPOSAL_INSERTION_ONLY = """## Rationale
+Testing a hunk with no removed lines -- a context anchor plus pure additions.
+
+## Diff
+--- modes/settings/settings.md
++++ modes/settings/settings.md
+@@
+ anchor line stays put
++
++new paragraph inserted after the anchor
+
+## Evidence
+- test evidence
+"""
+
 PROPOSAL_NO_DIFF = """## Rationale
 Dev's flagged-job status note.
 
@@ -76,6 +91,22 @@ def test_apply_proposal_applies_each_hunk_independently(vault):
     assert "first new spot" in updated and "second new spot" in updated
     assert "first old spot" not in updated and "second old spot" not in updated
     assert "middle" in updated
+
+
+def test_apply_proposal_applies_insertion_only_hunk_anchored_on_context(vault):
+    vault_io.write_file(
+        "modes/settings/settings.md",
+        "before\nanchor line stays put\n\nnext paragraph\nafter\n",
+    )
+
+    target = apply.apply_proposal(PROPOSAL_INSERTION_ONLY)
+
+    assert target == "modes/settings/settings.md"
+    updated = vault_io.read_file("modes/settings/settings.md")
+    assert (
+        "anchor line stays put\n\nnew paragraph inserted after the anchor\n\nnext paragraph"
+        in updated
+    )
 
 
 def test_apply_proposal_raises_when_old_text_not_found(vault):
