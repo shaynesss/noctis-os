@@ -109,7 +109,12 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
   // actual mechanism behind it. Replaced the original window.prompt
   // placeholder with a real designed form (see the new-build-modal render
   // below and NewBuildModal component).
-  async function submitNewDevBuild(name: string, projectPath: string) {
+  //
+  // No project path collected here -- Plan doesn't lock a project name yet,
+  // so there's nothing real to ask for. POST /mode/dev/jobs gives the job a
+  // scratch directory automatically; Setup's first step renames it once a
+  // name is locked (dev.md Stage 1/2).
+  async function submitNewDevBuild(name: string) {
     const slug = name
       .toLowerCase()
       .trim()
@@ -117,7 +122,7 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
       .replace(/(^-|-$)/g, '')
     if (!slug) return
 
-    await createJob('dev', slug, name, projectPath)
+    await createJob('dev', slug, name)
     await launchSession('dev', slug)
     setState(await getModeState('dev'))
     setNewBuildOpen(false)
@@ -250,11 +255,10 @@ function NewBuildModal({
   onSubmit,
 }: {
   onCancel: () => void
-  onSubmit: (name: string, projectPath: string) => void
+  onSubmit: (name: string) => void
 }) {
   const [name, setName] = useState('')
-  const [projectPath, setProjectPath] = useState('')
-  const canSubmit = name.trim().length > 0 && projectPath.trim().length > 0
+  const canSubmit = name.trim().length > 0
 
   return (
     <>
@@ -276,15 +280,6 @@ function NewBuildModal({
             autoFocus
           />
         </label>
-        <label>
-          <span>project path</span>
-          <input
-            type="text"
-            value={projectPath}
-            onChange={(e) => setProjectPath(e.target.value)}
-            placeholder="/Users/you/Developer/project"
-          />
-        </label>
         <div className="new-build-actions">
           <button type="button" className="new-build-cancel" onClick={onCancel}>
             cancel
@@ -293,7 +288,7 @@ function NewBuildModal({
             type="button"
             className="new-build-submit"
             disabled={!canSubmit}
-            onClick={() => onSubmit(name.trim(), projectPath.trim())}
+            onClick={() => onSubmit(name.trim())}
           >
             create &amp; launch
           </button>

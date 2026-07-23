@@ -93,7 +93,7 @@ export function createJob(mode: Mode, slug: string, name: string, projectPath?: 
 export function updateJob(
   mode: Mode,
   slug: string,
-  update: { stage?: string; status?: string; track?: string; flagged?: boolean },
+  update: { stage?: string; status?: string; track?: string; flagged?: boolean; project_path?: string },
 ) {
   return request<Job>(`/mode/${mode}/jobs/${slug}`, {
     method: 'PATCH',
