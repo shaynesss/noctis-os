@@ -14,7 +14,7 @@ const FOOTING: Record<Mode, { leftPct: number; topPct: number }> = {
   nightshift: { leftPct: 77.2, topPct: 60.8 },
 }
 
-const POLL_INTERVAL_MS = 15_000
+export const POLL_INTERVAL_MS = 15_000
 
 function relativeTime(iso: string | null | undefined): string {
   if (!iso) return '—'
