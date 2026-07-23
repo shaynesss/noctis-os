@@ -14,6 +14,9 @@ def vault(tmp_path, monkeypatch):
     test: modes/<name>/{<name>.md, lessons.md, state.md, jobs/}."""
     monkeypatch.setenv("VAULT_PATH", str(tmp_path))
     monkeypatch.setenv("NOCTIS_API_TOKEN", TEST_TOKEN)
+    # Keeps new-build scratch directories (routers/mode.py's create_job) out
+    # of the real home directory during tests.
+    monkeypatch.setenv("NOCTIS_SCRATCH_ROOT", str(tmp_path / "scratch"))
 
     (tmp_path / "log.md").write_text("# Log\n\n", encoding="utf-8")
 

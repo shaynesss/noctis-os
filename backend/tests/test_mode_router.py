@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import vault_io
 
 
@@ -66,6 +68,55 @@ def test_create_job_rejects_path_traversal_slug(client, auth_headers, vault):
     )
     assert response.status_code == 400
     assert not (vault.parent.parent.parent.parent / "tmp" / "pwned").exists()
+
+
+def test_create_dev_job_without_project_path_gets_scratch_dir(client, auth_headers, vault):
+    """New-build Plan stage has no project name locked yet -- create_job
+    must still satisfy POST /session/launch's project_path requirement."""
+    response = client.post(
+        "/mode/dev/jobs",
+        json={"slug": "brand-new", "name": "Brand New"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    project_path = response.json()["project_path"]
+    assert project_path.endswith("scratch/brand-new") or project_path.endswith("scratch\\brand-new")
+    assert Path(project_path).is_dir()
+
+
+def test_create_non_dev_job_has_no_project_path(client, auth_headers, vault):
+    """Only dev (Faber) jobs need a launchable project directory."""
+    response = client.post(
+        "/mode/settings/jobs",
+        json={"slug": "audit-task", "name": "Audit task"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert "project_path" not in response.json()
+
+
+def test_patch_project_path_moves_scratch_dir(client, auth_headers, vault):
+    """Setup's first checklist item: rename the Plan-stage scratch
+    directory to the locked project name via PATCH."""
+    create = client.post(
+        "/mode/dev/jobs",
+        json={"slug": "rename-me", "name": "Rename Me"},
+        headers=auth_headers,
+    )
+    old_path = Path(create.json()["project_path"])
+    assert old_path.is_dir()
+    (old_path / "marker.txt").write_text("hi", encoding="utf-8")
+
+    new_path = str(vault / "renamed-project")
+    response = client.patch(
+        "/mode/dev/jobs/rename-me",
+        json={"project_path": new_path},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["project_path"] == new_path
+    assert not old_path.exists()
+    assert (Path(new_path) / "marker.txt").is_file()
 
 
 def test_update_job_rejects_invalid_slug(client, auth_headers, vault):

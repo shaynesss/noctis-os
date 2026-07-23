@@ -1,3 +1,5 @@
+import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -17,6 +19,19 @@ VALID_MODES = {"dev", "learn", "research", "settings", "nightshift"}
 # content (SPEC.md EDD "State files ... Runtime scratch"). Same directory
 # backend/hooks/log_action.py writes to.
 RUNTIME_DIR = Path(__file__).parent.parent / "runtime"
+
+# Faber Plan-stage scratch directories for brand-new builds -- dev.md's
+# Stage 1 no longer locks a project name/path before Setup, but
+# POST /session/launch still hard-requires project_path to exist on the
+# job. A new build gets a real, disposable directory here at creation time;
+# Setup's first checklist item renames it to the real project location via
+# PATCH .../jobs/{slug} with a new project_path (see below).
+# NOCTIS_SCRATCH_ROOT override exists so tests (and the vault fixture) don't
+# write scratch job directories into the real home directory -- same
+# env-var-override pattern as vault_io's VAULT_PATH.
+def _scratch_root() -> Path:
+    override = os.environ.get("NOCTIS_SCRATCH_ROOT")
+    return Path(override) if override else Path.home() / "Developer" / ".scratch"
 
 
 @router.get("/{name}")
@@ -105,6 +120,13 @@ def create_job(name: str, job: JobCreate):
     }
     if job.project_path:
         metadata["project_path"] = job.project_path
+    elif name == "dev":
+        # Brand-new Faber build, no path supplied -- give it a real scratch
+        # directory so the launch endpoint's project_path requirement is
+        # met from the first session, before a project name is locked.
+        scratch_path = _scratch_root() / job.slug
+        scratch_path.mkdir(parents=True, exist_ok=True)
+        metadata["project_path"] = str(scratch_path)
 
     vault_io.write_frontmatter(job_path, metadata, job.notes)
     _sync_state_job_entry(name, job.slug, metadata)
@@ -121,6 +143,10 @@ class JobUpdate(BaseModel):
     # session, so the telemetry hooks that would prove it alive never fired.
     # Resuming a flagged job is the natural point to clear it (World.tsx).
     flagged: bool | None = None
+    # Setup's first checklist item: rename the Plan-stage scratch directory
+    # to the locked project name. A real filesystem move, not just a label
+    # change -- see _relocate_project_path below.
+    project_path: str | None = None
 
 
 @router.patch("/{name}/jobs/{slug}")
@@ -143,11 +169,32 @@ def update_job(name: str, slug: str, update: JobUpdate):
         value = getattr(update, field)
         if value is not None:
             metadata[field] = value
+    if update.project_path is not None and update.project_path != metadata.get("project_path"):
+        _relocate_project_path(metadata.get("project_path"), update.project_path)
+        metadata["project_path"] = update.project_path
     metadata["last_touched"] = datetime.now(timezone.utc).isoformat()
     vault_io.write_frontmatter(job_path, metadata, content)
 
     _sync_state_job_entry(name, slug, metadata)
     return metadata
+
+
+def _relocate_project_path(old_path: str | None, new_path: str) -> None:
+    """Moves the job's working directory on disk when project_path changes
+    via PATCH -- the deterministic half of Setup's "rename the scratch
+    directory" checklist item (dev.md Stage 2). Only actually moves
+    anything when the old path is a real scratch directory that still
+    exists; a job created with an explicit project_path (not a scratch
+    dir) or already-renamed job is left untouched.
+    """
+    if not old_path:
+        return
+    old = Path(old_path)
+    new = Path(new_path)
+    if old == new or not old.is_dir() or new.exists():
+        return
+    new.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(old), str(new))
 
 
 def _sync_state_job_entry(mode: str, slug: str, job_metadata: dict) -> None:
