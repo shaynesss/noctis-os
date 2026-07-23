@@ -5,7 +5,26 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import busy_marker  # noqa: E402 -- needs sys.path insert above first
+
 TEST_TOKEN = "test-token-123"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_busy_marker(tmp_path, monkeypatch):
+    """busy_marker.RUNTIME_DIR is a hardcoded path to the real
+    backend/runtime/ dir, not env-var-overridable like VAULT_PATH -- any
+    test that exercises POST /session/launch for mode=dev without its own
+    explicit monkeypatch (test_dev_launch_opens_vscode and two others in
+    test_session_router.py did exactly this) sets the REAL dev.busy marker
+    file on the live running app. Found 2026-07-23: running this suite
+    while working a settings/Custos session on Faber-related code flipped
+    Faber's world-screen icon to busy for real, with nothing to ever clear
+    it since no real session launched. autouse so every test is isolated by
+    default rather than relying on each test author remembering to patch
+    this individually, the way only test_nondev_launch_opens_terminal did.
+    """
+    monkeypatch.setattr(busy_marker, "RUNTIME_DIR", tmp_path / "runtime")
 
 
 @pytest.fixture
