@@ -18,6 +18,7 @@ import {
   type Mode,
   type ModeState,
 } from './api'
+import { POLL_INTERVAL_MS } from './World'
 import { MODE_META } from './modes'
 
 interface ProfileOverlayProps {
@@ -57,6 +58,19 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
       setExpandedHistorySlug(null)
       setExpandedProposals({})
     }
+  }, [mode])
+
+  // Unlike World.tsx's ambient sprites (polled every 15s), this card's
+  // `state` was previously fetched once on open and never again -- busy
+  // flipping false in the background (a session's SessionEnd hook firing)
+  // never reached an already-open card, so it kept reading "busy" until
+  // closed and reopened. Same POLL_INTERVAL_MS as World.tsx for consistency.
+  useEffect(() => {
+    if (!mode) return
+    const interval = setInterval(() => {
+      getModeState(mode).then(setState)
+    }, POLL_INTERVAL_MS)
+    return () => clearInterval(interval)
   }, [mode])
 
   useEffect(() => {
