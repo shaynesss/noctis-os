@@ -252,7 +252,10 @@ def _write_resume_task(project_path: str, prompt: str, model: str | None) -> Non
     approach launch_terminal already uses successfully for Terminal.app.
     """
     model_flag = f"--model {shlex.quote(model)} " if model else ""
-    command = f"claude {model_flag}{shlex.quote(prompt)}"
+    command = (
+        "export CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 && "
+        f"claude {model_flag}{shlex.quote(prompt)}"
+    )
     task = {
         "version": "2.0.0",
         "tasks": [
