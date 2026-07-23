@@ -346,7 +346,8 @@ def launch_terminal(
         command = (
             f"export NOCTIS_MODE={shlex.quote(mode)} "
             f"NOCTIS_JOB_ID={shlex.quote(job_slug or 'general')} "
-            f"CLAUDE_CONFIG_DIR={shlex.quote(str(NONDEV_CONFIG_DIR))} && "
+            f"CLAUDE_CONFIG_DIR={shlex.quote(str(NONDEV_CONFIG_DIR))} "
+            f"CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 && "
             f"claude {system_prompt_flag}{model_flag}{shlex.quote(prompt)}"
         )
 
