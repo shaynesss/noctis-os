@@ -19,6 +19,9 @@ from pathlib import Path
 
 RUNTIME_DIR = Path(__file__).parent.parent / "runtime"
 
+sys.path.insert(0, str(Path(__file__).parent.parent))
+import busy_marker  # noqa: E402
+
 
 def _summarize(tool_input: dict) -> str:
     for key in ("file_path", "command", "path", "pattern", "url"):
@@ -31,6 +34,19 @@ def _summarize(tool_input: dict) -> str:
 def log_action(mode: str | None, job_id: str | None, payload: dict) -> None:
     if not mode:
         return  # not a Noctis-launched session, nothing to log
+
+    # Refreshes the busy marker's mtime on every tool call, not just once at
+    # launch -- is_busy() self-heals (deletes) any marker older than
+    # STALE_THRESHOLD (6h) on the assumption that age alone means abandoned,
+    # which is right for a crashed session but wrong for one that's simply
+    # been running a long time. A session left open overnight blows past 6h
+    # while genuinely active, so the marker expired and the card read idle
+    # out from under a live session (found live 2026-07-24, an overnight
+    # settings session with no SessionEnd ever logged). Touching here means
+    # the marker's age reflects "time since last activity," not "time since
+    # launch" -- a session truly abandoned still goes stale within 6h of its
+    # last real tool call.
+    busy_marker.set_busy(mode)
 
     tool_name = payload.get("tool_name", "unknown")
     summary = _summarize(payload.get("tool_input") or {})
@@ -48,8 +64,19 @@ def main() -> None:
     parser.add_argument("--job-id")
     args = parser.parse_args()
 
-    mode = args.mode or os.environ.get("NOCTIS_MODE")
-    job_id = args.job_id or os.environ.get("NOCTIS_JOB_ID")
+    # Env wins over baked args, not the other way around: a non-dev session
+    # whose cwd happens to sit inside a dev project's directory still picks
+    # up that project's --mode/--job-id-baked hooks (Claude Code applies
+    # project-local settings.local.json by cwd, regardless of which mode
+    # actually launched the session) -- found live 2026-07-23, a settings
+    # session's SessionEnd firing dev's hook at the identical microsecond
+    # as its own. A real launch always exports NOCTIS_MODE/NOCTIS_JOB_ID
+    # for its own session (see launch_terminal / the dev task's export
+    # line); baked args only exist as VS Code's fallback for when no shell
+    # env carries through, so they should lose to a live env value, never
+    # win over one.
+    mode = os.environ.get("NOCTIS_MODE") or args.mode
+    job_id = os.environ.get("NOCTIS_JOB_ID") or args.job_id
 
     try:
         payload = json.loads(sys.stdin.read() or "{}")

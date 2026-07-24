@@ -53,3 +53,32 @@ def test_no_mode_is_noop(tmp_path, monkeypatch):
 
     remaining = [p for p in tmp_path.iterdir() if p.name != "session_end_debug.log"]
     assert remaining == []
+
+
+def test_env_identity_wins_over_baked_args(vault, tmp_path, monkeypatch, capsys):
+    """A non-dev session cwd'd into a dev project still gets the dev
+    project's --mode/--job-id-baked SessionEnd hook invoked (Claude Code
+    applies project-local settings.local.json by cwd, not by which mode
+    actually launched the session). Its own real NOCTIS_MODE/NOCTIS_JOB_ID
+    env -- set by its own launch -- must win, or its exit misattributes as
+    dev's SessionEnd and wrongly clears dev's busy marker. Found live
+    2026-07-23: a settings session's exit fired mode=dev's SessionEnd at
+    the identical microsecond as mode=settings' own."""
+    monkeypatch.setattr(mark_session_end, "RUNTIME_DIR", tmp_path)
+    monkeypatch.setattr(busy_marker, "RUNTIME_DIR", tmp_path)
+    busy_marker.set_busy("dev")
+    busy_marker.set_busy("settings")
+
+    monkeypatch.setenv("NOCTIS_MODE", "settings")
+    monkeypatch.setenv("NOCTIS_JOB_ID", "general")
+    monkeypatch.setattr(
+        sys, "argv", ["mark_session_end.py", "--mode", "dev", "--job-id", "noctis-build"]
+    )
+    monkeypatch.setattr(sys, "stdin", type("_", (), {"read": staticmethod(lambda: '{"reason": "other"}')})())
+
+    mark_session_end.main()
+
+    assert busy_marker.is_busy("settings") is False
+    assert busy_marker.is_busy("dev") is True
+    assert (tmp_path / "settings__general.log").exists()
+    assert not (tmp_path / "dev__noctis-build.log").exists()
