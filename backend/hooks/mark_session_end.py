@@ -92,8 +92,15 @@ def main() -> None:
     parser.add_argument("--job-id")
     args = parser.parse_args()
 
-    mode = args.mode or os.environ.get("NOCTIS_MODE")
-    job_id = args.job_id or os.environ.get("NOCTIS_JOB_ID")
+    # Env wins over baked args -- see log_action.py's identical fix for why:
+    # a non-dev session cwd'd into a dev project still picks up that
+    # project's baked --mode/--job-id hooks via Claude Code's cwd-based
+    # settings.local.json resolution, and must not have its own real
+    # SessionEnd misattributed to (and clearing the busy marker of) a mode
+    # it isn't. Found live 2026-07-23: a settings session's own exit fired
+    # mode=dev's SessionEnd at the identical microsecond as mode=settings'.
+    mode = os.environ.get("NOCTIS_MODE") or args.mode
+    job_id = os.environ.get("NOCTIS_JOB_ID") or args.job_id
 
     try:
         payload = json.loads(sys.stdin.read() or "{}")
