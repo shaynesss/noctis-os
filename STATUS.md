@@ -1,10 +1,20 @@
 # STATUS.md
 
-Last updated: 2026-07-21
+Last updated: 2026-07-25
 
 ## Current state
 
-**v1 shipped, 2026-07-21.** Phase 1, 2, and 3 all complete. All build-order milestones done and smoke-tested live. Two full ship-gate passes run (first: 2026-07-21 morning, security-focused; second: 2026-07-21 evening, closing this file out for real after a large batch of desktop-app/sprite/spec-completeness work). Deploy decision unchanged from the locked EDD: stays local, single-user, single-machine — nothing to deploy. `desktop/NoctisOS.app` is the real way to run it now (double-click, real Dock icon), `make dev`/`make app` remain for from-source work.
+**v1 shipped, 2026-07-21; Design Lodge Overhaul shipped 2026-07-25.** Phase 1, 2, and 3 all complete. All build-order milestones done and smoke-tested live. Deploy decision unchanged from the locked EDD: stays local, single-user, single-machine — nothing to deploy. `desktop/NoctisOS.app` is the real way to run it now (double-click, real Dock icon), `make dev`/`make app` remain for from-source work.
+
+## Done this pass (Design Lodge, full Overhaul — 2026-07-25)
+
+- `SPEC.md` amended (PRD, EDD, Design Brief) — not a rewrite, per the Overhaul mechanic's own "amend, not redo" rule. Explicitly distinguished from the older, still-unbuilt "library catalog" (vetted code dependencies) so the two don't get conflated.
+- Backend: `backend/routers/design_lodge.py` (entry CRUD, quick-capture inbox, preview-image upload/serve), `vault_io.py` gains `list_dir` + the vault's first binary read/write helpers.
+- Vault: `second-brain/design-lodge/` (vault-level, cross-project, not per-mode) — `index.md` lightweight index + `entries/<slug>.md` per entry, mirroring every mode's existing `state.md` pattern.
+- Frontend: `DesignLodge.tsx`, a new tab inside Faber's profile-overlay card; Faber's card gains the same fixed-height exception already granted to Echo.
+- Seeded with 7 real entries (not placeholders) from this repo and Portfolio Platform, each with a real or honestly-labeled-schematic preview image.
+- `dev.md` updated via two Custos-reviewed staged diffs (not edited directly by this build): the Overhaul mechanic itself gained an explicit four-stage breakdown, plus three Design Lodge touchpoints and a session-bootstrap inbox-processing pass.
+- Verified: full backend curl coverage (including a real bug caught and fixed — a partial entry edit was silently dropping the untouched code/reference section), `tsc`/`oxlint`/`vite build` clean, browser check confirmed live by Shayne.
 
 ## Locked (full detail in SPEC.md + wiki/Noctis OS/)
 

@@ -18,6 +18,7 @@ import {
   type Mode,
   type ModeState,
 } from './api'
+import DesignLodgeTab from './DesignLodge'
 import { POLL_INTERVAL_MS } from './World'
 import { MODE_META } from './modes'
 
@@ -204,7 +205,7 @@ export default function ProfileOverlay({ mode, onClose }: ProfileOverlayProps) {
     <>
       <div className="scrim" onClick={onClose} />
       <div
-        className={`overlay${mode === 'nightshift' ? ' overlay-echo' : ''}`}
+        className={`overlay${mode === 'nightshift' ? ' overlay-echo' : ''}${mode === 'dev' ? ' overlay-dev' : ''}`}
         role="dialog"
         aria-label={`${meta.name} profile`}
         style={{ ['--accent' as string]: `var(${meta.accentVar})` }}
@@ -439,15 +440,39 @@ function JobRow({
 }
 
 function FaberBody({ state, onResumeJob }: { state: ModeState; onResumeJob: (jobSlug: string) => void }) {
+  const [tab, setTab] = useState<'jobs' | 'lodge'>('jobs')
   const jobs = state.jobs ?? []
-  if (jobs.length === 0) {
-    return (
-      <p className="idle-note">
-        <Typewriter text="no dams under construction. the pond is calm." startDelayMs={BODY_START_DELAY_MS} />
-      </p>
-    )
-  }
-  return <JobList jobs={jobs} mode="dev" onResumeJob={onResumeJob} />
+  return (
+    <>
+      <div className="faber-tabs">
+        <button
+          type="button"
+          className={`faber-tab${tab === 'jobs' ? ' active' : ''}`}
+          onClick={() => setTab('jobs')}
+        >
+          jobs
+        </button>
+        <button
+          type="button"
+          className={`faber-tab${tab === 'lodge' ? ' active' : ''}`}
+          onClick={() => setTab('lodge')}
+        >
+          design lodge
+        </button>
+      </div>
+      {tab === 'jobs' ? (
+        jobs.length === 0 ? (
+          <p className="idle-note">
+            <Typewriter text="no dams under construction. the pond is calm." startDelayMs={BODY_START_DELAY_MS} />
+          </p>
+        ) : (
+          <JobList jobs={jobs} mode="dev" onResumeJob={onResumeJob} />
+        )
+      ) : (
+        <DesignLodgeTab />
+      )}
+    </>
+  )
 }
 
 // The locked entrance style from card-design mockup iteration (Interface.md
