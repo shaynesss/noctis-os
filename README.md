@@ -138,7 +138,7 @@ noctis-os/
 
 ## Status
 
-**v1 shipped.** All five modes are wired to real vault reads/writes, session launching works end-to-end for both surfaces (VS Code and tinted Terminal windows), telemetry hooks stream live action logs into the interface, and Nightshift's propose-only inbox is functional. Two full review passes (correctness + security) have been run against the codebase. See [`STATUS.md`](STATUS.md) for the detailed, non-aspirational build log.
+**v1.5 shipped.** All five modes are wired to real vault reads/writes, session launching works end-to-end for both surfaces (VS Code and tinted Terminal windows), telemetry hooks stream live action logs into the interface, and Nightshift's propose-only inbox is functional. v1.5 adds **Design Lodge** — a vault-native, browsable/editable catalog of design assets (components, layouts, palettes, typography, icons, animation patterns), cross-project and seeded from what's already shipped, plus a more concrete version of Faber's own Overhaul mechanic (how Plan/Setup/Build/Ship each apply differently when resuming an already-shipped project vs. starting fresh). Multiple full review passes (correctness + security) have been run against the codebase. See [`STATUS.md`](STATUS.md) for the detailed, non-aspirational build log.
 
 **Deliberately out of scope for v1:** multi-user support or auth beyond a single bearer token, any hosted deployment, cross-vendor model routing (Claude-only for now), idle character animation/roaming, and a full expression-swap library beyond the current busy/idle pair per character.
 
