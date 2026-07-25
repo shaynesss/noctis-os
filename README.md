@@ -10,7 +10,7 @@
 
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />
-  <img alt="status" src="https://img.shields.io/badge/status-v1%20shipped-brightgreen.svg" />
+  <img alt="status" src="https://img.shields.io/badge/status-v1.5%20shipped-brightgreen.svg" />
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS-black.svg" />
 </p>
 
