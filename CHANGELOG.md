@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — 2026-07-25
+## v1.5.0 — 2026-07-25
 
 **Design Lodge** — a vault-native, browsable/editable catalog of design assets, built as a full Overhaul (Plan amendments through `SPEC.md`'s PRD/EDD/Design Brief, Build, Ship). Distinct from the existing (still-unbuilt) "library catalog" feature, which is vetted *code dependencies* fed by research verdicts — this one is design components/patterns/palettes, fed by Faber's own build and capture flow.
 
