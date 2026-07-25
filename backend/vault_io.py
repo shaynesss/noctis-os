@@ -102,3 +102,35 @@ def move_file(src_relative: str, dst_relative: str) -> None:
     dst = _resolve_within_vault(dst_relative)
     dst.parent.mkdir(parents=True, exist_ok=True)
     src.rename(dst)
+
+
+def read_binary(relative_path: str) -> bytes:
+    return _resolve_within_vault(relative_path).read_bytes()
+
+
+def write_binary(relative_path: str, data: bytes) -> None:
+    """Design Lodge preview images are the first binary vault content --
+    everything else in the vault is markdown/frontmatter. Same containment
+    check and write lock as write_file, just bytes instead of text.
+    """
+    path = _resolve_within_vault(relative_path)
+    with _write_lock:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+
+def list_dir(relative_path: str) -> list[str]:
+    """Markdown filenames (no extension) in a vault subdirectory, sorted.
+
+    Design Lodge's entries/ folder is the first vault content addressed by
+    slug-per-file rather than one index file with an array field (unlike
+    every mode's state.md/inbox pattern) -- entries can grow past what's
+    comfortable to hold in one frontmatter array, so listing means reading
+    the directory itself. Returns [] for a directory that doesn't exist yet
+    rather than raising, matching read_frontmatter's job-file-not-found
+    callers that already expect an empty/absent case.
+    """
+    dir_path = _resolve_within_vault(relative_path)
+    if not dir_path.is_dir():
+        return []
+    return sorted(p.stem for p in dir_path.glob("*.md"))

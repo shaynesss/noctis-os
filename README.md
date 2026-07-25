@@ -47,6 +47,7 @@ The migration was to generalize that one file into five: `build-spine.md` became
 - **Two-tier self-improvement.** Sessions freely append to a mode's lessons file with no gate (the automatic, low-stakes tier). Periodically, Custos digests those lessons and drafts a *proposed* diff to a mode's actual methodology file, staged for manual accept/reject — no mode ever silently rewrites its own process.
 - **Fire-and-forget session telemetry.** A Claude Code hook appends one line per tool call to a per-job log; the interface polls it and shows a live "what's it doing right now" strip under each in-flight job — without the interface ever trying to control or interrupt a running session.
 - **A propose-only overnight worker.** Nightshift runs on a schedule, drafts into a staging inbox, and never commits anything itself — every proposal gets reviewed and explicitly accepted or rejected.
+- **Design Lodge.** A vault-native, browsable/editable catalog of design assets (components, layouts, palettes, typography, icons, animation patterns) — cross-project, seeded from what's already shipped, checked before Faber reaches for anything new during Plan or Build. A quick-capture inbox (paste a link + a note) gets opportunistically sorted the next time a dev session starts, no context-switch required to file something properly.
 - **The hero image above is a real screenshot**, not a mockup or a composite — that's the actual world screen, live backend state and all.
 
 ## Architecture

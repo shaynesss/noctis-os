@@ -128,3 +128,108 @@ export function getNightshiftHistory(limit = 50): Promise<HistoryEntry[]> {
 export function getArchivedProposal(itemId: string): Promise<{ slug: string; proposal: string }> {
   return request(`/nightshift/archive/${itemId}`)
 }
+
+export const LODGE_CATEGORIES = [
+  'Interactables',
+  'Navigation',
+  'Hero section',
+  'Typography',
+  'Color themes/palette',
+  'Icons',
+  'Animation patterns',
+] as const
+
+export type LodgeCategory = (typeof LODGE_CATEGORIES)[number]
+
+export interface LodgeEntry {
+  slug: string
+  name: string
+  category: string
+  tags: string[]
+  source: string
+  projects_used: string[]
+  superseded_by: string | null
+  has_preview: boolean
+}
+
+export interface LodgeEntryDetail extends LodgeEntry {
+  body: string
+}
+
+export interface LodgeInboxItem {
+  slug: string
+  link: string
+  note: string
+  added_at: string
+}
+
+export function getLodgeEntries(category?: string, tag?: string): Promise<LodgeEntry[]> {
+  const params = new URLSearchParams()
+  if (category) params.set('category', category)
+  if (tag) params.set('tag', tag)
+  const qs = params.toString()
+  return request(`/design-lodge/entries${qs ? `?${qs}` : ''}`)
+}
+
+export function getLodgeEntry(slug: string): Promise<LodgeEntryDetail> {
+  return request(`/design-lodge/entries/${slug}`)
+}
+
+export function createLodgeEntry(entry: {
+  slug: string
+  name: string
+  category: string
+  tags?: string[]
+  source?: string
+  code?: string
+  reference?: string
+  projects_used?: string[]
+}): Promise<LodgeEntry> {
+  return request('/design-lodge/entries', { method: 'POST', body: JSON.stringify(entry) })
+}
+
+export function updateLodgeEntry(
+  slug: string,
+  update: Partial<{
+    name: string
+    category: string
+    tags: string[]
+    source: string
+    code: string
+    reference: string
+    projects_used: string[]
+    superseded_by: string | null
+  }>,
+): Promise<LodgeEntry> {
+  return request(`/design-lodge/entries/${slug}`, { method: 'PATCH', body: JSON.stringify(update) })
+}
+
+export function getLodgeInbox(): Promise<LodgeInboxItem[]> {
+  return request('/design-lodge/inbox')
+}
+
+export function addLodgeInboxItem(link: string, note?: string): Promise<LodgeInboxItem> {
+  return request('/design-lodge/inbox', { method: 'POST', body: JSON.stringify({ link, note }) })
+}
+
+export function processLodgeInboxItem(slug: string): Promise<{ processed: string }> {
+  return request(`/design-lodge/inbox/${slug}/process`, { method: 'POST' })
+}
+
+// Fetched as an authenticated blob, never a token-in-URL <img src> -- the
+// bearer token is a header, not something safe to expose in a query string.
+export async function getLodgePreviewUrl(slug: string): Promise<string | null> {
+  const response = await fetch(`${API_BASE}/design-lodge/entries/${slug}/preview`, {
+    headers: { Authorization: `Bearer ${API_TOKEN}` },
+  })
+  if (!response.ok) return null
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
+
+export function uploadLodgePreview(slug: string, imageBase64: string) {
+  return request<{ slug: string; has_preview: boolean }>(`/design-lodge/entries/${slug}/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ image_base64: imageBase64 }),
+  })
+}

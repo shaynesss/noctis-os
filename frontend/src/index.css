@@ -282,6 +282,22 @@ button {
   max-height: 80vh;
 }
 
+.overlay.overlay-dev {
+  /* Same exception already granted to Echo (auto-height, wider, capped by
+     viewport) rather than a new pattern -- the Lodge tab's category chips +
+     entry list + add/edit form + capture section don't fit the default
+     420x360 card. min-height keeps the idle/jobs-only view from shrinking
+     below the original size when content is short. Sized larger than
+     Echo's own exception (2026-07-24, second pass) so every Lodge section
+     -- chips, list, form, capture -- is visible without the card itself
+     scrolling; only the entry list's own body still scrolls internally
+     once it holds more entries than fit. */
+  width: min(960px, 96vw);
+  height: auto;
+  min-height: 420px;
+  max-height: 92vh;
+}
+
 .overlay .header {
   display: flex;
   align-items: center;
@@ -856,6 +872,392 @@ button {
 .new-build-submit:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ---------- Faber tabs + Design Lodge ---------- */
+
+.faber-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex: none;
+}
+
+.faber-tab {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #78728c;
+  background: none;
+  border: 1px solid rgba(16, 11, 36, 0.12);
+  border-radius: 4px;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.faber-tab.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.lodge {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.lodge-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-bottom: 2px;
+  flex: none;
+}
+
+.lodge-chip {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #55506a;
+  background: rgba(16, 11, 36, 0.05);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lodge-chip.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(16, 11, 36, 0.02);
+}
+
+.lodge-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+}
+
+.lodge-count {
+  font-size: 10px;
+  color: #78728c;
+}
+
+.lodge-add-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.lodge-add-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.lodge-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.lodge-empty {
+  font-size: 11px;
+  color: #78728c;
+  padding: 10px 0;
+}
+
+.lodge-entry {
+  border-bottom: 1px solid rgba(16, 11, 36, 0.08);
+  padding: 8px 0;
+}
+.lodge-entry:last-child {
+  border-bottom: none;
+}
+.lodge-entry.superseded {
+  opacity: 0.55;
+}
+
+.lodge-entry-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.lodge-thumb-small {
+  flex: none;
+  width: 28px;
+  height: 18px;
+  object-fit: cover;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(16, 11, 36, 0.1);
+}
+
+.lodge-thumb-large {
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: rgba(16, 11, 36, 0.04);
+}
+
+.lodge-entry-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+
+.lodge-entry-category {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #78728c;
+  flex: none;
+}
+
+.lodge-entry-detail {
+  margin-top: 8px;
+  padding-left: 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lodge-tags {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.lodge-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: #55506a;
+  background: rgba(16, 11, 36, 0.05);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
+.lodge-source {
+  margin: 0;
+  font-size: 10.5px;
+  color: #78728c;
+  font-style: italic;
+}
+
+.lodge-superseded-note {
+  margin: 0;
+  font-size: 10.5px;
+  color: #b3261e;
+}
+
+.lodge-body {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(16, 11, 36, 0.04);
+  border-radius: 6px;
+  padding: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.lodge-loading {
+  margin: 0;
+  font-size: 10.5px;
+  color: #78728c;
+}
+
+.lodge-edit-btn {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+.lodge-edit-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.lodge-edit-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lodge-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 2px solid rgba(16, 11, 36, 0.08);
+  padding-top: 10px;
+  flex: none;
+}
+
+.lodge-form h4 {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.lodge-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  color: #55506a;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.lodge-form input,
+.lodge-form select,
+.lodge-form textarea {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  background: #fff;
+  border: 2px solid rgba(16, 11, 36, 0.15);
+  border-radius: 6px;
+  padding: 6px 8px;
+  text-transform: none;
+  letter-spacing: normal;
+  resize: vertical;
+}
+.lodge-form input:focus,
+.lodge-form select:focus,
+.lodge-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.lodge-form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.lodge-capture {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px dashed rgba(16, 11, 36, 0.15);
+  padding-top: 8px;
+  flex: none;
+}
+
+.lodge-capture-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #78728c;
+  flex: none;
+  width: 100%;
+}
+
+.lodge-capture-link {
+  flex: 2;
+  min-width: 90px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 7px;
+  border: 1px solid rgba(16, 11, 36, 0.15);
+  border-radius: 5px;
+}
+
+.lodge-capture-note {
+  flex: 2;
+  min-width: 90px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 5px 7px;
+  border: 1px solid rgba(16, 11, 36, 0.15);
+  border-radius: 5px;
+}
+
+.lodge-capture-btn {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 5px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.lodge-capture-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lodge-inbox-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.lodge-inbox-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 10px;
+  color: #55506a;
+  background: rgba(16, 11, 36, 0.04);
+  border-radius: 4px;
+  padding: 4px 7px;
+}
+
+.lodge-inbox-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lodge-inbox-dismiss {
+  flex: none;
+  font-size: 10px;
+  color: #78728c;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.lodge-inbox-dismiss:hover {
+  color: #b3261e;
+}
+
+.lodge-notice {
+  margin: 0;
+  font-size: 10px;
+  color: var(--accent);
+  text-align: center;
+  flex: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

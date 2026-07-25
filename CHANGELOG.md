@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — 2026-07-25
+
+**Design Lodge** — a vault-native, browsable/editable catalog of design assets, built as a full Overhaul (Plan amendments through `SPEC.md`'s PRD/EDD/Design Brief, Build, Ship). Distinct from the existing (still-unbuilt) "library catalog" feature, which is vetted *code dependencies* fed by research verdicts — this one is design components/patterns/palettes, fed by Faber's own build and capture flow.
+
+- Backend: `backend/routers/design_lodge.py` — CRUD for entries plus a quick-capture inbox queue, all behind the existing bearer-token + Origin auth. `vault_io.py` gains `list_dir` and the vault's first binary read/write helpers (`read_binary`/`write_binary`) for preview images.
+- Storage: `second-brain/design-lodge/index.md` (lightweight index, same pattern as every mode's `state.md`) + `entries/<slug>.md` per entry, vault-level rather than per-project so every future Faber build reads the same shelf.
+- Frontend: new "design lodge" tab inside Faber's profile-overlay card (`DesignLodge.tsx`) — category-filtered browse grid with image-first previews (fetched as authenticated blobs, never a token in a URL), expand-to-reveal code/reference/tags, inline add/edit form with image upload, and the quick-capture inbox. Faber's card gains the same fixed-height exception already granted to Echo (auto-height, wider, viewport-capped) since the default card was too small for this content.
+- Seeded with 7 real entries pulled from this repo and Portfolio Platform (typography pairing, world/character palette, typewriter reveal, caret-expand disclosure row, the 3D project card's rest-state camera-fit math, its separate expand/dive animation curve, and the two-column repo-card hero) — not fabricated placeholders; two Portfolio Platform visuals are honestly labeled schematic, not live WebGL captures.
+- `dev.md` (global Faber methodology, applied via Custos's staged-diff process, not edited directly by this build): the Overhaul mechanic gained an explicit four-stage breakdown (Plan amends only, Setup is treated as already-satisfied with feature scaffolding folding into Build, Build re-triggers 3.0 scoped to the change, Ship keeps the full nine-step gate with an integration-fit lens) — plus three new Design Lodge touchpoints (Plan: browse before gathering references; Build 3.0: check-first before shadcn/Magic MCP/fresh inference, save keepers back; Ship: consistency check) and an opportunistic, non-blocking inbox-processing pass at session-bootstrap.
+
 ## v1.0.0 — 2026-07-21
 
 Full build order complete (mode folders, backend, frontend tracker, telemetry hooks, nightshift infra, dev job lifecycle), two ship-gate passes run, deployed locally per the locked EDD (single-user, single-machine — nothing to deploy). Everything below.

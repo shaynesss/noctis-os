@@ -50,7 +50,10 @@ If this file and the wiki ever disagree, the wiki wins for *why* a decision was 
 - **Skills-absorb-upward mapping (was missing).** Existing skills fold into the new mode system rather than staying standalone: `teach` → learn mode's spine, `ingest` → research mode's intake stage, `rationalise` + `vault-capture` → cross-mode utilities any mode can invoke. Not new capabilities — a migration of what already exists.
 - **Failure behavior, per mode (was missing as a general feature — only Faber's specific case had been mentioned in chat).** Every mode declares: what happens when a session of it dies or hangs (job marked stale-and-flagged in the interface, never silently frozen), what retries are allowed, what escalates to the inbox. Mundane failure is designed, not just malicious failure.
 - **Escalation via confidence flag (was missing).** Beyond binary staged/free, inbox proposals can carry a confidence flag — a third state ("done, but unsure — look at this one") so morning review sorts rubber-stamps from real reads. Applies especially to nightshift and the synthesizer subagent.
-- **Library catalog (was missing entirely).** A vault-native catalog of vetted dependencies — what it is, when to reach for it, verdict provenance — supplied by research mode's adopt-track verdicts. A `libraries:` field in job-context frontmatter; the launcher injects it so dev sessions start knowing their approved stack. Interface gains a catalog browse view. Standing rule: dev sessions shop from the vetted shelf first.
+- **Library catalog (was missing entirely).** A vault-native catalog of vetted dependencies — what it is, when to reach for it, verdict provenance — supplied by research mode's adopt-track verdicts. A `libraries:` field in job-context frontmatter; the launcher injects it so dev sessions start knowing their approved stack. Interface gains a catalog browse view. Standing rule: dev sessions shop from the vetted shelf first. **Distinct from Design Lodge below — this one is vetted code dependencies, not design assets. Not to be conflated.**
+- **Design Lodge (Overhaul, added 2026-07-24) — a vault-native, browsable and editable catalog of design assets** (components, layouts, palettes, typography, icons, animation patterns), organized by category: Interactables (buttons, modals/overlays, data display — folded together rather than split further), Navigation, Hero section, Typography, Color themes/palette, Icons, Animation patterns. Cross-project (`second-brain/design-lodge/`, not scoped to noctis-os — every future Faber build reads the same shelf), seeded retroactively from already-shipped projects. Absorbs the "Personal 21st.dev Library" habit (see `wiki/Tooling Decisions.md`) — presets/components sourced from 21st.dev and similar sites get pulled in here instead of saved externally. Per entry: name, category, tags, source, code (or its core logic) and/or reference (screenshot + note) — whichever's smarter for that entry — plus which projects it's been used in. Browse view shows a visual preview only by default, expands to reveal code/source/tags; tag search alongside category browsing; a staleness/superseded-by flag carries lineage across a pattern's evolution, not just a boolean. Standing rule: check the Lodge first, but infer fresh from the Design Brief's current theme rather than stalling if nothing fits. Lives as a new tab inside Faber's profile overlay — reachable any time the Interface is open, independent of an active dev session.
+- **Design Lodge's quick-capture inbox** — a low-friction path inside the Lodge tab: paste a link + short note, sorting deferred. Opportunistic, non-blocking housekeeping at the start of any Faber dev session processes pending items (visit link, decide code-vs-reference, categorize, file, mark processed); a dead or ambiguous link gets flagged and skipped rather than stalling the session.
+- **Design Brief gains a Lodge-aware reference step (Overhaul, added 2026-07-24).** Stage 1.2 gets a second reference-gathering path — custom media (video/images supplied directly), alongside manual web browsing — and a new "Lodge entries considered/used" subsection. Palette/typography reuse is checked at Design Brief time too, not just component-picking at Build time. The Playwright final-approval gate (3.0) gains a design-consistency check confirming shipped screens match what the Design Brief locked/referenced.
 - **Deploy security review — dev mode's ship gate step 9 (was missing).** Before anything deploys: deterministic dependency audit (`npm audit`/`pip-audit`, always) → code-review plugin on the full diff with a security lens → CodeRabbit on the PR for anything public-facing or user-data-handling. Nothing deploys unreviewed.
 - **Token audit — one of settings mode's explicit capabilities (was missing from the feature list, though implied elsewhere).** What loads into sessions without earning its cost, audited by Custos alongside drift and vault-health audits.
 - **Spec-completeness audit (added 2026-07-20, same day this rule was needed for real).** Custos can diff a project's wiki/planning pages against its compiled spec and flag anything discussed and locked but never pulled in — the exact check that was missing when this very file turned out to be missing thirteen features. Applies to Noctis's own `SPEC.md` too, not just projects Noctis builds.
@@ -80,6 +83,9 @@ If this file and the wiki ever disagree, the wiki wins for *why* a decision was 
 - Cross-vendor model routing (non-Claude backends) — v2, named mechanism is a LiteLLM local proxy via `ANTHROPIC_BASE_URL`, gated on tool-calling reliability proof for the specific job shape
 - In-app history views for Faber and Custos — idle states instead (see Design Brief)
 - shadcn — not adopted for this project, see Design Brief (derived fact, not a rule)
+- Design Lodge: a per-entry adaptation-notes field (considered during the Overhaul brainstorm, dropped)
+- Design Lodge: generalizing beyond design assets into other dependency types — that's the separate Library catalog feature above, not to be merged in
+- Design Lodge: blocking dev-session start on a non-empty quick-capture inbox — opportunistic only, never a gate
 
 ### User flows
 
@@ -91,6 +97,10 @@ If this file and the wiki ever disagree, the wiki wins for *why* a decision was 
 6. **Nightshift review** — open Echo's profile → staged inbox items, each optionally carrying a confidence flag → accept/reject individually.
 7. **Methodology diff review** — Custos digests accumulated lessons → drafts a proposed methodology diff with evidence → staged in the inbox → Shayne accepts or rejects.
 8. **Mode-to-mode handoff** — e.g. research's inquiry track flags "worth a learn session" → close Vesper's profile → open Noctua's → topic already queued.
+9. **Design Lodge browse/edit, no session** — open the Interface → Faber's profile → Lodge tab → browse by category or search tags → expand an entry for code/reference/source, or add/edit one directly via a plain form. No Claude Code session required.
+10. **Design Lodge quick capture** — same tab, paste a link + short note into the inbox, close the Interface. Sorting deferred.
+11. **Design Lodge session-start housekeeping** — next Faber dev session starts, opportunistically processes any pending inbox items before its own task; flags dead/ambiguous links rather than stalling.
+12. **Design Lodge in Plan/Build/Ship** — Plan: browse before gathering fresh references or amending a Design Brief section. Build (3.0): check first → shadcn/Magic MCP/fresh-inference fallback → save new keepers back immediately. Ship: consistency check confirms shipped screens match what was locked/referenced, catches anything not yet saved back.
 
 ---
 
@@ -142,6 +152,16 @@ The interface can only render what's structured. Per mode:
 - **Nightshift infra: done (2026-07-21) — last item on the build order.** `backend/nightshift/slack_surface.py` is the Scan step, one checker per mode (`SLACK_CHECKS` registry — nightshift.md's tap-in contract, no hardcoded per-mode knowledge in nightshift itself). Real checkers for dev (a new optional `flagged` field on job-context frontmatter, per dev's deliberately near-empty slack surface) and settings (undistilled lessons via a `lessons_distilled_through` line-count cursor on `modes/settings/state.md`); learn/research are registered but honestly return empty — no real due-recall/parked-trigger data model exists yet. `backend/nightshift/runner.py` is Advance + Stage: dev's advance is a fully mechanical templated status note (never code/branch content); settings' advance genuinely borrows the distiller subagent at reduced permission via a real headless `claude -p` call, tool-scoped to Read/Grep plus Write on exactly one inbox file, no Bash/network. Stage is idempotent against already-pending items (matched on slug's stable prefix, not its date stamp) and parses `rationale` out of the drafted proposal rather than drafting it twice. `scripts/nightshift_run.sh` (previously a TODO stub) now invokes it for real; `launchd/com.noctis-os.nightshift.plist` schedules a nightly 03:00 run, load/unload steps in `SETUP.md`. Smoke-tested live end-to-end including one real distiller call, which caught and fixed a genuine bug: an empty cursor treated every mode's still-boilerplate `lessons.md` as undistilled, which would have spent a real API call every night for nothing — cursor is now seeded to each file's actual current line count.
 - **`~/.claude/CLAUDE.md` residue — fully resolved (2026-07-20, second pass).** The symlink stays pointed at `modes/dev/dev.md` unchanged — correct for Dev-mode launches and any ad hoc terminal `claude` use in Shayne's other projects, since those are all dev-mode work. For Learn/Research/Settings/Nightshift launches specifically, the launcher sets the `CLAUDE_CONFIG_DIR` environment variable (undocumented by Anthropic but confirmed CLI-respected — redirects which directory Claude Code reads its config/CLAUDE.md from) to `noctis-os/backend/launch_config/nondev/`, which holds a minimal universal-rules-only `CLAUDE.md` (vault write discipline, communication style, session-close lessons-append reminder — nothing dev-specific). Per-process env var, so it's safe under the locked parallel-sessions requirement (no shared-file race, unlike the alternative of renaming the real file in and out). Known limitation: the VS Code extension doesn't respect `CLAUDE_CONFIG_DIR` — irrelevant here since Dev launches via VS Code and wants the global file anyway; only the four Terminal.app/CLI launches need the override, and the CLI does respect it.
 
+### Design Lodge (Overhaul, added 2026-07-24)
+
+- **Storage:** `second-brain/design-lodge/`, vault-level (not per-project), category-organized. Each entry is a vault-native page — frontmatter: `name`, `category`, `tags`, `source`, `projects_used`, `superseded_by`; body: a code block and/or a reference description, whichever fits the entry.
+- **Preview images (added 2026-07-24, second pass).** Browse-first (per the Design Brief) needed an actual visual, not just code/reference text. First binary vault content — `second-brain/design-lodge/entries/<slug>.png`, read/written via new `vault_io.read_binary`/`write_binary` helpers. `POST /entries/{slug}/preview` (base64 upload) and `GET /entries/{slug}/preview` (serves the PNG, `image/png`); list/get responses carry a computed `has_preview` bool so the frontend doesn't fire a request per entry against ones with none. Frontend fetches the image as an authenticated blob (`fetch` + bearer header, `URL.createObjectURL`) — never a token in an `<img src>` query string.
+- **Inbox:** a separate pending queue for quick-capture (`link` + `note`), processed opportunistically at the start of any Faber dev session — not a blocking gate. A dead or ambiguous link gets flagged and skipped, not stalled on.
+- **Backend:** new router (`backend/routers/design_lodge.py`) — CRUD for entries plus the inbox queue (add/list/mark-processed), same mandatory bearer-token + Origin-check auth as every other route.
+- **Frontend:** new tab inside `ProfileOverlay.tsx`'s Faber card — category-filtered grid of visual previews (image-first, expand-to-reveal-detail), a minimal capture form (link + note), and a fuller add/edit form (code, image, tags, category). Reachable any time the Interface is open, independent of any active dev session — the Interface is a persistent app, sessions are fire-and-forget launches from it.
+- **Session integration:** `modes/dev/dev.md` gains three stage touchpoints (Plan: browse before gathering references / amending a Design Brief section; Build 3.0: check-first → fallback → save-back; Ship: consistency check) plus the opportunistic inbox-processing pass at session-bootstrap, same tier as the existing resumed-job track check.
+- **Distinct from the Library catalog** (PRD, above) — that one is vetted code dependencies fed by Vesper's research verdicts; Design Lodge is design assets (components, layouts, palettes, typography, icons, animation), fed by Faber's own build/capture flow. Two separate vault directories, two separate concerns, not to be conflated.
+
 ### Version control workflow
 
 **Claude Code commits as work progresses.** Shayne pushes manually — matches Portfolio Platform, not Articulation Loop's fully-manual-commits rule.
@@ -154,7 +174,7 @@ The interface can only render what's structured. Per mode:
 - **No database** — vault files ARE the persistence layer.
 - **Sprites** — PIL-rendered PNGs from grid-data text files. `assets/characters/` is the sole source of truth.
 - **World background** — a static illustrated plate, hand-picked footing coordinates. See `assets/world/README.md`.
-- **Profile overlay** — Press Start 2P (header) + JetBrains Mono (body); typewriter-reveal entrance; fixed card height across four modes, Echo the exception. 100% hand-coded CSS.
+- **Profile overlay** — Press Start 2P (header) + JetBrains Mono (body); typewriter-reveal entrance; fixed card height across four modes, Echo and Faber the exceptions (auto-height, wider, viewport-capped — Faber's added 2026-07-24 for the Design Lodge tab's browse grid/forms, same reasoning as Echo's inbox). 100% hand-coded CSS.
 
 ### Decisions locked during EDD
 
@@ -170,6 +190,7 @@ The interface can only render what's structured. Per mode:
 - **Sessions run in parallel across modes** — a mode is methodology + view focus, never an execution lock.
 - **In-app History for Faber and Custos: rejected in favor of idle states.**
 - **Deterministic-where-possible:** recall-bank math, staleness detection, health checks, git commits are backend code, never session judgment.
+- **Personal 21st.dev Library superseded by Design Lodge (2026-07-24).** The external, 21st.dev-hosted "components you like" library (`wiki/Tooling Decisions.md`) is replaced by the vault-native Design Lodge — sourced components now get pulled into `second-brain/design-lodge/` instead of saved externally.
 
 ### File/folder structure (target — created at Phase 2)
 
@@ -177,7 +198,7 @@ The interface can only render what's structured. Per mode:
 noctis-os/
 ├── backend/
 │   ├── main.py
-│   ├── routers/          # mode.py, session.py, nightshift.py
+│   ├── routers/          # mode.py, session.py, nightshift.py, design_lodge.py
 │   ├── vault_io.py       # all vault read/write goes through here
 │   └── runtime/           # gitignored — per-job hook action-feed logs, NOT vault content
 ├── frontend/
@@ -185,6 +206,7 @@ noctis-os/
 │   │   ├── World.tsx
 │   │   ├── ProfileOverlay.tsx
 │   │   ├── LibraryCatalog.tsx   # dev mode's vetted-dependency browse view
+│   │   ├── DesignLodge.tsx      # Faber tab: design-asset catalog + quick-capture inbox
 │   │   └── ...           # consumes assets/, holds no grid data or world-plate copies
 ├── assets/
 │   ├── characters/        # SOLE source of truth: grid definitions + render script + generated PNGs
@@ -197,7 +219,7 @@ noctis-os/
 └── SETUP.md
 ```
 
-Vault side (not this repo): `second-brain/modes/<name>/` per mode — `<name>.md`, `lessons.md`, `state.md`, `jobs/<slug>/context.md`, `agents/*.md`.
+Vault side (not this repo): `second-brain/modes/<name>/` per mode — `<name>.md`, `lessons.md`, `state.md`, `jobs/<slug>/context.md`, `agents/*.md`. Also `second-brain/design-lodge/` — vault-level, not per-mode (see EDD's "Design Lodge" section).
 
 ### External dependencies
 
@@ -216,6 +238,8 @@ Claude Code CLI, the Claude Code VS Code extension, PIL, a Python frontmatter/YA
 **Component sourcing — no shadcn, fully hand-built, and this is a derived fact, not a rule.** Every element of the card system fought the pixel-art/world aesthetic enough to warrant hand-building. Setup installs whatever the Stack section declares — currently that's Tailwind + Impeccable, no shadcn — because nothing here needed it, not because of a standing ban. A different project's Design Brief could resolve the other way.
 
 **Design Brief is complete.** Remaining items are asset-production tasks: two touch-ups on the background image, a composite scale test. Custos's trigger thresholds — done (2026-07-21): `backend/triggers.py` computes friction/accumulation/suspicion live on every `GET /mode/settings` poll (accumulation reuses nightshift's undistilled-lessons cursor signal; friction is an opt-in `FRICTION:` marker in a mode's lessons.md, documented in each mode's lessons.md; suspicion is a 7-day state.md staleness check).
+
+**Design Lodge tab — locked 2026-07-24 (Overhaul amendment, not a rewrite of the above).** New tab inside Faber's existing profile-overlay chrome — same paper/accent-border/pixel-font language as the rest of the card system, Faber's warm red (`#E53311`) as the tab's accent. Grid-of-previews browsing, image-first, expand-to-reveal-detail. Category filter chips: Interactables, Navigation, Hero section, Typography, Color themes/palette, Icons, Animation patterns. Quick-capture inbox visually separated from the main browse grid, deliberately minimal (link + note only) to keep free-time capture low-friction. Faber's card gains the same fixed-card-height exception already granted to Echo (auto-height, wider, viewport-capped) — the default 420×360 card was too small for the browse grid plus forms.
 
 ---
 
