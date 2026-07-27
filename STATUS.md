@@ -1,10 +1,14 @@
 # STATUS.md
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 ## Current state
 
-**v1 shipped, 2026-07-21; Design Lodge Overhaul shipped 2026-07-25.** Phase 1, 2, and 3 all complete. All build-order milestones done and smoke-tested live. Deploy decision unchanged from the locked EDD: stays local, single-user, single-machine — nothing to deploy. `desktop/NoctisOS.app` is the real way to run it now (double-click, real Dock icon), `make dev`/`make app` remain for from-source work.
+**v1 shipped, 2026-07-21; Design Lodge Overhaul shipped 2026-07-25; reload/apply-pipeline fix shipped 2026-07-27.** Phase 1, 2, and 3 all complete. All build-order milestones done and smoke-tested live. Deploy decision unchanged from the locked EDD: stays local, single-user, single-machine — nothing to deploy. `desktop/NoctisOS.app` is the real way to run it now (double-click, real Dock icon), `make dev`/`make app` remain for from-source work.
+
+## Done this pass (reload + apply-pipeline fixes, found by Custos's spec-completeness audit — 2026-07-27)
+
+Full detail in `CHANGELOG.md`'s v1.5.1 entry. Summary: `uvicorn --reload` had no exclusion on `backend/runtime/`, so the hooks' own action-feed/busy-marker writes (every tool call, every live session) were restarting the backend mid-request — fixed with `--reload-exclude 'runtime/*'` on both launch paths. `vault_io.py` couldn't resolve any path outside `VAULT_PATH`, so a diff proposal targeting `noctis-os/SPEC.md` (a sibling repo) had nowhere to go — fixed with a narrow, explicit `noctis-os/` project-root allowlist. `apply.py`'s target-path regex truncated at the first space, breaking the first-ever proposal targeting a wiki page — fixed to capture the whole line. All three were previously unexercised: every prior accepted proposal only ever targeted a vault mode file with no spaces in its path. 4 new regression tests, 151/151 passing. `SPEC.md` itself picked up 6 fixes from the audit that found these bugs (1 direct contradiction, 3 missing-but-shipped mechanisms, 1 pair of undocumented fixes, 1 stale self-contradiction in its own Open Questions).
 
 ## Done this pass (Design Lodge, full Overhaul — 2026-07-25)
 

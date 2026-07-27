@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5.1 — 2026-07-27
+
+**Fix: backend reload was dropping in-flight requests, plus two apply-pipeline bugs found by Custos's own spec-completeness audit on Noctis OS itself.**
+
+- `uvicorn --reload` watched `backend/runtime/` with no exclusion — the PostToolUse/Stop hooks write action-feed logs and busy markers into that directory on every tool call of every live session, so ordinary hook activity was restarting the backend mid-request. Surfaced live as "Load failed" in the desktop app's WKWebView when an Echo accept/reject click landed in a restart window (Chromium reports the identical failure as "Failed to fetch", which is why a same-machine browser-tab repro came back clean). Fixed with `--reload-exclude 'runtime/*'` on both `make dev` and the desktop app's uvicorn invocation.
+- `vault_io.py` could only ever resolve paths inside `VAULT_PATH` — a diff proposal targeting `noctis-os/SPEC.md` (a sibling repo, not vault content) had nowhere to resolve to and raised a bare `FileNotFoundError`. Every prior accepted proposal only ever targeted a vault mode file (`modes/<name>/<name>.md`), so this was never exercised before. Fixed with a narrow, explicit `noctis-os/` project-root allowlist rather than widening vault_io's writable root generally.
+- `backend/nightshift/apply.py`'s target-path regex (`\S+`) stopped at the first space, truncating the one proposal targeting a wiki page (`wiki/Noctis OS/Modes.md`, a real space in a real folder name) to `wiki/Noctis`. Fixed to capture the whole line.
+- 4 new regression tests (project-root resolution + traversal guard, the space-in-path fix, a mechanical check that the reload-exclude flag can't silently disappear from either launch path again) — 151/151 backend tests passing.
+- `SPEC.md` itself gained 6 fixes from the audit that found these bugs: a direct contradiction (`busy` documented as a `state.md` field when it's actually been a separate runtime marker since 2026-07-22), three missing-but-shipped mechanisms (the `--append-system-prompt` session-start channel, Echo's History section, Faber's new-build scratch-directory flow), one undocumented pair of 2026-07-24 telemetry fixes, and one stale self-contradiction in its own Open Questions list (nightshift's scheduler was already locked as launchd elsewhere in the same file).
+
 ## v1.5.0 — 2026-07-25
 
 **Design Lodge** — a vault-native, browsable/editable catalog of design assets, built as a full Overhaul (Plan amendments through `SPEC.md`'s PRD/EDD/Design Brief, Build, Ship). Distinct from the existing (still-unbuilt) "library catalog" feature, which is vetted *code dependencies* fed by research verdicts — this one is design components/patterns/palettes, fed by Faber's own build and capture flow.
