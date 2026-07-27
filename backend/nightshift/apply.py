@@ -102,10 +102,15 @@ def apply_proposal(proposal_text: str) -> str | None:
     if not diff_text or diff_text.lower().startswith("(none"):
         return None
 
-    match = re.search(r"^--- (\S+)", diff_text, re.MULTILINE)
+    # (.+) not \S+: every prior target was a vault mode file
+    # (modes/settings/settings.md and the like), none with a space in the
+    # path, so \S+ silently truncated at the first space and was never
+    # caught -- the first proposal targeting a wiki page ("wiki/Noctis
+    # OS/Modes.md", a real directory name with a literal space) exposed it.
+    match = re.search(r"^--- (.+)$", diff_text, re.MULTILINE)
     if not match:
         raise DiffApplyError("diff section has no '--- <path>' target file header")
-    target = match.group(1)
+    target = match.group(1).strip()
 
     hunks = _hunks(diff_text)
     if not hunks:
