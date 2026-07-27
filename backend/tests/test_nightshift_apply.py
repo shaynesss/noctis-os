@@ -129,6 +129,41 @@ def test_apply_proposal_raises_when_old_text_ambiguous(vault):
         pass
 
 
+PROPOSAL_TARGETING_PATH_WITH_SPACE = """## Rationale
+Testing a diff whose target path contains a space, like a real wiki folder
+name ("Noctis OS").
+
+## Diff
+--- wiki/Noctis OS/Modes.md
++++ wiki/Noctis OS/Modes.md
+@@
+- old text here
++ new text here
+
+## Evidence
+- test evidence
+"""
+
+
+def test_apply_proposal_target_path_with_space_is_not_truncated(vault):
+    """Found 2026-07-27: the target-path regex was `\\S+` (stops at the
+    first space), so the first-ever proposal targeting a path outside
+    modes/*/*.md (a wiki page whose parent folder is "Noctis OS", a real
+    space in a real path) silently truncated to "wiki/Noctis" and raised a
+    bare FileNotFoundError. Every prior proposal only ever targeted
+    modes/<name>/<name>.md, which never has a space, so this was never
+    exercised before.
+    """
+    vault_io.write_file("wiki/Noctis OS/Modes.md", "before\nold text here\nafter\n")
+
+    target = apply.apply_proposal(PROPOSAL_TARGETING_PATH_WITH_SPACE)
+
+    assert target == "wiki/Noctis OS/Modes.md"
+    updated = vault_io.read_file("wiki/Noctis OS/Modes.md")
+    assert "new text here" in updated
+    assert "old text here" not in updated
+
+
 def test_parse_cursor_advance_extracts_mode():
     text = "## Rationale\nx\n\n<!-- cursor-advance: dev=17 -->\n"
     assert apply.parse_cursor_advance(text) == "dev"

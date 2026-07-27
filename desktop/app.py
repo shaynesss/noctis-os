@@ -37,7 +37,7 @@ REPO_ROOT = Path(__file__).parent.parent
 BACKEND_DIR = REPO_ROOT / "backend"
 FRONTEND_DIR = REPO_ROOT / "frontend"
 BACKEND_URL = "http://localhost:8000/health"
-FRONTEND_URL = "http://localhost:5173/"
+FRONTEND_URL = "http://localhost:5180/"  # pinned in frontend/vite.config.ts (strictPort) -- 5173 is Vite's default and collides with other projects' dev servers on this machine
 # Faber-building (the tree expression), matching desktop/NoctisOS.app's
 # bundled AppIcon.icns -- Shayne's pick over the plain idle sprite. Both
 # create_window and start()'s own `icon` params are documented GTK/QT-only,
@@ -172,8 +172,24 @@ def main() -> None:
     atexit.register(_cleanup)
     signal.signal(signal.SIGTERM, lambda *_: (_cleanup(), sys.exit(0)))
 
+    # --reload-exclude on runtime/*: the PostToolUse/Stop hooks write into
+    # backend/runtime/ (action-feed logs, busy markers) on every tool call
+    # of every live session, and that directory sits inside the cwd uvicorn
+    # --reload watches by default -- so ordinary hook activity was
+    # restarting this backend mid-request, dropping any in-flight
+    # accept/reject fetch (WKWebView surfaces this as "Load failed", the
+    # desktop window's engine; Chromium says "Failed to fetch" for the same
+    # thing, which is why a browser-tab repro didn't catch it).
     _start(
-        [str(BACKEND_DIR / ".venv" / "bin" / "uvicorn"), "main:app", "--reload", "--port", "8000"],
+        [
+            str(BACKEND_DIR / ".venv" / "bin" / "uvicorn"),
+            "main:app",
+            "--reload",
+            "--reload-exclude",
+            "runtime/*",
+            "--port",
+            "8000",
+        ],
         BACKEND_DIR,
     )
     _start([NPM_BIN, "run", "dev"], FRONTEND_DIR, env=_npm_env())

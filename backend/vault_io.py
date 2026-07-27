@@ -48,6 +48,22 @@ def get_vault_path() -> Path:
     return Path(vault_path)
 
 
+# Custos's spec-completeness audit (settings.md's Audit stage) can propose
+# diffs against a project's own compiled SPEC.md/CLAUDE.md, not just vault
+# mode files -- for this project that file is noctis-os/SPEC.md, which
+# lives in a sibling git repo, outside second-brain/ entirely. Every prior
+# accepted proposal only ever targeted modes/*/*.md (inside the vault), so
+# this case was never exercised until a diff literally titled
+# "--- noctis-os/SPEC.md" hit apply_proposal and failed with a bare
+# FileNotFoundError -- vault_io had no path outside VAULT_PATH to resolve
+# it against. Narrow, explicit allowlist rather than widening the vault
+# root generally: only the literal `noctis-os/` prefix gets a second base
+# directory, with the same containment check applied to it, so the write
+# surface grows by exactly one named sibling project, not by all of
+# ~/Developer/.
+_PROJECT_ROOTS = {"noctis-os": Path(__file__).resolve().parent.parent}
+
+
 def _resolve_within_vault(relative_path: str) -> Path:
     """Every public function in this module takes a caller-controlled
     `relative_path` -- some of those callers thread it from HTTP request
@@ -56,6 +72,14 @@ def _resolve_within_vault(relative_path: str) -> Path:
     have sanitized its input (2026-07-21 ship-gate review found this
     missing entirely, allowing arbitrary-path writes via a crafted slug).
     """
+    for prefix, root in _PROJECT_ROOTS.items():
+        if relative_path == prefix or relative_path.startswith(prefix + "/"):
+            root = root.resolve()
+            resolved = (root / relative_path[len(prefix) + 1 :]).resolve()
+            if resolved != root and root not in resolved.parents:
+                raise ValueError(f"Path escapes {prefix}: {relative_path!r}")
+            return resolved
+
     vault_path = get_vault_path().resolve()
     resolved = (vault_path / relative_path).resolve()
     if resolved != vault_path and vault_path not in resolved.parents:
