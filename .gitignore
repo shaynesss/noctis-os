@@ -52,6 +52,9 @@ backend/launch_config/nondev/projects/
 backend/launch_config/nondev/sessions/
 backend/launch_config/nondev/settings.json
 backend/launch_config/nondev/shell-snapshots/
+backend/launch_config/nondev/chrome/
+backend/launch_config/nondev/ide/
+backend/launch_config/nondev/tasks/
 
 # OS
 .DS_Store

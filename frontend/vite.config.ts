@@ -11,4 +11,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Pinned, not Vite's 5173 default — collides with other projects' dev
+  // servers on this machine. Must match backend/auth.py's ALLOWED_ORIGIN.
+  server: {
+    port: 5180,
+    strictPort: true,
+  },
 })

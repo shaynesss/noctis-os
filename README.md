@@ -113,7 +113,7 @@ make setup     # installs backend + frontend deps, copies .env.example -> .env
 Fill in `.env` — `VAULT_PATH` (absolute path to a vault folder on your machine) and `NOCTIS_API_TOKEN` (any local secret string; it just has to match between backend and frontend).
 
 ```bash
-make dev       # backend (FastAPI, :8000) + frontend (Vite, :5173), browser tab
+make dev       # backend (FastAPI, :8000) + frontend (Vite, :5180, pinned), browser tab
 make open-app  # same thing, opened as a native macOS window instead
 ```
 

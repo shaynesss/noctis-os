@@ -1,10 +1,14 @@
 # STATUS.md
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 ## Current state
 
-**v1 shipped, 2026-07-21; Design Lodge Overhaul shipped 2026-07-25; reload/apply-pipeline fix shipped 2026-07-27.** Phase 1, 2, and 3 all complete. All build-order milestones done and smoke-tested live. Deploy decision unchanged from the locked EDD: stays local, single-user, single-machine — nothing to deploy. `desktop/NoctisOS.app` is the real way to run it now (double-click, real Dock icon), `make dev`/`make app` remain for from-source work.
+**v1 shipped, 2026-07-21; Design Lodge Overhaul shipped 2026-07-25; reload/apply-pipeline fix shipped 2026-07-27; port-pin + model-override fix shipped 2026-07-28.** Phase 1, 2, and 3 all complete. All build-order milestones done and smoke-tested live. Deploy decision unchanged from the locked EDD: stays local, single-user, single-machine — nothing to deploy. `desktop/NoctisOS.app` is the real way to run it now (double-click, real Dock icon), `make dev`/`make app` remain for from-source work.
+
+## Done this pass (port-pin + model-override fix — 2026-07-28)
+
+Full detail in `CHANGELOG.md`'s v1.5.2 entry. Summary: frontend dev server now pinned to `:5180` (`strictPort: true`) instead of Vite's colliding `:5173` default, with `auth.py`'s `ALLOWED_ORIGIN` and its test updated to match. Nightshift's `DISTILLER_MODEL` is now overridable via `NIGHTSHIFT_DISTILLER_MODEL` instead of a hardcoded literal, closing the gap the 2026-07-23 model-upgrade audit flagged. `.gitignore` gained three previously-untracked `launch_config/nondev/` runtime-state dirs (`chrome/`, `ide/`, `tasks/`).
 
 ## Done this pass (reload + apply-pipeline fixes, found by Custos's spec-completeness audit — 2026-07-27)
 
