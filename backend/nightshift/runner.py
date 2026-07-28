@@ -5,6 +5,7 @@ modes/nightshift/inbox/<slug>.md and the mirrored index entry in
 modes/nightshift/state.md -- nothing else in the vault, ever.
 """
 
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -23,7 +24,11 @@ import vault_io  # noqa: E402
 from nightshift.slack_surface import SLACK_CHECKS, SlackItem  # noqa: E402
 
 STATE_PATH = "modes/nightshift/state.md"
-DISTILLER_MODEL = "claude-haiku-4-5"
+# Cheapest/fastest current Claude tier, for mechanical distillation work
+# (dev.md: "effort routing expressed as model routing"). Env-overridable so
+# a smaller/newer tier can be adopted without a code change when one ships --
+# a literal never gets revisited on its own.
+DISTILLER_MODEL = os.environ.get("NIGHTSHIFT_DISTILLER_MODEL", "claude-haiku-4-5")
 
 
 def _existing_pending_slugs() -> list[str]:

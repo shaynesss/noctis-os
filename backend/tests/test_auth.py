@@ -1,3 +1,6 @@
+from auth import ALLOWED_ORIGIN
+
+
 def test_missing_token_rejected(client):
     response = client.get("/mode/dev")
     assert response.status_code == 401
@@ -20,7 +23,7 @@ def test_disallowed_origin_rejected(client, auth_headers):
 
 
 def test_allowed_origin_accepted(client, auth_headers):
-    headers = {**auth_headers, "Origin": "http://localhost:5173"}
+    headers = {**auth_headers, "Origin": ALLOWED_ORIGIN}
     response = client.get("/mode/dev", headers=headers)
     assert response.status_code == 200
 
@@ -37,12 +40,12 @@ def test_cors_preflight_allows_frontend_origin(client):
     response = client.options(
         "/mode/dev",
         headers={
-            "Origin": "http://localhost:5173",
+            "Origin": ALLOWED_ORIGIN,
             "Access-Control-Request-Method": "GET",
         },
     )
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
 
 
 def test_cors_preflight_rejects_other_origins(client):

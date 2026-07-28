@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.5.2 — 2026-07-28
+
+**Fix: frontend dev-server port collided with other projects on this machine; nightshift's distiller model was a hardcoded literal.**
+
+- `frontend/vite.config.ts` pins the dev server to `:5180` with `strictPort: true`, instead of relying on Vite's `:5173` default — which collides with other local projects' dev servers on this machine. `backend/auth.py`'s `ALLOWED_ORIGIN` and `backend/tests/test_auth.py` updated to match.
+- `backend/nightshift/runner.py`'s `DISTILLER_MODEL` is now overridable via a new `NIGHTSHIFT_DISTILLER_MODEL` env var (documented in `.env.example`), rather than a hardcoded literal — the fix the model-upgrade audit (Custos, 2026-07-23) flagged: a smaller/newer tier can now be adopted without a code change.
+- `.gitignore` gains `backend/launch_config/nondev/{chrome,ide,tasks}/` — Claude Code's own runtime state (a native-host binary, a PID lock file, session-UUID folders), same category as the other generated `launch_config/nondev/` entries already ignored, previously untracked but not excluded.
+
 ## v1.5.1 — 2026-07-27
 
 **Fix: backend reload was dropping in-flight requests, plus two apply-pipeline bugs found by Custos's own spec-completeness audit on Noctis OS itself.**

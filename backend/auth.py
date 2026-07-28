@@ -8,7 +8,7 @@ import os
 
 from fastapi import Header, HTTPException
 
-ALLOWED_ORIGIN = "http://localhost:5173"  # Vite dev server default
+ALLOWED_ORIGIN = "http://localhost:5180"  # noctis-os frontend's dedicated dev port (pinned, strictPort in vite.config.ts) — not Vite's 5173 default, which collides with other projects' dev servers
 
 
 def require_auth(
