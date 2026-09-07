@@ -8,7 +8,7 @@
  * the Stage 2 cutover removes them with their routes — the same
  * "move the new thing, leave the old until it can go cleanly" pattern the
  * mode merge used. */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { Composer, Rail, StatusBar, TabBar } from './Chrome'
 import { Transcript } from './Transcript'
@@ -18,12 +18,30 @@ import './tokens.css'
 export default function App() {
   const [view, setView] = useState('chat')
   const [activeTab, setActiveTab] = useState('t1')
+  const composerRef = useRef<HTMLTextAreaElement>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(SESSIONS).map(([id, s]) => [id, s.draft])),
   )
 
   const session = SESSIONS[activeTab]
   const accent = MODE_ACCENT[session.mode]
+
+  // Cmd+1/2/3 switches tab. Implemented rather than merely labelled: a
+  // shortcut shown in the UI that does nothing is a worse lie than the
+  // explanatory text it sits next to.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.shiftKey || e.altKey) return
+      const i = ['1', '2', '3'].indexOf(e.key)
+      if (i === -1 || !TABS[i]) return
+      e.preventDefault()
+      setActiveTab(TABS[i].id)
+      setView('chat')
+      composerRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   return (
     <div className="flex h-full" style={{ ['--accent' as string]: accent }}>
@@ -43,9 +61,11 @@ export default function App() {
           <>
             <Transcript blocks={session.blocks} accent={accent} />
             <Composer
+              ref={composerRef}
               mode={session.mode}
               value={drafts[activeTab] ?? ''}
               onChange={(v) => setDrafts({ ...drafts, [activeTab]: v })}
+              onSend={() => setDrafts({ ...drafts, [activeTab]: '' })}
             />
           </>
         ) : (
@@ -130,15 +150,14 @@ function Stats() {
               <Row key={label as string} label={label as string} value={val as number} tone={tone as string} />
             ))}
           </div>
-          {/* The one diagnostic number on this page: an orchestrated workload
-              reloads methodology and job context every turn, so cache reads
-              should dominate. A drop is the earliest warning that prompt or
-              context structure has begun thrashing the cache. */}
-          <p className="mt-[13px] border-t border-line pt-[11px] font-mono text-[10.5px] leading-[1.65] text-ink-faint">
-            94% of input served from cache. Cache reads dominate an orchestrated workload — each
-            session reloads its methodology and job context every turn, and that prefix is cached
-            rather than re-sent.
-          </p>
+          {/* The ratio is the diagnostic number on this page -- a drop means
+              prompt or context structure has begun thrashing the cache -- but
+              it is shown as a stat, not explained. The reasoning belongs in
+              the spec, not on screen. */}
+          <div className="mt-[13px] flex items-baseline gap-2 border-t border-line pt-[11px] font-mono text-[11.5px]">
+            <span className="text-ink-dim">cache hit rate</span>
+            <span className="ml-auto tabular-nums text-good">94%</span>
+          </div>
         </div>
       </div>
     </div>

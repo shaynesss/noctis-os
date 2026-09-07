@@ -1,5 +1,5 @@
 /* Rail, tabs, composer, status, characters — the shell around the transcript. */
-import { useEffect, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { CHARACTERS, MODE_ACCENT, MODE_LABEL, STATUS, type Mode, type Tab } from './mock'
 
 /* ------------------------------------------------------------------ rail */
@@ -47,12 +47,9 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
       })}
 
       <div className="mt-auto border-t border-line px-[14px] pt-[10px] font-mono text-[10px] leading-[1.8] text-ink-faint">
-        <Kbd>⌥</Kbd>
-        <Kbd>space</Kbd> summon
-        <br />
         <Kbd>⌘1</Kbd>
         <Kbd>2</Kbd>
-        <Kbd>3</Kbd> mode
+        <Kbd>3</Kbd> switch tab
       </div>
     </nav>
   )
@@ -106,16 +103,14 @@ export function TabBar({
 }
 
 /* -------------------------------------------------------------- composer */
-export function Composer({
-  mode,
-  value,
-  onChange,
-}: {
+export const Composer = forwardRef<HTMLTextAreaElement, {
   mode: Mode
   value: string
   onChange: (v: string) => void
-}) {
+  onSend: () => void
+}>(function Composer({ mode, value, onChange, onSend }, forwarded) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  useImperativeHandle(forwarded, () => ref.current as HTMLTextAreaElement)
 
   // Grow to a cap, then scroll. Done here rather than with CSS because a
   // textarea cannot size to its content without measuring it.
@@ -139,11 +134,18 @@ export function Composer({
 
         {/* A real text field, not a terminal line editor: click to place the
             caret anywhere, drag to select, standard undo. One of the concrete
-            answers to "why not just use the CLI". */}
+            answers to "why not just use the CLI" -- and something the UI
+            should demonstrate rather than describe. */}
         <textarea
           ref={ref}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              if (value.trim()) onSend()
+            }
+          }}
           rows={2}
           spellCheck={false}
           aria-label="Message"
@@ -154,26 +156,29 @@ export function Composer({
 
         <span className="mt-auto flex shrink-0 items-center gap-2">
           <IconButton title="Attach" d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8" />
-          <IconButton title="Send" d="M4 12h15M13 6l6 6-6 6" />
+          <IconButton title="Send" d="M4 12h15M13 6l6 6-6 6" onClick={() => value.trim() && onSend()} />
         </span>
       </div>
 
-      <div className="flex items-center gap-[14px] px-[2px] pt-[6px] font-mono text-[10px] text-ink-faint">
-        <span>click anywhere to place the caret · drag to select</span>
-        <span className="ml-auto">
-          <Kbd>↵</Kbd> send <Kbd>⇧↵</Kbd> newline <Kbd>⌘K</Kbd> commands
+      {/* Only shortcuts that actually work are shown. Cmd+K has no command
+          palette yet and Opt+Space needs the desktop shell (item 4); listing
+          either would be a claim the app cannot honour. */}
+      <div className="flex items-center justify-end px-[2px] pt-[6px] font-mono text-[10px] text-ink-faint">
+        <span>
+          <Kbd>↵</Kbd> send <Kbd>⇧↵</Kbd> newline <Kbd>⌘1–3</Kbd> tabs
         </span>
       </div>
     </div>
   )
-}
+})
 
-function IconButton({ title, d }: { title: string; d: string }) {
+function IconButton({ title, d, onClick }: { title: string; d: string; onClick?: () => void }) {
   return (
     <button
       type="button"
       title={title}
       aria-label={title}
+      onClick={onClick}
       className="grid h-[22px] w-6 place-items-center rounded-[3px] border border-line text-ink-faint hover:border-[#3a3a3a] hover:text-ink"
     >
       <svg viewBox="0 0 24 24" aria-hidden className="h-3 w-3" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.8 }}>
