@@ -35,7 +35,19 @@ sys.path.insert(0, str(Path(__file__).parent))
 from render import CONFIG_ROOT, VAULT, compose  # noqa: E402
 
 REGRESSION = VAULT / "prompts" / "regression.jsonl"
-MODEL = os.environ.get("REGRESSION_MODEL", "claude-haiku-4-5")
+# Test each mode on the model it actually runs. An earlier version tested
+# everything on Haiku, which measured a configuration four of the five modes
+# do not ship -- and produced 12/12 then 9/12 on identical input, noise wide
+# enough that the suite could not gate anything. Match production or the
+# result is not evidence about production.
+MODE_MODELS = {
+    "general": "claude-opus-5",
+    "faber": "claude-opus-5",
+    "noctua": "claude-opus-5",
+    "vesper": "claude-opus-5",
+    "maintenance": "claude-haiku-4-5",   # mechanical distillation work
+}
+DEFAULT_MODEL = os.environ.get("REGRESSION_MODEL")  # override for a cheap smoke run
 PASS_BAR = 11 / 12  # 11 of 12; one flake tolerated, two is a real signal
 
 DISALLOWED = "Bash Edit Write WebFetch WebSearch Read Grep Glob"
@@ -50,7 +62,8 @@ NEUTRAL_CWD = Path(os.environ.get("TMPDIR", "/tmp")) / "noctis-regression-cwd"
 
 
 def ask(prompt: str, mode: str, use_config_dir: bool) -> str:
-    cmd = ["claude", "-p", prompt, "--model", MODEL, "--disallowedTools", DISALLOWED,
+    model = DEFAULT_MODEL or MODE_MODELS.get(mode, "claude-opus-5")
+    cmd = ["claude", "-p", prompt, "--model", model, "--disallowedTools", DISALLOWED,
            "--output-format", "json"]
     env = dict(os.environ)
     if use_config_dir:
@@ -75,7 +88,8 @@ def main() -> int:
 
     cases = [json.loads(l) for l in REGRESSION.read_text().splitlines() if l.strip()]
     inject = "CLAUDE_CONFIG_DIR" if args.config_dir else "--append-system-prompt"
-    print(f"\n{len(cases)} cases · model {MODEL} · injected via {inject}\n")
+    shown = DEFAULT_MODEL or "per-mode (opus-5, maintenance haiku)"
+    print(f"\n{len(cases)} cases · model {shown} · injected via {inject}\n")
 
     passed, failures = 0, []
     for c in cases:
