@@ -16,15 +16,23 @@ const RAIL = [
 ] as const
 
 export function Rail({ view, onView }: { view: string; onView: (v: string) => void }) {
+  // pt-7 clears the macOS traffic lights, which titleBarStyle:"Overlay"
+  // floats over the content at the top-left. They cannot be moved to the
+  // right on macOS, so the rail moves out from under them instead.
   return (
-    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-surface py-[14px]">
+    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-surface pb-0 pt-7">
       {/* Mark and wordmark centred together. The star takes the active
           mode's accent via currentColor, so the identity shifts with the
           session rather than sitting inert above a UI that changes. */}
-      <div className="mb-[10px] flex items-center justify-center gap-[7px] border-b border-line px-[12px] pb-4">
+      {/* h-[34px] is the tab bar's height. Matching them makes the rail's
+          divider continue the tab bar's, so the two panes read as one
+          surface split rather than two boxes side by side. */}
+      <div className="flex h-[34px] shrink-0 items-center justify-center gap-[7px] border-b border-line px-[12px]">
         <Logo size={15} className="shrink-0" style={{ color: 'var(--accent)' }} />
         <span className="font-mono text-[12px] font-bold uppercase tracking-[0.14em]">Noctis</span>
       </div>
+
+      <div className="h-[10px] shrink-0" />
 
       {RAIL.map((item) => {
         const active = view === item.id
@@ -57,7 +65,9 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
           one does not: the permission chip already carries a word-length
           label, so a badge beside it was present without being legible.
           Sized to be read rather than merely shown. */}
-      <div className="mt-auto flex items-center gap-[7px] border-t border-line px-[12px] pt-[11px] font-mono text-[11px] text-ink-faint">
+      {/* Same height as the status band opposite it, so the horizontal rule
+          runs unbroken across both panes. */}
+      <div className="mt-auto flex h-[var(--status-band)] shrink-0 items-center gap-[7px] border-t border-line px-[12px] font-mono text-[11px] text-ink-faint">
         <Kbd>⇧⇥</Kbd> permission
       </div>
     </nav>
@@ -310,7 +320,7 @@ export function BottomBar({ children }: { children: React.ReactNode }) {
       {/* Same components, second position. Rendered twice rather than moved
           with JS: a resize listener would reflow on every drag frame, and the
           duplicate costs nothing since only one is ever displayed. */}
-      <div className="flex items-center gap-4 border-t border-line px-[14px] py-[7px] min-[1620px]:hidden">
+      <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
         <StatusBar />
         <div className="ml-auto">
           <CharacterStrip />

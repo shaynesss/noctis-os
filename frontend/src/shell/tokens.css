@@ -42,6 +42,9 @@
 
 :root {
   --accent: var(--color-faber);
+  /* Shared so the rail's footer and the status band are the same height and
+     their dividers meet across the pane boundary. */
+  --status-band: 44px;
   color-scheme: dark;
 }
 
