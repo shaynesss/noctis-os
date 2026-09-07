@@ -156,10 +156,20 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
           {PERMISSION_LABEL[permission]}
         </button>
 
-        {/* A real text field, not a terminal line editor: click to place the
-            caret anywhere, drag to select, standard undo. One of the concrete
-            answers to "why not just use the CLI" -- and something the UI
-            should demonstrate rather than describe. */}
+        {/* A persistent prompt glyph rather than placeholder text. A
+            placeholder disappears the moment you type, so it can only ever
+            label an empty field; the prompt stays, which is what makes a
+            terminal read as a terminal. Dimmed and unselectable so it never
+            gets caught in a drag-select of the line. */}
+        <span
+          aria-hidden
+          className="shrink-0 select-none self-start font-mono text-[12.5px] leading-[21px] text-ink-faint"
+        >
+          ›
+        </span>
+
+        {/* Still a real text field: click to place the caret anywhere, drag
+            to select, standard undo -- the CLI's input cannot do any of it. */}
         <textarea
           ref={ref}
           value={value}
@@ -173,8 +183,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
           rows={1}
           spellCheck={false}
           aria-label="Message"
-          placeholder="Ask anything…"
-          className="max-h-[160px] min-h-[21px] flex-1 resize-none border-0 bg-transparent font-mono text-[12.5px] leading-[21px] text-ink outline-none placeholder:text-ink-faint"
+          className="max-h-[160px] min-h-[21px] flex-1 resize-none border-0 bg-transparent font-mono text-[12.5px] leading-[21px] text-ink outline-none"
           style={{ caretColor: accent }}
         />
 
