@@ -24,8 +24,29 @@ export default function App() {
     Object.fromEntries(Object.entries(SESSIONS).map(([id, s]) => [id, s.draft])),
   )
 
+  // The panels are not conversations. While one is open the composer binds
+  // to General rather than to whichever tab you happened to leave behind --
+  // typing into a Faber-labelled box from the Settings page would send to a
+  // session you are not looking at, which is the kind of thing you only
+  // notice after it has happened.
+  const generalTab = TABS.find((t) => t.mode === 'general')!.id
+  const inChat = view === 'chat'
+  const composerTab = inChat ? activeTab : generalTab
+
   const session = SESSIONS[activeTab]
+  const composerMode = SESSIONS[composerTab].mode
   const accent = MODE_ACCENT[session.mode]
+
+  // Sending from a panel takes you to the conversation it went to. Leaving
+  // you on Settings while a reply arrives somewhere unseen would be worse
+  // than the extra navigation.
+  const send = () => {
+    setDrafts({ ...drafts, [composerTab]: '' })
+    if (!inChat) {
+      setActiveTab(composerTab)
+      setView('chat')
+    }
+  }
 
   // Cmd+1/2/3 switches tab. Implemented rather than merely labelled: a
   // shortcut shown in the UI that does nothing is a worse lie than the
@@ -74,15 +95,15 @@ export default function App() {
 
         <BottomBar>
           <Composer
-              ref={composerRef}
-              mode={session.mode}
-              value={drafts[activeTab] ?? ''}
-              onChange={(v) => setDrafts({ ...drafts, [activeTab]: v })}
-              onSend={() => setDrafts({ ...drafts, [activeTab]: '' })}
-              permission={permission}
-              onCyclePermission={() =>
-                setPermission(PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length])
-              }
+            ref={composerRef}
+            mode={composerMode}
+            value={drafts[composerTab] ?? ''}
+            onChange={(v) => setDrafts({ ...drafts, [composerTab]: v })}
+            onSend={send}
+            permission={permission}
+            onCyclePermission={() =>
+              setPermission(PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length])
+            }
           />
         </BottomBar>
       </div>
