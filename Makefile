@@ -1,7 +1,12 @@
-.PHONY: setup dev app open-app
+.PHONY: setup bootstrap dev app open-app
 
 setup:
 	./scripts/setup.sh
+
+# setup.sh installs this repo's dependencies; bootstrap configures the
+# machine (symlinks, launchd, config dirs, tooling). Different concerns.
+bootstrap:
+	./bootstrap/bootstrap.sh
 
 dev:
 	@trap 'kill 0' EXIT; \
