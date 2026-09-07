@@ -16,17 +16,6 @@ const FOOTING: Record<Mode, { leftPct: number; topPct: number }> = {
 
 export const POLL_INTERVAL_MS = 15_000
 
-function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const deltaMs = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(deltaMs / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
-
 // Ambient world badges are intentionally minimal per Interface.md's Views
 // section: "busy/idle, count badges where relevant (due reviews for Noctua,
 // pending inbox items for Echo)" — the richer per-mode stat blocks (Vesper's
@@ -102,10 +91,6 @@ export default function World({ onSelect, activeMode }: WorldProps) {
         <span className="health-item">
           <span className={`dot dot-${health?.lint.status ?? 'unknown'}`} />
           lint <b>{(health?.lint.last_run as string | undefined) ?? '—'}</b>
-        </span>
-        <span className="health-item">
-          <span className={`dot dot-${health?.istefox.status ?? 'unknown'}`} />
-          istefox <b>{relativeTime(health?.istefox.last_write as string | undefined)}</b>
         </span>
       </div>
 

@@ -41,7 +41,6 @@ export interface HealthItem {
 
 export interface HealthStrip {
   lint: HealthItem
-  istefox: HealthItem
 }
 
 export interface HistoryEntry {

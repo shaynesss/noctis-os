@@ -14,10 +14,11 @@ Manual, machine-level checklist only. Everything else is scripted by `make setup
   ```
   Trigger a run manually to test without waiting for 03:00: `launchctl start com.noctis-os.nightshift`. Logs land in `backend/runtime/nightshift.log` (gitignored, same runtime-scratch area as the telemetry hooks). Unload with `launchctl unload ~/Library/LaunchAgents/com.noctis-os.nightshift.plist`. The plist hardcodes this machine's absolute repo path — update it (both the copy in `launchd/` and the one in `~/Library/LaunchAgents/`) if the repo ever moves.
 
-## Desktop workflow
+## Vault access
 
-- **Obsidian** — installed, `second-brain/` opened as a vault.
-- **istefox plugin** — installed and running in Obsidian. Required for the Claude Desktop / claude.ai workflow to read the vault (Desktop can't speak HTTP directly and bridges through `mcp-remote`). Not a dependency of the Noctis OS backend itself — the backend reads the vault directly off disk.
+The backend reads and writes `second-brain/` directly off disk. **No Obsidian, no istefox, no MCP dependency.** Obsidian is an optional viewer — useful for browsing the vault by hand, required by nothing.
+
+*(Removed 2026-09-07, Noctis v2 Stage 1 item 1. Obsidian's app-level config hung on 2026-08-29 for reasons unrelated to any vault file and cost most of an afternoon; it is demoted from prerequisite to convenience.)*
 
 Nothing else. Repo scaffolding, dependency installs, and env file creation are all handled by `make setup`.
 
