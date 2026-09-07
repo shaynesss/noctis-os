@@ -73,6 +73,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  // Focus the composer on mount. Without it the document has no keyboard
+  // focus until something is clicked, so window-level shortcuts appear
+  // broken until you happen to click -- which reads as the shortcut being
+  // conditional rather than the window being unfocused. Landing in the input
+  // is also where you want to be.
+  useEffect(() => {
+    composerRef.current?.focus()
+  }, [])
+
   return (
     <div className="flex h-full" style={{ ['--accent' as string]: accent }}>
       <Rail view={view} onView={setView} />
