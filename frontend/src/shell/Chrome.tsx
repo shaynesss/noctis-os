@@ -149,7 +149,16 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
       <div className="flex items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-[7px] focus-within:border-[#3a3a3a]">
         <span
           className="flex shrink-0 self-start items-center gap-[5px] rounded-[3px] border px-[7px] py-[2px] font-mono text-[10.5px] uppercase leading-[1.5] tracking-[0.06em]"
-          style={{ color: accent, borderColor: `color-mix(in srgb, ${accent} 28%, transparent)`, background: `color-mix(in srgb, ${accent} 10%, transparent)` }}
+          // Mixed toward the ground colour, not toward `transparent`.
+          // Mixing to transparent in srgb is unreliable across engines --
+          // WebKit returned near-opaque, which is what made the selection
+          // paint solid red. Mixing between two opaque colours is
+          // well-defined everywhere and gives the same result on this ground.
+          style={{
+            color: accent,
+            borderColor: `color-mix(in srgb, ${accent} 34%, var(--color-ground))`,
+            background: `color-mix(in srgb, ${accent} 11%, var(--color-ground))`,
+          }}
         >
           {MODE_LABEL[mode]}
         </span>

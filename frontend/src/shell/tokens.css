@@ -70,8 +70,14 @@ body {
   outline-offset: 1px;
 }
 
+/* Explicit alpha rather than color-mix with `transparent`. Mixing toward
+   `transparent` in srgb does not reliably yield the alpha you asked for --
+   in WebKit (which is what Tauri runs, unlike the Chrome this was developed
+   against) it came out near-opaque, so a drag-select painted the whole pane
+   solid red. A fixed low-alpha neutral is also better behaviour: selection
+   should mark a range, not recolour the interface. */
 ::selection {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: rgba(229, 51, 17, 0.22);
 }
 
 /* Scrollbars: the default light-on-dark ones are louder than anything they
