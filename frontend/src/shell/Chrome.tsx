@@ -1,0 +1,278 @@
+/* Rail, tabs, composer, status, characters — the shell around the transcript. */
+import { useEffect, useRef } from 'react'
+import { CHARACTERS, MODE_ACCENT, MODE_LABEL, STATUS, type Mode, type Tab } from './mock'
+
+/* ------------------------------------------------------------------ rail */
+const RAIL = [
+  { id: 'brief', label: 'Brief', d: 'M4 5h16M4 12h16M4 19h10' },
+  { id: 'chat', label: 'Chat', d: 'M20 15a2 2 0 0 1-2 2H8l-4 4V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z' },
+  { id: 'stats', label: 'Stats', d: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
+  { id: 'inbox', label: 'Inbox', d: 'M4 13h5l1 3h4l1-3h5M4 13l2-8h12l2 8v6H4z', badge: 3 },
+  { id: 'settings', label: 'Settings', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 14H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z' },
+] as const
+
+export function Rail({ view, onView }: { view: string; onView: (v: string) => void }) {
+  return (
+    <nav className="flex w-[186px] shrink-0 flex-col border-r border-line bg-surface py-[14px]">
+      <div className="mb-[10px] flex items-center gap-2 border-b border-line px-[14px] pb-4">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
+        <span className="font-mono text-[12px] font-bold uppercase tracking-[0.1em]">Noctis</span>
+      </div>
+
+      {RAIL.map((item) => {
+        const active = view === item.id
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onView(item.id)}
+            aria-current={active}
+            className={`flex w-full items-center gap-[10px] border-l-2 px-[14px] py-[7px] text-left text-[13px] ${
+              active
+                ? 'border-l-[var(--accent)] bg-elevated text-ink'
+                : 'border-l-transparent text-ink-dim hover:bg-elevated hover:text-ink'
+            }`}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden className="h-[15px] w-[15px] shrink-0" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 }}>
+              <path d={item.d} />
+            </svg>
+            {item.label}
+            {'badge' in item && item.badge ? (
+              <span className="ml-auto rounded-lg bg-maint px-[6px] font-mono text-[10px] font-bold text-ground">
+                {item.badge}
+              </span>
+            ) : null}
+          </button>
+        )
+      })}
+
+      <div className="mt-auto border-t border-line px-[14px] pt-[10px] font-mono text-[10px] leading-[1.8] text-ink-faint">
+        <Kbd>⌥</Kbd>
+        <Kbd>space</Kbd> summon
+        <br />
+        <Kbd>⌘1</Kbd>
+        <Kbd>2</Kbd>
+        <Kbd>3</Kbd> mode
+      </div>
+    </nav>
+  )
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="mr-[3px] rounded-[3px] border border-b-2 border-line bg-elevated px-1 font-mono text-[10px] text-ink-dim">
+      {children}
+    </kbd>
+  )
+}
+
+/* ------------------------------------------------------------------ tabs */
+export function TabBar({
+  tabs,
+  active,
+  onSelect,
+}: {
+  tabs: Tab[]
+  active: string
+  onSelect: (id: string) => void
+}) {
+  return (
+    <div role="tablist" className="flex h-[34px] shrink-0 border-b border-line bg-surface">
+      {tabs.map((t) => {
+        const selected = t.id === active
+        return (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={selected}
+            onClick={() => onSelect(t.id)}
+            className={`relative flex items-center gap-[7px] border-r border-line px-[14px] font-mono text-[11.5px] ${
+              selected ? 'bg-ground text-ink' : 'text-ink-faint hover:text-ink-dim'
+            }`}
+          >
+            {selected && (
+              <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: MODE_ACCENT[t.mode] }} />
+            )}
+            {t.pinned && <span className="text-[9px] text-ink-faint">◆</span>}
+            {!t.pinned && (
+              <span className="h-[7px] w-[7px] rounded-[1px]" style={{ background: MODE_ACCENT[t.mode] }} />
+            )}
+            {t.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------- composer */
+export function Composer({
+  mode,
+  value,
+  onChange,
+}: {
+  mode: Mode
+  value: string
+  onChange: (v: string) => void
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  // Grow to a cap, then scroll. Done here rather than with CSS because a
+  // textarea cannot size to its content without measuring it.
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+  }, [value])
+
+  const accent = MODE_ACCENT[mode]
+  return (
+    <div className="shrink-0 border-t border-line bg-surface px-[14px] pb-2 pt-[9px]">
+      <div className="flex items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-2 focus-within:border-[#3a3a3a]">
+        <span
+          className="mt-px flex shrink-0 items-center gap-[5px] rounded-[3px] border px-[7px] py-[2px] font-mono text-[10.5px] uppercase tracking-[0.06em]"
+          style={{ color: accent, borderColor: `color-mix(in srgb, ${accent} 28%, transparent)`, background: `color-mix(in srgb, ${accent} 10%, transparent)` }}
+        >
+          {MODE_LABEL[mode]}
+        </span>
+
+        {/* A real text field, not a terminal line editor: click to place the
+            caret anywhere, drag to select, standard undo. One of the concrete
+            answers to "why not just use the CLI". */}
+        <textarea
+          ref={ref}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={2}
+          spellCheck={false}
+          aria-label="Message"
+          placeholder="Ask anything…"
+          className="max-h-[120px] min-h-[40px] flex-1 resize-none border-0 bg-transparent py-px font-mono text-[12.5px] leading-[1.65] text-ink outline-none placeholder:text-ink-faint"
+          style={{ caretColor: accent }}
+        />
+
+        <span className="mt-auto flex shrink-0 items-center gap-2">
+          <IconButton title="Attach" d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8" />
+          <IconButton title="Send" d="M4 12h15M13 6l6 6-6 6" />
+        </span>
+      </div>
+
+      <div className="flex items-center gap-[14px] px-[2px] pt-[6px] font-mono text-[10px] text-ink-faint">
+        <span>click anywhere to place the caret · drag to select</span>
+        <span className="ml-auto">
+          <Kbd>↵</Kbd> send <Kbd>⇧↵</Kbd> newline <Kbd>⌘K</Kbd> commands
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function IconButton({ title, d }: { title: string; d: string }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      className="grid h-[22px] w-6 place-items-center rounded-[3px] border border-line text-ink-faint hover:border-[#3a3a3a] hover:text-ink"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden className="h-3 w-3" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.8 }}>
+        <path d={d} />
+      </svg>
+    </button>
+  )
+}
+
+/* ---------------------------------------------------- status + characters */
+function Meter({ pct, tone = 'var(--color-good)' }: { pct: number; tone?: string }) {
+  return (
+    <span className="mx-[3px] inline-block h-1 w-[30px] overflow-hidden rounded-sm bg-line align-[1px]">
+      <span className="block h-full" style={{ width: `${pct}%`, background: tone }} />
+    </span>
+  )
+}
+
+export function StatusBar() {
+  const s = STATUS
+  return (
+    <div className="flex shrink-0 items-center gap-4 border-t border-line bg-elevated px-3 pb-[6px] pt-[5px] font-mono text-[10.5px]">
+      <div className="flex min-w-0 flex-1 flex-col gap-[2px] text-ink-faint">
+        <div className="flex flex-wrap items-center">
+          <Seg className="text-ink-dim">{s.cwd}</Seg>
+          <Seg className="text-ink-dim">⎇ {s.branch}</Seg>
+          <Seg>{s.model}</Seg>
+          <Seg last>{s.clock}</Seg>
+        </div>
+        <div className="flex flex-wrap items-center">
+          <Seg className="text-noctua">
+            ctx <Meter pct={s.contextPct} tone="var(--color-noctua)" /> {s.contextPct}%
+          </Seg>
+          <Seg>
+            5h <Meter pct={s.fiveHourPct} /> {s.fiveHourPct}%{' '}
+            <span className="text-ink-faint">· resets {s.fiveHourResets}</span>
+          </Seg>
+          <Seg>
+            7d <Meter pct={s.sevenDayPct} /> {s.sevenDayPct}%
+          </Seg>
+          <Seg last>
+            {s.sessionsLive}/{s.sessionsMax} sessions
+          </Seg>
+        </div>
+        <div className="flex items-center gap-[6px] text-noctua">
+          <span>▶▶ auto mode on</span>
+          <span className="text-ink-faint">(⇧⇥ to cycle) · ← for agents</span>
+        </div>
+        <div className="flex items-center gap-[7px]">
+          {s.artifacts.map((a) => (
+            <span key={a} className="rounded-[3px] border border-line px-[5px] text-ink-dim">
+              {a}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <CharacterStrip />
+    </div>
+  )
+}
+
+function Seg({ children, last, className = '' }: { children: React.ReactNode; last?: boolean; className?: string }) {
+  return (
+    <span className={`whitespace-nowrap ${last ? '' : 'mr-[9px] border-r border-line pr-[9px]'} ${className}`}>
+      {children}
+    </span>
+  )
+}
+
+/* The characters sit here rather than in a bar of their own: with the pixel
+ * world retired they are status indicators, and a full-width strip cost
+ * ~54px of permanent vertical space to say what a dot can. */
+function CharacterStrip() {
+  return (
+    <div className="ml-auto flex shrink-0 items-center gap-[10px] self-stretch border-l border-line pl-[14px]">
+      {CHARACTERS.map((c) => {
+        const accent = MODE_ACCENT[c.mode]
+        const live = c.state === 'working'
+        return (
+          <button
+            key={c.mode}
+            type="button"
+            title={`${MODE_LABEL[c.mode]} · ${c.state}`}
+            className="group relative grid h-6 w-6 place-items-center rounded-[3px] hover:bg-surface"
+          >
+            <span
+              className="font-mono text-[11px] font-bold"
+              style={{ color: live ? accent : 'var(--color-ink-faint)', opacity: live ? 1 : 0.55 }}
+            >
+              {MODE_LABEL[c.mode][0]}
+            </span>
+            <span
+              className={`absolute -bottom-px -right-px h-[6px] w-[6px] rounded-full border-[1.5px] border-elevated ${live ? 'animate-pulse' : ''}`}
+              style={{ background: live ? accent : 'var(--color-ink-faint)' }}
+            />
+          </button>
+        )
+      })}
+    </div>
+  )
+}

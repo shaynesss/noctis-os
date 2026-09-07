@@ -1,0 +1,103 @@
+/* Noctis v2 design tokens — Stage 2 item 3.
+ *
+ * From the Design Brief locked 2026-09-07. The direction is "an IDE, not a
+ * world": v1's pixel scene is retired, so the ground goes neutral near-black
+ * (Cursor-dark rather than VS Code's lighter grey) and the character accents
+ * become the only chromatic events on screen.
+ *
+ * TODO(fonts): Cascadia Code is not installed on this machine and is not on
+ * Google Fonts. It is SIL OFL, so vendor the woff2 into public/fonts and add
+ * an @font-face here — a shipping app cannot depend on a font the user may
+ * not have. Until then the chain falls through to Menlo, which is close
+ * enough to develop against but is not the locked choice.
+ */
+
+@import "tailwindcss";
+
+@theme {
+  /* ground — deliberately unsaturated so accents are the only colour */
+  --color-ground: #0f0f0f;
+  --color-surface: #161616;
+  --color-elevated: #1c1c1c;
+  --color-line: #2a2a2a;
+  --color-line-soft: #212121;
+
+  /* text — #cccccc is VS Code Dark Modern's actual foreground */
+  --color-ink: #cccccc;
+  --color-ink-dim: #8a8a8a;
+  --color-ink-faint: #6a6a6a;
+
+  /* character accents — unchanged from v1, one --accent swapped per context */
+  --color-faber: #e53311;
+  --color-noctua: #eca207;
+  --color-vesper: #953ead;
+  --color-maint: #da5b00;
+
+  /* semantic, kept distinct from the accents */
+  --color-good: #3fa463;
+
+  --font-mono: "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+:root {
+  --accent: var(--color-faber);
+  color-scheme: dark;
+}
+
+/* The app is a single-purpose window, not a document: it never scrolls as a
+ * whole, only its panes do. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Focus has to stay visible on a surface this dark, and the default ring
+ * disappears against #0f0f0f. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Scrollbars: the default light-on-dark ones are louder than anything they
+ * sit beside. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border: 3px solid var(--color-ground);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
