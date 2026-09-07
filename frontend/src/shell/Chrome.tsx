@@ -228,24 +228,25 @@ export function StatusBar() {
   const s = STATUS
   return (
     <div className="flex min-w-0 flex-col gap-[2px] font-mono text-[10.5px] text-ink-faint">
-      <div className="flex flex-wrap items-center">
-        <Seg className="text-ink-dim">{s.cwd}</Seg>
+      {/* Each row stays on one line. The cwd is the only variable-length
+          item, so it is the one allowed to truncate -- everything else is
+          short and fixed, and wrapping a status bar makes it read as
+          content rather than furniture. */}
+      <div className="flex min-w-0 items-center whitespace-nowrap">
+        <Seg className="min-w-0 truncate text-ink-dim">{s.cwd}</Seg>
         <Seg className="text-ink-dim">⎇ {s.branch}</Seg>
         <Seg>{s.model}</Seg>
         <Seg last>{s.clock}</Seg>
       </div>
-      <div className="flex flex-wrap items-center">
+      <div className="flex items-center whitespace-nowrap">
         <Seg className="text-noctua">
           ctx <Meter pct={s.contextPct} tone="var(--color-noctua)" /> {s.contextPct}%
         </Seg>
         <Seg>
           5h <Meter pct={s.fiveHourPct} /> {s.fiveHourPct}%
         </Seg>
-        <Seg>
-          7d <Meter pct={s.sevenDayPct} /> {s.sevenDayPct}%
-        </Seg>
         <Seg last>
-          {s.sessionsLive}/{s.sessionsMax}
+          7d <Meter pct={s.sevenDayPct} /> {s.sevenDayPct}%
         </Seg>
       </div>
     </div>
@@ -278,7 +279,7 @@ export function BottomBar({ children }: { children: React.ReactNode }) {
 
 function Seg({ children, last, className = '' }: { children: React.ReactNode; last?: boolean; className?: string }) {
   return (
-    <span className={`whitespace-nowrap ${last ? '' : 'mr-[9px] border-r border-line pr-[9px]'} ${className}`}>
+    <span className={`${last ? '' : 'mr-[9px] shrink-0 border-r border-line pr-[9px]'} ${className}`}>
       {children}
     </span>
   )

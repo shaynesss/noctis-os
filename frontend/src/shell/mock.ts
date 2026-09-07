@@ -163,8 +163,6 @@ export const STATUS = {
   fiveHourPct: 20,
   fiveHourResets: '3h44m',
   sevenDayPct: 24,
-  sessionsLive: 2,
-  sessionsMax: 2,
 }
 
 export const USAGE = {
