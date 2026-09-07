@@ -75,20 +75,24 @@ def _draft_flagged_job_summary(item: SlackItem, vault_path: Path, inbox_path: Pa
 
 
 def _draft_distillation(item: SlackItem, vault_path: Path, inbox_path: Path) -> None:
-    """Settings' slack surface genuinely needs judgment (identify a
-    recurring pattern, draft a diff candidate) -- borrows settings' own
+    """Maintenance's slack surface genuinely needs judgment (identify a
+    recurring pattern, draft a diff candidate) -- borrows maintenance's own
     distiller subagent at reduced permission: read-only over the vault,
     write scoped to exactly this one inbox file, no bash, no network.
+
+    Methodology and agent definition moved to maintenance/ on 2026-09-07
+    (Noctis v2 Stage 1 item 3). State -- the inbox, its index, the archive --
+    deliberately did not move yet, so every other path here is unchanged.
     """
-    methodology = vault_io.read_file("modes/nightshift/nightshift.md")
-    agent_def = vault_io.read_file("modes/settings/agents/distiller.md")
+    methodology = vault_io.read_file("maintenance/schedule.md")
+    agent_def = vault_io.read_file("maintenance/agents/distiller.md")
     readme = vault_io.read_file("modes/nightshift/inbox/README.md")
 
     prompt = f"""{methodology}
 
 ---
 
-You are nightshift's Advance step for this run, borrowing settings mode's
+You are the maintenance sweep's Advance step for this run, borrowing the
 distiller subagent at reduced permission (drafts only, never writes to a
 live mode file):
 
