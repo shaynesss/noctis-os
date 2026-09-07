@@ -9,6 +9,7 @@
  * "move the new thing, leave the old until it can go cleanly" pattern the
  * mode merge used. */
 import { useState } from 'react'
+import { Activity } from './Activity'
 import { Composer, Rail, StatusBar, TabBar } from './Chrome'
 import { Transcript } from './Transcript'
 import { MODE_ACCENT, SESSIONS, TABS, USAGE } from './mock'
@@ -106,6 +107,8 @@ function Stats() {
             </div>
           ))}
         </div>
+
+        <Activity />
 
         <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           Lifetime tokens

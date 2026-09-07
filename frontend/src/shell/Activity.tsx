@@ -1,0 +1,134 @@
+/* Contribution grid — Stage 2 item 3.
+ *
+ * One general grid, not per-mode. The mode split is already legible from the
+ * tabs and the character strip, and a single grid answers the only question
+ * this panel is really for: *am I actually using this?* — which is v1's
+ * failure mode made visible.
+ *
+ * Ramp is Faber red rather than GitHub green: the Design Brief says the
+ * character accents are the only chromatic events on screen, and most cells
+ * sit near-black, so the grid reads as texture with occasional warm hits
+ * rather than a slab of colour.
+ *
+ * Data will come from `store.daily_activity()` (sessions per day). Mocked
+ * here per dev.md §3.0 — screens before wiring. */
+
+const LEVELS = ['#171717', '#4a1710', '#8a2410', '#c22d11', '#e53311']
+const WEEKS = 53
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+interface Cell {
+  date: Date
+  count: number
+  future: boolean
+}
+
+/** Deterministic sample data — a fixed seed so the grid does not reshuffle on
+ *  every render, which would make a layout problem look like a data problem. */
+function buildGrid(today: Date): Cell[][] {
+  let seed = 20260907
+  const rnd = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff
+    return seed / 0x7fffffff
+  }
+
+  const start = new Date(today)
+  start.setDate(start.getDate() - 364 - today.getDay())
+
+  const weeks: Cell[][] = []
+  for (let w = 0; w < WEEKS; w++) {
+    const col: Cell[] = []
+    const recency = w / WEEKS
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(start)
+      date.setDate(date.getDate() + w * 7 + d)
+      const weekday = d > 0 && d < 6 ? 1 : 0.35
+      const burst = rnd() < 0.1 ? 2.2 : 1
+      let count = 0
+      if (date <= today && rnd() < 0.1 + recency * 0.42 * weekday) {
+        count = Math.max(1, Math.round(rnd() * 4 * recency * weekday * burst))
+      }
+      col.push({ date, count, future: date > today })
+    }
+    weeks.push(col)
+  }
+  return weeks
+}
+
+function level(n: number): string {
+  if (n === 0) return LEVELS[0]
+  if (n < 2) return LEVELS[1]
+  if (n < 4) return LEVELS[2]
+  if (n < 6) return LEVELS[3]
+  return LEVELS[4]
+}
+
+export function Activity() {
+  const today = new Date(2026, 8, 7)
+  const weeks = buildGrid(today)
+  const total = weeks.flat().reduce((n, c) => n + c.count, 0)
+
+  // A month label sits above the first week that begins that month, which is
+  // the only placement that stays aligned as the year rolls.
+  const monthLabel = (w: number): string => {
+    const first = weeks[w][0].date
+    if (first.getDate() > 7) return ''
+    if (w > 0 && weeks[w - 1][0].date.getMonth() === first.getMonth()) return ''
+    return MONTHS[first.getMonth()]
+  }
+
+  return (
+    <>
+      <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+        Activity
+      </h2>
+      <div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
+        <div className="mb-[14px] flex items-baseline gap-2">
+          <b className="text-[14px] font-semibold text-ink tabular-nums">{total}</b>
+          <span className="font-mono text-[10.5px] text-ink-faint">sessions in the last year</span>
+        </div>
+
+        {/* Wide content scrolls inside its own container so the app body never
+            scrolls sideways. */}
+        <div className="overflow-x-auto pb-[2px]">
+          <div className="inline-grid grid-cols-[auto_1fr] gap-x-[7px] gap-y-[5px] font-mono text-[9px] text-ink-faint">
+            <div />
+            <div className="grid h-3 auto-cols-[13px] grid-flow-col">
+              {weeks.map((_, w) => (
+                <span key={w} className="whitespace-nowrap">
+                  {monthLabel(w)}
+                </span>
+              ))}
+            </div>
+
+            <div className="grid grid-rows-[repeat(7,13px)] items-center pr-px text-right">
+              {['', 'Mon', '', 'Wed', '', 'Fri', ''].map((d, i) => (
+                <span key={i}>{d}</span>
+              ))}
+            </div>
+            <div className="grid auto-cols-[13px] grid-flow-col grid-rows-[repeat(7,13px)]">
+              {weeks.flatMap((col, w) =>
+                col.map((c, d) => (
+                  <div
+                    key={`${w}-${d}`}
+                    title={`${c.count || 'No'} session${c.count === 1 ? '' : 's'} · ${c.date.toDateString().slice(4)}`}
+                    className="h-[10px] w-[10px] rounded-[2px]"
+                    style={{ background: level(c.count), visibility: c.future ? 'hidden' : undefined }}
+                  />
+                )),
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-[11px] flex items-center justify-end gap-1 font-mono text-[9.5px] text-ink-faint">
+          Less
+          {LEVELS.map((l) => (
+            <span key={l} className="inline-block h-[10px] w-[10px] rounded-[2px]" style={{ background: l }} />
+          ))}
+          More
+        </div>
+      </div>
+    </>
+  )
+}
