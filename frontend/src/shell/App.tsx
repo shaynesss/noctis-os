@@ -98,7 +98,7 @@ function Pane({ view }: { view: string }) {
   if (view === 'stats') return <Stats />
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="max-w-[760px] px-8 pt-7">
+      <div className="mx-auto max-w-[760px] px-8 pt-7">
         <h2 className="m-0 mb-[14px] font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           {view}
         </h2>
@@ -114,7 +114,7 @@ function Stats() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="max-w-[760px] px-8 pb-8 pt-7">
+      <div className="mx-auto max-w-[760px] px-8 pb-8 pt-7">
         <h2 className="m-0 mb-[14px] font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           Usage
         </h2>

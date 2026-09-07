@@ -129,9 +129,12 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   }, [value])
 
   const accent = MODE_ACCENT[mode]
+  // Constrained and centred to the same measure as the transcript. A centred
+  // column above a full-bleed composer is what made the layout read as
+  // accidental -- the dead space was not the problem, the disagreement was.
   return (
     <div className="shrink-0 border-t border-line bg-surface px-[14px] pb-2 pt-[9px]">
-      <div className="flex items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-2 focus-within:border-[#3a3a3a]">
+      <div className="mx-auto flex max-w-[792px] items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-2 focus-within:border-[#3a3a3a]">
         <span
           className="mt-px flex shrink-0 items-center gap-[5px] rounded-[3px] border px-[7px] py-[2px] font-mono text-[10.5px] uppercase tracking-[0.06em]"
           style={{ color: accent, borderColor: `color-mix(in srgb, ${accent} 28%, transparent)`, background: `color-mix(in srgb, ${accent} 10%, transparent)` }}
