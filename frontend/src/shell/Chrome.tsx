@@ -106,7 +106,7 @@ export function TabBar({
   onSelect: (id: string) => void
 }) {
   return (
-    <div role="tablist" className="flex h-[34px] shrink-0 border-b border-line bg-surface">
+    <div role="tablist" className="flex h-[34px] shrink-0 items-stretch border-b border-line bg-surface">
       {tabs.map((t, i) => {
         const selected = t.id === active
         return (
@@ -115,7 +115,7 @@ export function TabBar({
             role="tab"
             aria-selected={selected}
             onClick={() => onSelect(t.id)}
-            className={`relative flex items-center gap-[7px] border-r border-line px-[14px] font-mono text-[11.5px] ${
+            className={`relative flex h-full items-center gap-[7px] border-r border-line px-[14px] font-mono text-[11.5px] ${
               selected ? 'bg-ground text-ink' : 'text-ink-faint hover:text-ink-dim'
             }`}
           >
@@ -315,29 +315,31 @@ export function StatusBar() {
  * every width should move when it does not fit, not vanish. */
 export function BottomBar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="shrink-0 border-t border-line bg-surface">
-      {/* The rail's old footer, now the bottom bar's left cell. Full-width
-          bands mean the rule under the composer is the same rule that runs
-          under the rail -- alignment by structure rather than by matching
-          two numbers and hoping they stay matched. */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-[14px] pt-[10px] pb-[10px] min-[1620px]:pb-[10px]">
-        <div className="hidden min-w-0 justify-self-start overflow-hidden min-[1620px]:flex">
-          <StatusBar />
-        </div>
-        {children}
-        <div className="hidden justify-self-end min-[1620px]:flex">
-          <CharacterStrip />
-        </div>
+    <div className="flex shrink-0 border-t border-line bg-surface">
+      {/* Rail-width cell, always present. It was previously only rendered in
+          the narrow layout, so the permission hint vanished on a wide window
+          -- the same "hidden rather than moved" mistake as before. */}
+      <div className="flex w-[160px] shrink-0 items-center gap-[7px] border-r border-line px-[12px] font-mono text-[11px] text-ink-faint">
+        <Kbd>⇧⇥</Kbd> permission
       </div>
 
-      {/* Same components, second position. Rendered twice rather than moved
-          with JS: a resize listener would reflow on every drag frame, and the
-          duplicate costs nothing since only one is ever displayed. */}
-      <div className="flex h-[var(--status-band)] items-center border-t border-line min-[1620px]:hidden">
-        <div className="flex w-[160px] shrink-0 items-center gap-[7px] border-r border-line px-[12px] font-mono text-[11px] text-ink-faint">
-          <Kbd>⇧⇥</Kbd> permission
+      {/* Everything else lives inside the main pane's width, not the
+          window's. Centring the composer across the whole window put it out
+          of line with the transcript above, which is centred in the pane. */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-[14px] py-[10px]">
+          <div className="hidden min-w-0 justify-self-start overflow-hidden min-[1620px]:flex">
+            <StatusBar />
+          </div>
+          {children}
+          <div className="hidden justify-self-end min-[1620px]:flex">
+            <CharacterStrip />
+          </div>
         </div>
-        <div className="flex min-w-0 flex-1 items-center gap-4 px-[14px]">
+
+        {/* Same components, second position -- rendered twice rather than
+            moved with JS, since only one is ever displayed. */}
+        <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
           <StatusBar />
           <div className="ml-auto">
             <CharacterStrip />
