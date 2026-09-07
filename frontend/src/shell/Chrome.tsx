@@ -92,10 +92,18 @@ export function TitleStrip() {
 }
 
 /* ------------------------------------------------------------------ tabs */
-/* Each tab shows the key that reaches it, rather than a legend elsewhere
- * listing them. A shortcut printed on the thing it operates is discovered
- * while you use it; a legend has to be remembered and read, which is the
- * same "UI explaining itself" pattern as placeholder instructions. */
+/* Tabs as pills, centred on the same axis as the transcript.
+ *
+ * Squared tabs with dividers are filing-cabinet furniture -- a different
+ * metaphor from the rounded tinted chips already in the composer. Pills make
+ * the two read as one language, and the selected tab carries its mode's
+ * accent as a tint rather than a rule, which is the same treatment the mode
+ * chip gets one band down.
+ *
+ * Centred rather than left-aligned so the row sits on the transcript's axis:
+ * both centre within the pane, so the tabs sit above the text they belong to
+ * instead of hugging a rail edge they have nothing to do with.
+ */
 export function TabBar({
   tabs,
   active,
@@ -106,29 +114,45 @@ export function TabBar({
   onSelect: (id: string) => void
 }) {
   return (
-    <div role="tablist" className="flex h-[34px] shrink-0 items-stretch border-b border-line bg-surface">
+    <div role="tablist" className="flex h-[42px] shrink-0 items-center justify-center gap-[6px] border-b border-line bg-surface px-3">
       {tabs.map((t, i) => {
         const selected = t.id === active
+        const accent = MODE_ACCENT[t.mode]
         return (
           <button
             key={t.id}
             role="tab"
             aria-selected={selected}
             onClick={() => onSelect(t.id)}
-            className={`relative flex h-full items-center gap-[7px] border-r border-line px-[14px] font-mono text-[11.5px] ${
-              selected ? 'bg-ground text-ink' : 'text-ink-faint hover:text-ink-dim'
+            className={`flex items-center gap-[7px] rounded-[5px] border px-[11px] py-[5px] font-mono text-[11.5px] transition-colors ${
+              selected ? 'border-transparent' : 'border-transparent text-ink-faint hover:bg-elevated hover:text-ink-dim'
             }`}
+            style={
+              selected
+                ? {
+                    color: accent,
+                    background: `color-mix(in srgb, ${accent} 12%, var(--color-surface))`,
+                    borderColor: `color-mix(in srgb, ${accent} 32%, var(--color-surface))`,
+                  }
+                : undefined
+            }
           >
-            {selected && (
-              <span className="absolute inset-x-0 top-0 h-[2px]" style={{ background: MODE_ACCENT[t.mode] }} />
-            )}
-            {t.pinned && <span className="text-[9px] text-ink-faint">◆</span>}
-            {!t.pinned && (
-              <span className="h-[7px] w-[7px] rounded-[1px]" style={{ background: MODE_ACCENT[t.mode] }} />
+            {t.pinned ? (
+              <span className="text-[9px] opacity-70">◆</span>
+            ) : (
+              <span
+                className="h-[7px] w-[7px] rounded-[1px]"
+                style={{ background: accent, opacity: selected ? 1 : 0.5 }}
+              />
             )}
             {t.label}
             {i < 3 && (
-              <span className="ml-[3px] rounded-[2px] border border-line px-[3px] text-[9px] leading-[13px] text-ink-faint">
+              <span
+                className={`ml-[3px] rounded-[2px] px-[3px] text-[9px] leading-[13px] ${
+                  selected ? 'text-current opacity-60' : 'text-ink-faint'
+                }`}
+                style={{ border: '1px solid var(--color-line)' }}
+              >
                 ⌘{i + 1}
               </span>
             )}
