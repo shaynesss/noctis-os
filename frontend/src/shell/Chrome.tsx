@@ -160,14 +160,6 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
         </span>
       </div>
 
-      {/* Only shortcuts that actually work are shown. Cmd+K has no command
-          palette yet and Opt+Space needs the desktop shell (item 4); listing
-          either would be a claim the app cannot honour. */}
-      <div className="flex items-center justify-end px-[2px] pt-[6px] font-mono text-[10px] text-ink-faint">
-        <span>
-          <Kbd>↵</Kbd> send <Kbd>⇧↵</Kbd> newline <Kbd>⌘1–3</Kbd> tabs
-        </span>
-      </div>
     </div>
   )
 })
@@ -197,6 +189,17 @@ function Meter({ pct, tone = 'var(--color-good)' }: { pct: number; tone?: string
   )
 }
 
+/* Every element here is sourced from something real: cwd and model from
+ * SessionStart, the two windows from rate_limit_event, sessions from the
+ * manager, branch from git. Context % is the one exception -- it is not in
+ * stream-json and is computed from token totals.
+ *
+ * Two rows were removed after review: an "auto mode on (shift-tab to cycle)"
+ * line and artifact chips, both copied from a Claude Code terminal
+ * screenshot. Neither has any meaning here -- there is no permission-mode
+ * cycling in headless -p, and Noctis produces no artifacts -- and neither
+ * appears in the spec's status-line list. A status bar that reports things
+ * the app cannot know is worse than a shorter one. */
 export function StatusBar() {
   const s = STATUS
   return (
@@ -222,17 +225,6 @@ export function StatusBar() {
           <Seg last>
             {s.sessionsLive}/{s.sessionsMax} sessions
           </Seg>
-        </div>
-        <div className="flex items-center gap-[6px] text-noctua">
-          <span>▶▶ auto mode on</span>
-          <span className="text-ink-faint">(⇧⇥ to cycle) · ← for agents</span>
-        </div>
-        <div className="flex items-center gap-[7px]">
-          {s.artifacts.map((a) => (
-            <span key={a} className="rounded-[3px] border border-line px-[5px] text-ink-dim">
-              {a}
-            </span>
-          ))}
         </div>
       </div>
 

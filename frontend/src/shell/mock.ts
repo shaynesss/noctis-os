@@ -140,8 +140,6 @@ export const STATUS = {
   sevenDayPct: 24,
   sessionsLive: 2,
   sessionsMax: 2,
-  autoMode: true,
-  artifacts: ['noctis-v2-spec', 'noctis-mockup'],
 }
 
 export const USAGE = {
