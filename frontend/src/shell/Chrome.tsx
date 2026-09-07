@@ -49,26 +49,16 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
         )
       })}
 
-      <div className="mt-auto border-t border-line px-[12px] pt-[10px] font-mono text-[10px] leading-[1.8] text-ink-faint">
-        <Kbd>⌘1</Kbd>
-        <Kbd>2</Kbd>
-        <Kbd>3</Kbd> switch tab
-        <br />
-        <Kbd>⇧⇥</Kbd> cycle permission
-      </div>
+
     </nav>
   )
 }
 
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="mr-[3px] rounded-[3px] border border-b-2 border-line bg-elevated px-1 font-mono text-[10px] text-ink-dim">
-      {children}
-    </kbd>
-  )
-}
-
 /* ------------------------------------------------------------------ tabs */
+/* Each tab shows the key that reaches it, rather than a legend elsewhere
+ * listing them. A shortcut printed on the thing it operates is discovered
+ * while you use it; a legend has to be remembered and read, which is the
+ * same "UI explaining itself" pattern as placeholder instructions. */
 export function TabBar({
   tabs,
   active,
@@ -80,7 +70,7 @@ export function TabBar({
 }) {
   return (
     <div role="tablist" className="flex h-[34px] shrink-0 border-b border-line bg-surface">
-      {tabs.map((t) => {
+      {tabs.map((t, i) => {
         const selected = t.id === active
         return (
           <button
@@ -100,6 +90,11 @@ export function TabBar({
               <span className="h-[7px] w-[7px] rounded-[1px]" style={{ background: MODE_ACCENT[t.mode] }} />
             )}
             {t.label}
+            {i < 3 && (
+              <span className="ml-[3px] rounded-[2px] border border-line px-[3px] text-[9px] leading-[13px] text-ink-faint">
+                ⌘{i + 1}
+              </span>
+            )}
           </button>
         )
       })}
@@ -154,6 +149,9 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
         >
           <span className="text-[8px]">▶▶</span>
           {PERMISSION_LABEL[permission]}
+          <span className="ml-[2px] rounded-[2px] border border-line px-[3px] text-[9px] leading-[13px] text-ink-faint">
+            ⇧⇥
+          </span>
         </button>
 
         {/* A persistent prompt glyph rather than placeholder text. A
