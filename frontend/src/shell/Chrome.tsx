@@ -253,31 +253,37 @@ export function StatusBar() {
   )
 }
 
-/* The bottom bar: status left, composer centred, characters right.
+/* The bottom bar adapts rather than hides.
  *
- * Centring the composer left dead space on both sides. Rather than narrow
- * the column or stretch the input past a readable measure, the surrounding
- * furniture moves into that space -- which also removes the separate status
- * row entirely, so the bottom chrome costs one band instead of two.
+ * Wide enough (past 1620px: 160 rail + 776 composer leaves ~340 a side) and
+ * the status and characters sit either side of the input, costing one band.
+ * Narrower, they drop to their own row beneath it, costing two.
  *
- * A 1fr/auto/1fr grid keeps the composer centred regardless of how wide the
- * side content is; the sides would otherwise push it off-centre as the cwd
- * changed length.
- *
- * The sides appear only past 1620px, which is where they actually fit:
- * 160 rail + 776 composer leaves ~340 a side there. An earlier xl (1280)
- * breakpoint revealed them with ~160px each, so they ran under the input.
- * overflow-hidden on the left cell is the belt-and-braces -- the status can
- * clip at its own boundary, but must never overlap the thing you type in. */
+ * The earlier version simply hid them below the breakpoint, which traded an
+ * overlap for an absence -- worse, because the quota numbers are the ones
+ * that govern whether to start another session. Information that matters at
+ * every width should move when it does not fit, not vanish. */
 export function BottomBar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-t border-line bg-surface px-[14px] py-[10px]">
-      <div className="hidden min-w-0 overflow-hidden justify-self-start min-[1620px]:flex">
-        <StatusBar />
+    <div className="shrink-0 border-t border-line bg-surface">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-[14px] pt-[10px] pb-[10px] min-[1620px]:pb-[10px]">
+        <div className="hidden min-w-0 justify-self-start overflow-hidden min-[1620px]:flex">
+          <StatusBar />
+        </div>
+        {children}
+        <div className="hidden justify-self-end min-[1620px]:flex">
+          <CharacterStrip />
+        </div>
       </div>
-      {children}
-      <div className="hidden justify-self-end min-[1620px]:flex">
-        <CharacterStrip />
+
+      {/* Same components, second position. Rendered twice rather than moved
+          with JS: a resize listener would reflow on every drag frame, and the
+          duplicate costs nothing since only one is ever displayed. */}
+      <div className="flex items-center gap-4 border-t border-line px-[14px] py-[7px] min-[1620px]:hidden">
+        <StatusBar />
+        <div className="ml-auto">
+          <CharacterStrip />
+        </div>
       </div>
     </div>
   )
