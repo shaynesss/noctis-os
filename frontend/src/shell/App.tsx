@@ -12,13 +12,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { Composer, Rail, StatusBar, TabBar } from './Chrome'
 import { Transcript } from './Transcript'
-import { MODE_ACCENT, SESSIONS, TABS, USAGE } from './mock'
+import { MODE_ACCENT, PERMISSION_CYCLE, SESSIONS, TABS, USAGE, type Permission } from './mock'
 import './tokens.css'
 
 export default function App() {
   const [view, setView] = useState('chat')
   const [activeTab, setActiveTab] = useState('t1')
   const composerRef = useRef<HTMLTextAreaElement>(null)
+  const [permission, setPermission] = useState<Permission>('manual')
   const [drafts, setDrafts] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(SESSIONS).map(([id, s]) => [id, s.draft])),
   )
@@ -31,6 +32,14 @@ export default function App() {
   // explanatory text it sits next to.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Shift+Tab cycles permission, the affordance carried over from the
+      // CLI's TUI. Wrapping past the end returns to `plan`, so the cycle
+      // never strands you at the permissive end.
+      if (e.key === 'Tab' && e.shiftKey && !e.metaKey) {
+        e.preventDefault()
+        setPermission((p) => PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(p) + 1) % PERMISSION_CYCLE.length])
+        return
+      }
       if (!e.metaKey || e.shiftKey || e.altKey) return
       const i = ['1', '2', '3'].indexOf(e.key)
       if (i === -1 || !TABS[i]) return
@@ -66,6 +75,10 @@ export default function App() {
               value={drafts[activeTab] ?? ''}
               onChange={(v) => setDrafts({ ...drafts, [activeTab]: v })}
               onSend={() => setDrafts({ ...drafts, [activeTab]: '' })}
+              permission={permission}
+              onCyclePermission={() =>
+                setPermission(PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length])
+              }
             />
           </>
         ) : (

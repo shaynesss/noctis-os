@@ -178,3 +178,34 @@ def test_manager_keeps_the_latest_limits_for_the_status_line():
     m = asyncio.run(go())
     assert m.limits is not None
     assert 0.0 <= m.limits.five_hour_used <= 1.0
+
+
+# ------------------------------------------------------- permission modes
+
+def test_permission_mode_reaches_the_command_line():
+    cmd = build_command(SessionSpec(mode="faber", prompt="x", permission_mode="plan"))
+    assert cmd[cmd.index("--permission-mode") + 1] == "plan"
+
+
+def test_default_permission_mode_asks():
+    """Defaulting to anything more permissive would make the safest state the
+    one you have to opt into."""
+    assert SessionSpec(mode="faber", prompt="x").permission_mode == "manual"
+
+
+def test_bypass_is_not_in_the_cycle():
+    """It stays a settable flag, but must not be reachable by tapping a key."""
+    from orchestrator.driver import PERMISSION_CYCLE
+    assert "bypassPermissions" not in PERMISSION_CYCLE
+    assert PERMISSION_CYCLE[0] == "plan"
+
+
+def test_resume_preserves_the_permission_mode():
+    async def go():
+        m = SessionManager(runner=_fake_runner)
+        spec = SessionSpec(mode="faber", prompt="x", permission_mode="acceptEdits")
+        async for h, _ in m.start(spec):
+            handle = h
+        return m.resume_spec(handle, "more")
+
+    assert asyncio.run(go()).permission_mode == "acceptEdits"

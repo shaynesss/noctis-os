@@ -1,6 +1,9 @@
 /* Rail, tabs, composer, status, characters — the shell around the transcript. */
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { CHARACTERS, MODE_ACCENT, MODE_LABEL, STATUS, type Mode, type Tab } from './mock'
+import {
+  CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE, STATUS,
+  type Mode, type Permission, type Tab,
+} from './mock'
 
 /* ------------------------------------------------------------------ rail */
 const RAIL = [
@@ -50,6 +53,8 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
         <Kbd>⌘1</Kbd>
         <Kbd>2</Kbd>
         <Kbd>3</Kbd> switch tab
+        <br />
+        <Kbd>⇧⇥</Kbd> cycle permission
       </div>
     </nav>
   )
@@ -108,7 +113,9 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   value: string
   onChange: (v: string) => void
   onSend: () => void
-}>(function Composer({ mode, value, onChange, onSend }, forwarded) {
+  permission: Permission
+  onCyclePermission: () => void
+}>(function Composer({ mode, value, onChange, onSend, permission, onCyclePermission }, forwarded) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useImperativeHandle(forwarded, () => ref.current as HTMLTextAreaElement)
 
@@ -131,6 +138,21 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
         >
           {MODE_LABEL[mode]}
         </span>
+
+        {/* Sets --permission-mode on the next spawn. Unlike the CLI's own
+            shift-tab, this applies to the next turn rather than mid-turn --
+            each `claude -p` is a fresh process, so there is nothing running
+            to re-permission. */}
+        <button
+          type="button"
+          onClick={onCyclePermission}
+          title={`Permission: ${PERMISSION_LABEL[permission]} — ⇧⇥ to cycle`}
+          className="mt-px flex shrink-0 items-center gap-[5px] rounded-[3px] border border-line px-[7px] py-[2px] font-mono text-[10.5px] hover:border-[#3a3a3a]"
+          style={{ color: PERMISSION_TONE[permission] }}
+        >
+          <span className="text-[8px]">▶▶</span>
+          {PERMISSION_LABEL[permission]}
+        </button>
 
         {/* A real text field, not a terminal line editor: click to place the
             caret anywhere, drag to select, standard undo. One of the concrete

@@ -46,10 +46,18 @@ MODE_TOOLS: dict[str, dict[str, str]] = {
 }
 
 
+# The cycle the UI offers, in escalating order of what a session may do
+# without asking. bypassPermissions is deliberately NOT here: it is a real
+# flag and remains available to set explicitly, but it should not be
+# reachable by tapping a key repeatedly.
+PERMISSION_CYCLE = ("plan", "manual", "acceptEdits", "auto")
+
+
 @dataclass
 class SessionSpec:
     mode: str
     prompt: str
+    permission_mode: str = "manual"
     resume_id: str | None = None
     cwd: Path | None = None
     vault_path: Path | None = None
@@ -68,6 +76,8 @@ def build_command(spec: SessionSpec) -> list[str]:
         "--output-format", "stream-json",
         "--verbose",                 # required for stream-json to emit events
     ]
+    if spec.permission_mode:
+        cmd += ["--permission-mode", spec.permission_mode]
     if spec.resume_id:
         cmd += ["--resume", spec.resume_id]
     if disallowed := MODE_TOOLS.get(spec.mode, {}).get("disallowed"):

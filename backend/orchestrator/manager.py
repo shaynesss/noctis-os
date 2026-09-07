@@ -115,4 +115,5 @@ class SessionManager:
             resume_id=handle.session_id,
             cwd=handle.spec.cwd,
             vault_path=handle.spec.vault_path,
+            permission_mode=handle.spec.permission_mode,
         )

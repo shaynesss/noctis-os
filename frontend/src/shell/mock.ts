@@ -123,6 +123,31 @@ export const SESSIONS: Record<string, SessionState> = {
   },
 }
 
+/* Mirrors orchestrator/driver.py's PERMISSION_CYCLE. bypassPermissions is
+ * deliberately absent: it stays a settable flag but must not be reachable by
+ * tapping a key. Order escalates -- each step lets a session do more without
+ * asking -- so cycling forward is always the direction that grants, which is
+ * the direction worth being deliberate about. */
+export const PERMISSION_CYCLE = ['plan', 'manual', 'acceptEdits', 'auto'] as const
+export type Permission = (typeof PERMISSION_CYCLE)[number]
+
+export const PERMISSION_LABEL: Record<Permission, string> = {
+  plan: 'plan only',
+  manual: 'ask each time',
+  acceptEdits: 'auto-accept edits',
+  auto: 'auto',
+}
+
+/* Escalating: green through amber to the accent, so the permissive end of
+ * the cycle reads as warmer without being alarming -- these are all valid
+ * states, not warnings. */
+export const PERMISSION_TONE: Record<Permission, string> = {
+  plan: 'var(--color-good)',
+  manual: 'var(--color-ink-dim)',
+  acceptEdits: 'var(--color-noctua)',
+  auto: 'var(--color-faber)',
+}
+
 export const CHARACTERS: { mode: Mode; state: 'working' | 'idle' }[] = [
   { mode: 'faber', state: 'working' },
   { mode: 'noctua', state: 'idle' },
