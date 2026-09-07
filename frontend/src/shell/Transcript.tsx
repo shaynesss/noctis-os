@@ -83,7 +83,7 @@ function Rich({ text }: { text: string }) {
 export function Transcript({ blocks, accent }: { blocks: Block[]; accent: string }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[760px] px-8 pb-8 pt-7">
+      <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
         {blocks.map((b, i) => {
           if (b.kind === 'user') {
             return (

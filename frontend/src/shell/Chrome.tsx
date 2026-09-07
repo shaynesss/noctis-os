@@ -125,7 +125,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
     const el = ref.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 120)}px`
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
   }, [value])
 
   const accent = MODE_ACCENT[mode]
@@ -134,9 +134,9 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   // accidental -- the dead space was not the problem, the disagreement was.
   return (
     <div className="shrink-0 border-t border-line bg-surface px-[14px] pb-2 pt-[9px]">
-      <div className="mx-auto flex max-w-[792px] items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-2 focus-within:border-[#3a3a3a]">
+      <div className="mx-auto flex max-w-[776px] items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-[7px] focus-within:border-[#3a3a3a]">
         <span
-          className="mt-px flex shrink-0 items-center gap-[5px] rounded-[3px] border px-[7px] py-[2px] font-mono text-[10.5px] uppercase tracking-[0.06em]"
+          className="flex shrink-0 self-start items-center gap-[5px] rounded-[3px] border px-[7px] py-[2px] font-mono text-[10.5px] uppercase leading-[1.5] tracking-[0.06em]"
           style={{ color: accent, borderColor: `color-mix(in srgb, ${accent} 28%, transparent)`, background: `color-mix(in srgb, ${accent} 10%, transparent)` }}
         >
           {MODE_LABEL[mode]}
@@ -150,7 +150,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
           type="button"
           onClick={onCyclePermission}
           title={`Permission: ${PERMISSION_LABEL[permission]} — ⇧⇥ to cycle`}
-          className="mt-px flex shrink-0 items-center gap-[5px] rounded-[3px] border border-line px-[7px] py-[2px] font-mono text-[10.5px] hover:border-[#3a3a3a]"
+          className="flex shrink-0 self-start items-center gap-[5px] rounded-[3px] border border-line px-[7px] py-[2px] font-mono text-[10.5px] leading-[1.5] hover:border-[#3a3a3a]"
           style={{ color: PERMISSION_TONE[permission] }}
         >
           <span className="text-[8px]">▶▶</span>
@@ -171,15 +171,15 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
               if (value.trim()) onSend()
             }
           }}
-          rows={2}
+          rows={1}
           spellCheck={false}
           aria-label="Message"
           placeholder="Ask anything…"
-          className="max-h-[120px] min-h-[40px] flex-1 resize-none border-0 bg-transparent py-px font-mono text-[12.5px] leading-[1.65] text-ink outline-none placeholder:text-ink-faint"
+          className="max-h-[160px] min-h-[21px] flex-1 resize-none border-0 bg-transparent font-mono text-[12.5px] leading-[21px] text-ink outline-none placeholder:text-ink-faint"
           style={{ caretColor: accent }}
         />
 
-        <span className="mt-auto flex shrink-0 items-center gap-2">
+        <span className="flex shrink-0 items-center gap-[6px] self-end">
           <IconButton title="Attach" d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8" />
           <IconButton title="Send" d="M4 12h15M13 6l6 6-6 6" onClick={() => value.trim() && onSend()} />
         </span>
@@ -196,7 +196,7 @@ function IconButton({ title, d, onClick }: { title: string; d: string; onClick?:
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="grid h-[22px] w-6 place-items-center rounded-[3px] border border-line text-ink-faint hover:border-[#3a3a3a] hover:text-ink"
+      className="grid h-[21px] w-[21px] place-items-center rounded-[3px] border border-line text-ink-faint hover:border-[#3a3a3a] hover:text-ink"
     >
       <svg viewBox="0 0 24 24" aria-hidden className="h-3 w-3" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.8 }}>
         <path d={d} />
