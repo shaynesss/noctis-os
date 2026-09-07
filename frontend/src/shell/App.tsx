@@ -58,6 +58,7 @@ export default function App() {
       // never strands you at the permissive end.
       if (e.key === 'Tab' && e.shiftKey && !e.metaKey) {
         e.preventDefault()
+        e.stopPropagation()
         setPermission((p) => PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(p) + 1) % PERMISSION_CYCLE.length])
         return
       }
@@ -69,8 +70,12 @@ export default function App() {
       setView('chat')
       composerRef.current?.focus()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Capture phase, not bubble. On bubble, focus traversal and any focused
+    // control get the Tab first, so the shortcut only appeared to work from
+    // wherever happened not to consume it. Capture runs before all of that,
+    // which is what makes it genuinely global -- click anywhere, it works.
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
   // Focus the composer on mount. Without it the document has no keyboard
