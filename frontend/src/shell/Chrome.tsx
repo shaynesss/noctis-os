@@ -129,12 +129,11 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   }, [value])
 
   const accent = MODE_ACCENT[mode]
-  // Constrained and centred to the same measure as the transcript. A centred
-  // column above a full-bleed composer is what made the layout read as
-  // accidental -- the dead space was not the problem, the disagreement was.
+  // The composer keeps its own width (aligned to the transcript's text
+  // column); BottomBar centres it and fills the space either side.
   return (
-    <div className="shrink-0 border-t border-line bg-surface px-[14px] pb-2 pt-[9px]">
-      <div className="mx-auto flex max-w-[776px] items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-[7px] focus-within:border-[#3a3a3a]">
+    <div className="w-[776px] max-w-full">
+      <div className="flex items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-[7px] focus-within:border-[#3a3a3a]">
         <span
           className="flex shrink-0 self-start items-center gap-[5px] rounded-[3px] border px-[7px] py-[2px] font-mono text-[10.5px] uppercase leading-[1.5] tracking-[0.06em]"
           style={{ color: accent, borderColor: `color-mix(in srgb, ${accent} 28%, transparent)`, background: `color-mix(in srgb, ${accent} 10%, transparent)` }}
@@ -228,32 +227,51 @@ function Meter({ pct, tone = 'var(--color-good)' }: { pct: number; tone?: string
 export function StatusBar() {
   const s = STATUS
   return (
-    <div className="flex shrink-0 items-center gap-4 border-t border-line bg-elevated px-3 pb-[6px] pt-[5px] font-mono text-[10.5px]">
-      <div className="flex min-w-0 flex-1 flex-col gap-[2px] text-ink-faint">
-        <div className="flex flex-wrap items-center">
-          <Seg className="text-ink-dim">{s.cwd}</Seg>
-          <Seg className="text-ink-dim">⎇ {s.branch}</Seg>
-          <Seg>{s.model}</Seg>
-          <Seg last>{s.clock}</Seg>
-        </div>
-        <div className="flex flex-wrap items-center">
-          <Seg className="text-noctua">
-            ctx <Meter pct={s.contextPct} tone="var(--color-noctua)" /> {s.contextPct}%
-          </Seg>
-          <Seg>
-            5h <Meter pct={s.fiveHourPct} /> {s.fiveHourPct}%{' '}
-            <span className="text-ink-faint">· resets {s.fiveHourResets}</span>
-          </Seg>
-          <Seg>
-            7d <Meter pct={s.sevenDayPct} /> {s.sevenDayPct}%
-          </Seg>
-          <Seg last>
-            {s.sessionsLive}/{s.sessionsMax} sessions
-          </Seg>
-        </div>
+    <div className="flex min-w-0 flex-col gap-[2px] font-mono text-[10.5px] text-ink-faint">
+      <div className="flex flex-wrap items-center">
+        <Seg className="text-ink-dim">{s.cwd}</Seg>
+        <Seg className="text-ink-dim">⎇ {s.branch}</Seg>
+        <Seg>{s.model}</Seg>
+        <Seg last>{s.clock}</Seg>
       </div>
+      <div className="flex flex-wrap items-center">
+        <Seg className="text-noctua">
+          ctx <Meter pct={s.contextPct} tone="var(--color-noctua)" /> {s.contextPct}%
+        </Seg>
+        <Seg>
+          5h <Meter pct={s.fiveHourPct} /> {s.fiveHourPct}%
+        </Seg>
+        <Seg>
+          7d <Meter pct={s.sevenDayPct} /> {s.sevenDayPct}%
+        </Seg>
+        <Seg last>
+          {s.sessionsLive}/{s.sessionsMax}
+        </Seg>
+      </div>
+    </div>
+  )
+}
 
-      <CharacterStrip />
+/* The bottom bar: status left, composer centred, characters right.
+ *
+ * Centring the composer left dead space on both sides. Rather than narrow
+ * the column or stretch the input past a readable measure, the surrounding
+ * furniture moves into that space -- which also removes the separate status
+ * row entirely, so the bottom chrome costs one band instead of two.
+ *
+ * A 1fr/auto/1fr grid keeps the composer centred regardless of how wide the
+ * side content is; the sides would otherwise push it off-centre as the cwd
+ * or session count changed length. */
+export function BottomBar({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-t border-line bg-surface px-[14px] py-[10px]">
+      <div className="hidden min-w-0 justify-self-start xl:flex">
+        <StatusBar />
+      </div>
+      {children}
+      <div className="hidden justify-self-end xl:flex">
+        <CharacterStrip />
+      </div>
     </div>
   )
 }
@@ -271,7 +289,7 @@ function Seg({ children, last, className = '' }: { children: React.ReactNode; la
  * ~54px of permanent vertical space to say what a dot can. */
 function CharacterStrip() {
   return (
-    <div className="ml-auto flex shrink-0 items-center gap-[10px] self-stretch border-l border-line pl-[14px]">
+    <div className="flex shrink-0 items-center gap-[10px]">
       {CHARACTERS.map((c) => {
         const accent = MODE_ACCENT[c.mode]
         const live = c.state === 'working'
@@ -280,7 +298,7 @@ function CharacterStrip() {
             key={c.mode}
             type="button"
             title={`${MODE_LABEL[c.mode]} · ${c.state}`}
-            className="group relative grid h-6 w-6 place-items-center rounded-[3px] hover:bg-surface"
+            className="group relative grid h-6 w-6 place-items-center rounded-[3px] hover:bg-elevated"
           >
             <span
               className="font-mono text-[11px] font-bold"
@@ -289,7 +307,7 @@ function CharacterStrip() {
               {MODE_LABEL[c.mode][0]}
             </span>
             <span
-              className={`absolute -bottom-px -right-px h-[6px] w-[6px] rounded-full border-[1.5px] border-elevated ${live ? 'animate-pulse' : ''}`}
+              className={`absolute -bottom-px -right-px h-[6px] w-[6px] rounded-full border-[1.5px] border-surface ${live ? 'animate-pulse' : ''}`}
               style={{ background: live ? accent : 'var(--color-ink-faint)' }}
             />
           </button>

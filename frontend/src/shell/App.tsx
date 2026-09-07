@@ -10,7 +10,7 @@
  * mode merge used. */
 import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
-import { Composer, Rail, StatusBar, TabBar } from './Chrome'
+import { BottomBar, Composer, Rail, TabBar } from './Chrome'
 import { Transcript } from './Transcript'
 import { MODE_ACCENT, PERMISSION_CYCLE, SESSIONS, TABS, USAGE, type Permission } from './mock'
 import './tokens.css'
@@ -67,9 +67,13 @@ export default function App() {
         />
 
         {view === 'chat' ? (
-          <>
-            <Transcript blocks={session.blocks} accent={accent} />
-            <Composer
+          <Transcript blocks={session.blocks} accent={accent} />
+        ) : (
+          <Pane view={view} />
+        )}
+
+        <BottomBar>
+          <Composer
               ref={composerRef}
               mode={session.mode}
               value={drafts[activeTab] ?? ''}
@@ -79,13 +83,8 @@ export default function App() {
               onCyclePermission={() =>
                 setPermission(PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length])
               }
-            />
-          </>
-        ) : (
-          <Pane view={view} />
-        )}
-
-        <StatusBar />
+          />
+        </BottomBar>
       </div>
     </div>
   )
