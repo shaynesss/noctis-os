@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- TEMPLATE. __REPO_ROOT__ is substituted by bootstrap/ at install time.
+     Do not launchctl load this file directly - render it first. launchd
+     does not expand ~ or environment variables in these paths, which is
+     why an absolute path is required and therefore why this is a
+     template rather than a checked-in literal. -->
 <plist version="1.0">
 <dict>
     <key>Label</key>
@@ -7,11 +12,11 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/shayneyong/Developer/noctis-os/scripts/nightshift_run.sh</string>
+        <string>__REPO_ROOT__/scripts/nightshift_run.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/shayneyong/Developer/noctis-os</string>
+    <string>__REPO_ROOT__</string>
 
     <!-- Nightly, 03:00 local -- single fixed run, not an interval. Nightshift
          re-derives slack from scratch every run (nightshift.md's Failure
@@ -28,8 +33,8 @@
     <false/>
 
     <key>StandardOutPath</key>
-    <string>/Users/shayneyong/Developer/noctis-os/backend/runtime/nightshift.log</string>
+    <string>__REPO_ROOT__/backend/runtime/nightshift.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/shayneyong/Developer/noctis-os/backend/runtime/nightshift.log</string>
+    <string>__REPO_ROOT__/backend/runtime/nightshift.log</string>
 </dict>
 </plist>

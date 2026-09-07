@@ -7,12 +7,13 @@ Manual, machine-level checklist only. Everything else is scripted by `make setup
 - **Claude Code login** — `claude` CLI installed and logged in (`claude auth login` or equivalent), since the session launcher shells out to it.
 - **`VAULT_PATH`** — set in `.env` (copied from `.env.example` by `make setup`) to the absolute path of `second-brain/` on this machine.
 - **VS Code global setting: `workbench.browser.openLocalhostLinks`** — one-time, set globally (not per-repo) so any localhost link, including ones Claude Code prints in chat, opens in VS Code's Integrated Browser instead of a system browser tab. Needed for Dev mode's launch surface.
-- **Nightshift launchd job** — one-time, loads `launchd/com.noctis-os.nightshift.plist` (nightly 03:00 run of `scripts/nightshift_run.sh`, see `backend/nightshift/runner.py` for what it actually does):
+- **Nightshift launchd job** — one-time, renders and loads `launchd/com.noctis-os.nightshift.plist.template` (nightly 03:00 run of `scripts/nightshift_run.sh`, see `backend/nightshift/runner.py` for what it actually does):
   ```
-  cp launchd/com.noctis-os.nightshift.plist ~/Library/LaunchAgents/
+  sed "s|__REPO_ROOT__|$PWD|g" launchd/com.noctis-os.nightshift.plist.template \
+    > ~/Library/LaunchAgents/com.noctis-os.nightshift.plist
   launchctl load ~/Library/LaunchAgents/com.noctis-os.nightshift.plist
   ```
-  Trigger a run manually to test without waiting for 03:00: `launchctl start com.noctis-os.nightshift`. Logs land in `backend/runtime/nightshift.log` (gitignored, same runtime-scratch area as the telemetry hooks). Unload with `launchctl unload ~/Library/LaunchAgents/com.noctis-os.nightshift.plist`. The plist hardcodes this machine's absolute repo path — update it (both the copy in `launchd/` and the one in `~/Library/LaunchAgents/`) if the repo ever moves.
+  Trigger a run manually to test without waiting for 03:00: `launchctl start com.noctis-os.nightshift`. Logs land in `backend/runtime/nightshift.log` (gitignored, same runtime-scratch area as the telemetry hooks). Unload with `launchctl unload ~/Library/LaunchAgents/com.noctis-os.nightshift.plist`. The rendered plist holds an absolute repo path — launchd expands neither `~` nor environment variables — so re-render it if the repo ever moves. The tracked file is a template with `__REPO_ROOT__` placeholders and is never loaded directly.
 
 ## Vault access
 
