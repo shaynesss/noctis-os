@@ -1,5 +1,6 @@
 /* Rail, tabs, composer, status, characters — the shell around the transcript. */
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { Logo } from './Logo'
 import {
   CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE, STATUS,
   type Mode, type Permission, type Tab,
@@ -17,9 +18,12 @@ const RAIL = [
 export function Rail({ view, onView }: { view: string; onView: (v: string) => void }) {
   return (
     <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-surface py-[14px]">
-      <div className="mb-[10px] flex items-center gap-2 border-b border-line px-[12px] pb-4">
-        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
-        <span className="font-mono text-[12px] font-bold uppercase tracking-[0.1em]">Noctis</span>
+      {/* Mark and wordmark centred together. The star takes the active
+          mode's accent via currentColor, so the identity shifts with the
+          session rather than sitting inert above a UI that changes. */}
+      <div className="mb-[10px] flex items-center justify-center gap-[7px] border-b border-line px-[12px] pb-4">
+        <Logo size={15} className="shrink-0" style={{ color: 'var(--accent)' }} />
+        <span className="font-mono text-[12px] font-bold uppercase tracking-[0.14em]">Noctis</span>
       </div>
 
       {RAIL.map((item) => {
@@ -49,8 +53,22 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
         )
       })}
 
-
+      {/* The tab numbers live on the tabs, where there is room for them. This
+          one does not: the permission chip already carries a word-length
+          label, so a badge beside it was present without being legible.
+          Sized to be read rather than merely shown. */}
+      <div className="mt-auto flex items-center gap-[7px] border-t border-line px-[12px] pt-[11px] font-mono text-[11px] text-ink-faint">
+        <Kbd>⇧⇥</Kbd> permission
+      </div>
     </nav>
+  )
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="rounded-[3px] border border-b-2 border-line bg-elevated px-[5px] py-[2px] font-mono text-[11px] text-ink-dim">
+      {children}
+    </kbd>
   )
 }
 
@@ -149,9 +167,6 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
         >
           <span className="text-[8px]">▶▶</span>
           {PERMISSION_LABEL[permission]}
-          <span className="ml-[2px] rounded-[2px] border border-line px-[3px] text-[9px] leading-[13px] text-ink-faint">
-            ⇧⇥
-          </span>
         </button>
 
         {/* A persistent prompt glyph rather than placeholder text. A
