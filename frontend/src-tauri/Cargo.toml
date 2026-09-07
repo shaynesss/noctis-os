@@ -1,0 +1,30 @@
+[package]
+name = "noctis"
+version = "2.0.0"
+description = "Noctis — the entry point"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "noctis_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-notification = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+# The shell is a thin window around a web view; optimising for size keeps
+# the bundle honest rather than shipping a 40MB binary to host an iframe.
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

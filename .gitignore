@@ -51,3 +51,7 @@ backend/launch_config/nondev/*
 
 # OS
 .DS_Store
+
+# Tauri build artifacts and generated schemas
+frontend/src-tauri/target/
+frontend/src-tauri/gen/

@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Only what the shell actually uses. Tauri v2 denies by default, and leaving it that way is the point -- a permission granted 'just in case' is indistinguishable from one that is needed.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "global-shortcut:default",
+    "autostart:default",
+    "notification:default"
+  ]
+}
