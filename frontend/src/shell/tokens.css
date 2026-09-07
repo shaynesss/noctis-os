@@ -44,6 +44,11 @@
   --accent: var(--color-faber);
   /* Shared so the rail's footer and the status band are the same height and
      their dividers meet across the pane boundary. */
+  /* The rail's brand block and the tab bar sit side by side, so their
+     bottom rules have to meet. That agreement was two hardcoded numbers in
+     two files until one of them changed and the rules stopped lining up --
+     it is one token now so they cannot drift apart again. */
+  --head-band: 42px;
   --status-band: 44px;
   color-scheme: dark;
 }

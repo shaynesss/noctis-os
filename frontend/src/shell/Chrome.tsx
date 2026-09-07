@@ -24,10 +24,10 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
       {/* Mark and wordmark centred together. The star takes the active
           mode's accent via currentColor, so the identity shifts with the
           session rather than sitting inert above a UI that changes. */}
-      {/* h-[34px] is the tab bar's height. Matching them makes the rail's
-          divider continue the tab bar's, so the two panes read as one
-          surface split rather than two boxes side by side. */}
-      <div className="flex h-[34px] shrink-0 items-center justify-center gap-[7px] border-b border-line px-[12px]">
+      {/* Height comes from --head-band, shared with the tab bar beside it,
+          so the two bottom rules meet and the header reads as one band
+          split by the rail rather than two boxes of different sizes. */}
+      <div className="flex h-[var(--head-band)] shrink-0 items-center justify-center gap-[7px] border-b border-line px-[12px]">
         <Logo size={15} className="shrink-0" style={{ color: 'var(--accent)' }} />
         <span className="font-mono text-[12px] font-bold uppercase tracking-[0.14em]">Noctis</span>
       </div>
@@ -60,11 +60,6 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
           </button>
         )
       })}
-
-      {/* The tab numbers live on the tabs, where there is room for them. This
-          one does not: the permission chip already carries a word-length
-          label, so a badge beside it was present without being legible.
-          Sized to be read rather than merely shown. */}
     </nav>
   )
 }
@@ -114,7 +109,7 @@ export function TabBar({
   onSelect: (id: string) => void
 }) {
   return (
-    <div role="tablist" className="flex h-[42px] shrink-0 items-center justify-center gap-[6px] border-b border-line bg-surface px-3">
+    <div role="tablist" className="flex h-[var(--head-band)] shrink-0 items-center justify-center gap-[6px] border-b border-line bg-surface px-3">
       {tabs.map((t, i) => {
         const selected = t.id === active
         const accent = MODE_ACCENT[t.mode]
