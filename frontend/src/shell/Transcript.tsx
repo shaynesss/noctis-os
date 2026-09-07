@@ -5,7 +5,7 @@
  * That is why the Design Brief takes Ghostty for *rendering* and not for its
  * stream model: a terminal-shaped transcript would fight the data. */
 import { useState } from 'react'
-import type { Block } from './mock'
+import { MODE_ACCENT, MODE_LABEL, type Block } from './mock'
 
 function Caret({ open }: { open: boolean }) {
   return (
@@ -107,6 +107,31 @@ export function Transcript({ blocks, accent }: { blocks: Block[]; accent: string
                 meta={`${b.tokens} tokens · ${(b.ms / 1000).toFixed(1)}s`}
                 italic
               />
+            )
+          }
+          if (b.kind === 'handoff') {
+            /* Provenance, not a message. A handed-off session that opened on
+             * a bare prompt would look like something you started and forgot
+             * -- this says where it came from and what it was given, and the
+             * distinction between the two is the point: the new session got
+             * the summary, not the conversation. */
+            return (
+              <div key={i} className="mb-[22px] rounded-[3px] border border-line bg-surface">
+                <div className="flex items-center gap-[7px] border-b border-line px-[11px] py-[7px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
+                  Handed off from
+                  <span
+                    className="h-[6px] w-[6px] rounded-[1px]"
+                    style={{ background: MODE_ACCENT[b.from] }}
+                  />
+                  <span className="normal-case tracking-normal text-ink-dim">{b.fromLabel}</span>
+                  <span className="ml-auto normal-case tracking-normal">
+                    carried summary · {MODE_LABEL[b.from]} session still open
+                  </span>
+                </div>
+                <p className="m-0 px-[11px] py-[10px] text-[12.5px] leading-[1.65] text-ink-dim">
+                  {b.carried}
+                </p>
+              </div>
             )
           }
           if (b.kind === 'tool') {

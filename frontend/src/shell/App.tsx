@@ -11,30 +11,63 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
+import { Launcher, type LaunchRequest } from './Launcher'
 import { Transcript } from './Transcript'
-import { MODE_ACCENT, PERMISSION_CYCLE, SESSIONS, TABS, USAGE, type Permission } from './mock'
+import {
+  MODE_ACCENT, MODE_LABEL, PERMISSION_CYCLE, SESSIONS, TABS, USAGE,
+  type Mode, type Permission, type SessionState, type Tab,
+} from './mock'
 import './tokens.css'
+
+interface HandoffSource {
+  mode: Mode
+  label: string
+  cwd: string
+  carried: string
+}
+
+const now = () =>
+  new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 
 export default function App() {
   const [view, setView] = useState('chat')
   const [activeTab, setActiveTab] = useState('t1')
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const [permission, setPermission] = useState<Permission>('manual')
+
+  // Tabs and sessions are state rather than the imported constants now that
+  // mode entry can create them. The constants are the seed, not the store.
+  const [tabs, setTabs] = useState<Tab[]>(TABS)
+  const [sessions, setSessions] = useState<Record<string, SessionState>>(SESSIONS)
   const [drafts, setDrafts] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(SESSIONS).map(([id, s]) => [id, s.draft])),
   )
+
+  // `null` closed; otherwise a launch, carrying its handoff source if any.
+  const [launcher, setLauncher] = useState<null | { handoff?: HandoffSource }>(null)
+
+  /* The key listener is registered once, so its closure would otherwise hold
+   * the first render's tabs forever -- Cmd+3 would keep selecting the third
+   * tab as it was at mount, not as it is. Refs give the handler the current
+   * values without re-registering a capture-phase listener on every state
+   * change, which would drop keystrokes during the swap. */
+  const tabsRef = useRef(tabs)
+  const launcherRef = useRef(launcher)
+  const handoffRef = useRef(() => {})
+  tabsRef.current = tabs
+  launcherRef.current = launcher
 
   // The panels are not conversations. While one is open the composer binds
   // to General rather than to whichever tab you happened to leave behind --
   // typing into a Faber-labelled box from the Settings page would send to a
   // session you are not looking at, which is the kind of thing you only
   // notice after it has happened.
-  const generalTab = TABS.find((t) => t.mode === 'general')!.id
+  const generalTab = tabs.find((t) => t.mode === 'general')!.id
   const inChat = view === 'chat'
   const composerTab = inChat ? activeTab : generalTab
 
-  const session = SESSIONS[activeTab]
-  const composerMode = SESSIONS[composerTab].mode
+  const session = sessions[activeTab]
+  const composerMode = sessions[composerTab].mode
   const accent = MODE_ACCENT[session.mode]
 
   // Sending from a panel takes you to the conversation it went to. Leaving
@@ -48,11 +81,63 @@ export default function App() {
     }
   }
 
+  /* A launch always lands in a new tab, whether it came from + or from a
+   * handoff. The opening prompt is written into the transcript as a user
+   * turn rather than left in the composer, because the session has already
+   * been given it -- showing it as an unsent draft would misreport state. */
+  const launch = (req: LaunchRequest) => {
+    const id = `t${Date.now()}`
+    const label = `${MODE_LABEL[req.mode]} · ${req.cwd.split('/').pop()}`
+    const blocks: SessionState['blocks'] = []
+    if (req.from) {
+      blocks.push({
+        kind: 'handoff',
+        from: req.from.mode,
+        fromLabel: req.from.label,
+        carried: req.from.carried,
+      })
+    }
+    blocks.push({ kind: 'user', text: req.prompt, at: now() })
+
+    setTabs([...tabs, { id, mode: req.mode, label }])
+    setSessions({ ...sessions, [id]: { mode: req.mode, blocks, draft: '' } })
+    setDrafts({ ...drafts, [id]: '' })
+    setActiveTab(id)
+    setView('chat')
+    setLauncher(null)
+    composerRef.current?.focus()
+  }
+
+  /* What a handoff carries is a summary, not the transcript -- so it is
+   * built here and shown for editing rather than passed silently. Until the
+   * orchestrator is wired this takes the last assistant turn, which is a
+   * stand-in for a real summarisation pass and is labelled as one in the
+   * dialog. */
+  const openHandoff = () => {
+    const tab = tabs.find((t) => t.id === activeTab)!
+    const lastText = [...session.blocks].reverse().find((b) => b.kind === 'text')
+    setLauncher({
+      handoff: {
+        mode: tab.mode,
+        label: tab.label,
+        cwd: `~/Developer/${tab.label.split(' · ')[1] ?? ''}`,
+        carried: lastText && lastText.kind === 'text' ? lastText.text.slice(0, 240) : '',
+      },
+    })
+  }
+
+  handoffRef.current = openHandoff
+
   // Cmd+1/2/3 switches tab. Implemented rather than merely labelled: a
   // shortcut shown in the UI that does nothing is a worse lie than the
   // explanatory text it sits next to.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // While the launcher is open it owns the keyboard: its own Cmd+1-5
+      // picks a mode, and cycling permission for a session you are not
+      // looking at would change something you cannot see.
+      if (launcherRef.current) return
+
       // Shift+Tab cycles permission, the affordance carried over from the
       // CLI's TUI. Wrapping past the end returns to `plan`, so the cycle
       // never strands you at the permissive end.
@@ -62,11 +147,27 @@ export default function App() {
         setPermission((p) => PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(p) + 1) % PERMISSION_CYCLE.length])
         return
       }
-      if (!e.metaKey || e.shiftKey || e.altKey) return
+      if (!e.metaKey || e.altKey) return
+
+      // Cmd+Shift+H hands the active session off to another mode.
+      if (e.shiftKey && e.key.toLowerCase() === 'h') {
+        e.preventDefault()
+        handoffRef.current()
+        return
+      }
+      if (e.shiftKey) return
+
+      // Cmd+T starts a session, matching every tabbed app on the machine.
+      if (e.key.toLowerCase() === 't') {
+        e.preventDefault()
+        setLauncher({})
+        return
+      }
+
       const i = ['1', '2', '3'].indexOf(e.key)
-      if (i === -1 || !TABS[i]) return
+      if (i === -1 || !tabsRef.current[i]) return
       e.preventDefault()
-      setActiveTab(TABS[i].id)
+      setActiveTab(tabsRef.current[i].id)
       setView('chat')
       composerRef.current?.focus()
     }
@@ -88,7 +189,7 @@ export default function App() {
   }, [])
 
   return (
-    <div className="flex h-full flex-col" style={{ ['--accent' as string]: accent }}>
+    <div className="relative flex h-full flex-col" style={{ ['--accent' as string]: accent }}>
       <TitleStrip />
 
       <div className="flex min-h-0 flex-1">
@@ -96,12 +197,14 @@ export default function App() {
 
         <div className="flex min-w-0 flex-1 flex-col">
         <TabBar
-          tabs={TABS}
+          tabs={tabs}
           active={activeTab}
           onSelect={(id) => {
             setActiveTab(id)
             setView('chat')
           }}
+          onNew={() => setLauncher({})}
+          onHandoff={openHandoff}
         />
 
         {view === 'chat' ? (
@@ -126,6 +229,17 @@ export default function App() {
             }
         />
       </BottomBar>
+
+      {launcher && (
+        <Launcher
+          handoff={launcher.handoff}
+          onLaunch={launch}
+          onClose={() => {
+            setLauncher(null)
+            composerRef.current?.focus()
+          }}
+        />
+      )}
     </div>
   )
 }

@@ -28,11 +28,42 @@ export const MODE_LABEL: Record<Mode, string> = {
   maintenance: 'Maintenance',
 }
 
+/* What each mode is for, and what it actually runs. The model and tool
+ * policy are not decoration: they are the difference between the modes, and
+ * they are why a handoff has to open a new session rather than re-label a
+ * live one -- a running `claude -p` cannot change either mid-flight.
+ *
+ * Mirrors MODE_MODELS and MODE_TOOLS in orchestrator/driver.py. Duplicated
+ * here only while the shell is on mocks; item 3's wiring reads it from the
+ * backend and this constant goes. */
+export const MODE_INFO: Record<Mode, { blurb: string; model: string; policy?: string }> = {
+  general: { blurb: 'Questions, comparisons, anything unscoped', model: 'opus-5' },
+  faber: { blurb: 'Build: spec, implement, ship', model: 'opus-5' },
+  noctua: { blurb: 'Learn: read closely, explain, retain', model: 'opus-5' },
+  vesper: { blurb: 'Research: gather, weigh, return a verdict', model: 'opus-5' },
+  maintenance: {
+    blurb: 'Audit the vault and propose repairs',
+    model: 'opus-5',
+    policy: 'proposes only — cannot edit',
+  },
+}
+
+/** Recent working directories. Real ones come from session history. */
+export const CWD_RECENTS = [
+  '~/Developer/noctis-os',
+  '~/Developer/second-brain',
+  '~/Developer/portfolio-platform',
+]
+
 export type Block =
   | { kind: 'user'; text: string; at: string }
   | { kind: 'text'; text: string }
   | { kind: 'thinking'; tokens: number; ms: number }
   | { kind: 'tool'; name: string; target: string; meta: string; body: string; open?: boolean }
+  /* A handed-off session opens with its provenance rather than a blank
+   * transcript, so a tab you return to an hour later says where it came
+   * from instead of looking like something you started and forgot. */
+  | { kind: 'handoff'; from: Mode; fromLabel: string; carried: string }
 
 export interface Tab {
   id: string

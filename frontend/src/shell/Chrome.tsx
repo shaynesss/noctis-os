@@ -103,57 +103,86 @@ export function TabBar({
   tabs,
   active,
   onSelect,
+  onNew,
+  onHandoff,
 }: {
   tabs: Tab[]
   active: string
   onSelect: (id: string) => void
+  onNew: () => void
+  onHandoff: () => void
 }) {
   return (
-    <div role="tablist" className="flex h-[var(--head-band)] shrink-0 items-center justify-center gap-[6px] border-b border-line bg-surface px-3">
-      {tabs.map((t, i) => {
-        const selected = t.id === active
-        const accent = MODE_ACCENT[t.mode]
-        return (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={selected}
-            onClick={() => onSelect(t.id)}
-            className={`flex items-center gap-[7px] rounded-[5px] border px-[11px] py-[5px] font-mono text-[11.5px] transition-colors ${
-              selected ? 'border-transparent' : 'border-transparent text-ink-faint hover:bg-elevated hover:text-ink-dim'
-            }`}
-            style={
-              selected
-                ? {
-                    color: accent,
-                    background: `color-mix(in srgb, ${accent} 12%, var(--color-surface))`,
-                    borderColor: `color-mix(in srgb, ${accent} 32%, var(--color-surface))`,
-                  }
-                : undefined
-            }
-          >
-            {t.pinned ? (
-              <span className="text-[9px] opacity-70">◆</span>
-            ) : (
-              <span
-                className="h-[7px] w-[7px] rounded-[1px]"
-                style={{ background: accent, opacity: selected ? 1 : 0.5 }}
-              />
-            )}
-            {t.label}
-            {i < 3 && (
-              <span
-                className={`ml-[3px] rounded-[2px] px-[3px] text-[9px] leading-[13px] ${
-                  selected ? 'text-current opacity-60' : 'text-ink-faint'
-                }`}
-                style={{ border: '1px solid var(--color-line)' }}
-              >
-                ⌘{i + 1}
-              </span>
-            )}
-          </button>
-        )
-      })}
+    <div className="relative flex h-[var(--head-band)] shrink-0 items-center justify-center border-b border-line bg-surface px-3">
+      <div role="tablist" className="flex items-center gap-[6px]">
+        {tabs.map((t, i) => {
+          const selected = t.id === active
+          const accent = MODE_ACCENT[t.mode]
+          return (
+            <button
+              key={t.id}
+              role="tab"
+              aria-selected={selected}
+              onClick={() => onSelect(t.id)}
+              className={`flex items-center gap-[7px] rounded-[5px] border px-[11px] py-[5px] font-mono text-[11.5px] transition-colors ${
+                selected ? 'border-transparent' : 'border-transparent text-ink-faint hover:bg-elevated hover:text-ink-dim'
+              }`}
+              style={
+                selected
+                  ? {
+                      color: accent,
+                      background: `color-mix(in srgb, ${accent} 12%, var(--color-surface))`,
+                      borderColor: `color-mix(in srgb, ${accent} 32%, var(--color-surface))`,
+                    }
+                  : undefined
+              }
+            >
+              {t.pinned ? (
+                <span className="text-[9px] opacity-70">◆</span>
+              ) : (
+                <span
+                  className="h-[7px] w-[7px] rounded-[1px]"
+                  style={{ background: accent, opacity: selected ? 1 : 0.5 }}
+                />
+              )}
+              {t.label}
+              {i < 3 && (
+                <span
+                  className={`ml-[3px] rounded-[2px] border border-line px-[3px] text-[9px] leading-[13px] ${
+                    selected ? 'text-current opacity-60' : 'text-ink-faint'
+                  }`}
+                >
+                  ⌘{i + 1}
+                </span>
+              )}
+            </button>
+          )
+        })}
+
+        {/* Mode entry sits with the sessions rather than in the rail: the
+            rail is the four places you go, and a new session is not a place.
+            The spec fixes the rail as Brief/Stats/Inbox/Settings anyway. */}
+        <button
+          type="button"
+          onClick={onNew}
+          title="New session  ⌘T"
+          aria-label="New session"
+          className="flex h-[24px] w-[24px] items-center justify-center rounded-[5px] text-[15px] leading-none text-ink-faint transition-colors hover:bg-elevated hover:text-ink"
+        >
+          +
+        </button>
+      </div>
+
+      {/* Absolute, so the pills stay centred on the transcript's axis rather
+          than being pushed off it by whatever sits beside them. */}
+      <button
+        type="button"
+        onClick={onHandoff}
+        title="Hand off to another mode  ⌘⇧H"
+        className="absolute right-3 flex items-center gap-[6px] rounded-[5px] px-[9px] py-[5px] font-mono text-[11px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink-dim"
+      >
+        hand off <span className="text-[12px] leading-none">→</span>
+      </button>
     </div>
   )
 }
