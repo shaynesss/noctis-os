@@ -20,7 +20,7 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
   // floats over the content at the top-left. They cannot be moved to the
   // right on macOS, so the rail moves out from under them instead.
   return (
-    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-surface pb-0 pt-7">
+    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-surface">
       {/* Mark and wordmark centred together. The star takes the active
           mode's accent via currentColor, so the identity shifts with the
           session rather than sitting inert above a UI that changes. */}
@@ -65,11 +65,6 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
           one does not: the permission chip already carries a word-length
           label, so a badge beside it was present without being legible.
           Sized to be read rather than merely shown. */}
-      {/* Same height as the status band opposite it, so the horizontal rule
-          runs unbroken across both panes. */}
-      <div className="mt-auto flex h-[var(--status-band)] shrink-0 items-center gap-[7px] border-t border-line px-[12px] font-mono text-[11px] text-ink-faint">
-        <Kbd>⇧⇥</Kbd> permission
-      </div>
     </nav>
   )
 }
@@ -80,6 +75,20 @@ function Kbd({ children }: { children: React.ReactNode }) {
       {children}
     </kbd>
   )
+}
+
+/* A full-width strip for the macOS traffic lights.
+ *
+ * titleBarStyle:"Overlay" floats them over the content at the top-left, and
+ * macOS will not move them to the right. Giving them their own band -- rather
+ * than padding the rail out from under them -- is what lets the rail and the
+ * main pane start at the same y, which is the only way their internal
+ * dividers can line up without being hand-matched.
+ *
+ * data-tauri-drag-region makes it behave like a title bar: drag to move.
+ */
+export function TitleStrip() {
+  return <div data-tauri-drag-region className="h-7 shrink-0 bg-surface" />
 }
 
 /* ------------------------------------------------------------------ tabs */
@@ -307,6 +316,10 @@ export function StatusBar() {
 export function BottomBar({ children }: { children: React.ReactNode }) {
   return (
     <div className="shrink-0 border-t border-line bg-surface">
+      {/* The rail's old footer, now the bottom bar's left cell. Full-width
+          bands mean the rule under the composer is the same rule that runs
+          under the rail -- alignment by structure rather than by matching
+          two numbers and hoping they stay matched. */}
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-[14px] pt-[10px] pb-[10px] min-[1620px]:pb-[10px]">
         <div className="hidden min-w-0 justify-self-start overflow-hidden min-[1620px]:flex">
           <StatusBar />
@@ -320,10 +333,15 @@ export function BottomBar({ children }: { children: React.ReactNode }) {
       {/* Same components, second position. Rendered twice rather than moved
           with JS: a resize listener would reflow on every drag frame, and the
           duplicate costs nothing since only one is ever displayed. */}
-      <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
-        <StatusBar />
-        <div className="ml-auto">
-          <CharacterStrip />
+      <div className="flex h-[var(--status-band)] items-center border-t border-line min-[1620px]:hidden">
+        <div className="flex w-[160px] shrink-0 items-center gap-[7px] border-r border-line px-[12px] font-mono text-[11px] text-ink-faint">
+          <Kbd>⇧⇥</Kbd> permission
+        </div>
+        <div className="flex min-w-0 flex-1 items-center gap-4 px-[14px]">
+          <StatusBar />
+          <div className="ml-auto">
+            <CharacterStrip />
+          </div>
         </div>
       </div>
     </div>

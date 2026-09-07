@@ -10,7 +10,7 @@
  * mode merge used. */
 import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
-import { BottomBar, Composer, Rail, TabBar } from './Chrome'
+import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
 import { Transcript } from './Transcript'
 import { MODE_ACCENT, PERMISSION_CYCLE, SESSIONS, TABS, USAGE, type Permission } from './mock'
 import './tokens.css'
@@ -88,10 +88,13 @@ export default function App() {
   }, [])
 
   return (
-    <div className="flex h-full" style={{ ['--accent' as string]: accent }}>
-      <Rail view={view} onView={setView} />
+    <div className="flex h-full flex-col" style={{ ['--accent' as string]: accent }}>
+      <TitleStrip />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1">
+        <Rail view={view} onView={setView} />
+
+        <div className="flex min-w-0 flex-1 flex-col">
         <TabBar
           tabs={TABS}
           active={activeTab}
@@ -107,8 +110,11 @@ export default function App() {
           <Pane view={view} />
         )}
 
-        <BottomBar>
-          <Composer
+        </div>
+      </div>
+
+      <BottomBar>
+        <Composer
             ref={composerRef}
             mode={composerMode}
             value={drafts[composerTab] ?? ''}
@@ -118,9 +124,8 @@ export default function App() {
             onCyclePermission={() =>
               setPermission(PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length])
             }
-          />
-        </BottomBar>
-      </div>
+        />
+      </BottomBar>
     </div>
   )
 }
