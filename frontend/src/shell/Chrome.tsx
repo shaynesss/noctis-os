@@ -16,8 +16,8 @@ const RAIL = [
 
 export function Rail({ view, onView }: { view: string; onView: (v: string) => void }) {
   return (
-    <nav className="flex w-[186px] shrink-0 flex-col border-r border-line bg-surface py-[14px]">
-      <div className="mb-[10px] flex items-center gap-2 border-b border-line px-[14px] pb-4">
+    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-surface py-[14px]">
+      <div className="mb-[10px] flex items-center gap-2 border-b border-line px-[12px] pb-4">
         <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: 'var(--accent)' }} />
         <span className="font-mono text-[12px] font-bold uppercase tracking-[0.1em]">Noctis</span>
       </div>
@@ -30,7 +30,7 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
             type="button"
             onClick={() => onView(item.id)}
             aria-current={active}
-            className={`flex w-full items-center gap-[10px] border-l-2 px-[14px] py-[7px] text-left text-[13px] ${
+            className={`flex w-full items-center gap-[9px] border-l-2 px-[12px] py-[7px] text-left text-[12.5px] ${
               active
                 ? 'border-l-[var(--accent)] bg-elevated text-ink'
                 : 'border-l-transparent text-ink-dim hover:bg-elevated hover:text-ink'
@@ -49,7 +49,7 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
         )
       })}
 
-      <div className="mt-auto border-t border-line px-[14px] pt-[10px] font-mono text-[10px] leading-[1.8] text-ink-faint">
+      <div className="mt-auto border-t border-line px-[12px] pt-[10px] font-mono text-[10px] leading-[1.8] text-ink-faint">
         <Kbd>⌘1</Kbd>
         <Kbd>2</Kbd>
         <Kbd>3</Kbd> switch tab
@@ -262,15 +262,21 @@ export function StatusBar() {
  *
  * A 1fr/auto/1fr grid keeps the composer centred regardless of how wide the
  * side content is; the sides would otherwise push it off-centre as the cwd
- * or session count changed length. */
+ * changed length.
+ *
+ * The sides appear only past 1620px, which is where they actually fit:
+ * 160 rail + 776 composer leaves ~340 a side there. An earlier xl (1280)
+ * breakpoint revealed them with ~160px each, so they ran under the input.
+ * overflow-hidden on the left cell is the belt-and-braces -- the status can
+ * clip at its own boundary, but must never overlap the thing you type in. */
 export function BottomBar({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-4 border-t border-line bg-surface px-[14px] py-[10px]">
-      <div className="hidden min-w-0 justify-self-start xl:flex">
+      <div className="hidden min-w-0 overflow-hidden justify-self-start min-[1620px]:flex">
         <StatusBar />
       </div>
       {children}
-      <div className="hidden justify-self-end xl:flex">
+      <div className="hidden justify-self-end min-[1620px]:flex">
         <CharacterStrip />
       </div>
     </div>
