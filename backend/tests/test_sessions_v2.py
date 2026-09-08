@@ -168,3 +168,73 @@ def test_session_list_reports_the_concurrency_budget(client):
     body = client.get("/v2/sessions", headers=AUTH).json()
     assert body["max_concurrent"] == 2
     assert body["running"] == 0
+
+
+# ------------------------------------------------------------------- stats
+
+def test_stats_lifetime_includes_the_background_tier(tmp_path):
+    """The parser lost ~900 input tokens a turn by reading only the primary
+    model. A lifetime total that sums only the primary columns reproduces
+    that same undercount one layer down."""
+    from orchestrator.events import TurnEnd, Usage
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("faber", cwd="/tmp")
+    store.record(sid, "faber", TurnEnd(
+        session_id="s", duration_ms=1,
+        usage=Usage(input_tokens=2, output_tokens=52, cached_tokens=7444,
+                    model="claude-opus-5", aux_input_tokens=903, aux_output_tokens=12),
+    ))
+    life = store.lifetime_tokens()
+    assert life["input"] == 905          # 2 primary + 903 background
+    assert life["output"] == 64          # 52 + 12
+    assert life["primary_input"] == 2    # still available for the per-turn view
+    store.close()
+
+
+def test_usage_by_mode_attributes_tokens_to_the_mode_that_spent_them(tmp_path):
+    from orchestrator.events import TurnEnd, Usage
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    for mode, out in (("faber", 100), ("vesper", 30)):
+        sid = store.open_session(mode, cwd="/tmp")
+        store.record(sid, mode, TurnEnd(
+            session_id="s", duration_ms=1,
+            usage=Usage(input_tokens=1, output_tokens=out, cached_tokens=0, model="m"),
+        ))
+    rows = {r["mode"]: r["output"] for r in store.usage_by_mode()}
+    assert rows == {"faber": 100, "vesper": 30}
+    store.close()
+
+
+def test_an_older_database_gains_the_new_columns(tmp_path):
+    """CREATE TABLE IF NOT EXISTS is a no-op on a database that already has
+    the table, so without the add-column pass the next INSERT fails on any
+    machine that ran the older build."""
+    import sqlite3
+    from orchestrator.store import SCHEMA, ConversationStore
+
+    old = SCHEMA.replace("    aux_input_tokens  INTEGER NOT NULL DEFAULT 0,\n", "")
+    old = old.replace("    aux_output_tokens INTEGER NOT NULL DEFAULT 0,\n", "")
+    path = tmp_path / "old.db"
+    con = sqlite3.connect(path)
+    con.executescript(old)
+    con.commit()
+    con.close()
+
+    store = ConversationStore(path)
+    cols = {r[1] for r in store.db.execute("PRAGMA table_info(usage)")}
+    assert {"aux_input_tokens", "aux_output_tokens"} <= cols
+    store.close()
+
+
+def test_stats_route_shape(client):
+    body = client.get("/v2/sessions/stats", headers=AUTH).json()
+    assert set(body) == {"lifetime", "by_mode", "activity"}
+    assert set(body["lifetime"]) >= {"input", "output", "cached", "turns", "aux_input"}
+
+
+def test_stats_requires_auth(client):
+    assert client.get("/v2/sessions/stats").status_code == 401

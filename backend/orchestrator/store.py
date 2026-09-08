@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -63,6 +64,12 @@ CREATE TABLE IF NOT EXISTS usage (
     input_tokens  INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cached_tokens INTEGER NOT NULL DEFAULT 0,
+    -- What the turn also spent on the CLI's background tier. Stored because
+    -- omitting it is how the parser lost ~900 input tokens per turn until
+    -- 2026-09-08; a lifetime total that reads only the primary columns
+    -- reproduces that undercount one layer down.
+    aux_input_tokens  INTEGER NOT NULL DEFAULT 0,
+    aux_output_tokens INTEGER NOT NULL DEFAULT 0,
     duration_ms   INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL
 );
@@ -97,13 +104,59 @@ class ConversationStore:
             DATA_DIR.mkdir(parents=True, exist_ok=True)
             path = DATA_DIR / "history.db"
         self.path = str(path)
-        self.db = sqlite3.connect(self.path)
-        self.db.row_factory = sqlite3.Row
+        self._local = threading.local()
         self.db.executescript(SCHEMA)
+        self._add_missing_columns()
         self.db.commit()
 
+    def _add_missing_columns(self) -> None:
+        """Bring an existing database up to the current schema.
+
+        `CREATE TABLE IF NOT EXISTS` is a no-op on a database that already
+        has the table, so a column added later never appears and the next
+        INSERT fails on a machine that has been running the older build.
+
+        This is deliberately not a migration framework -- CLAUDE.md rules
+        those out, and the vault is the database of record. It is an
+        idempotent add-column pass: safe to run on every open, and doing
+        nothing when the columns are already there.
+        """
+        have = {r["name"] for r in self.db.execute("PRAGMA table_info(usage)")}
+        for column in ("aux_input_tokens", "aux_output_tokens"):
+            if column not in have:
+                self.db.execute(
+                    f"ALTER TABLE usage ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+                )
+
+    @property
+    def db(self) -> sqlite3.Connection:
+        """This thread's connection, opened on first use.
+
+        A single shared connection raises "SQLite objects created in a thread
+        can only be used in that same thread" -- and FastAPI runs sync routes
+        on a threadpool, so a store opened at import time is never on the
+        thread that later reads it. One connection per thread is the standard
+        answer and keeps every call site unchanged.
+
+        WAL lets a reader (the Stats page) run while a session is writing,
+        instead of the two blocking each other; the busy timeout covers the
+        moment two writers do overlap.
+        """
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = sqlite3.connect(self.path, timeout=10.0)
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=10000")
+            self._local.conn = conn
+        return conn
+
     def close(self) -> None:
-        self.db.close()
+        """Close this thread's connection. Others close with their thread."""
+        conn = getattr(self._local, "conn", None)
+        if conn is not None:
+            conn.close()
+            self._local.conn = None
 
     # ---------------------------------------------------------- writing
     def open_session(self, mode: str, cwd: str | None = None, title: str | None = None) -> int:
@@ -146,9 +199,11 @@ class ConversationStore:
             u = event.usage
             self.db.execute(
                 "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
-                " cached_tokens, duration_ms, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                " cached_tokens, aux_input_tokens, aux_output_tokens, duration_ms,"
+                " created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (session_id, mode, u.model, u.input_tokens, u.output_tokens,
-                 u.cached_tokens, event.duration_ms, _now()),
+                 u.cached_tokens, u.aux_input_tokens, u.aux_output_tokens,
+                 event.duration_ms, _now()),
             )
             self.db.commit()
 
@@ -204,12 +259,30 @@ class ConversationStore:
             " GROUP BY day ORDER BY day", (f"-{days} days",)).fetchall()
 
     def lifetime_tokens(self) -> sqlite3.Row:
+        """Totals across every turn Noctis has run.
+
+        `input`/`output` include the background tier: this is the
+        what-did-my-day-cost question, where leaving it out is simply an
+        undercount. The primary-only columns stay available separately for
+        the per-turn view, which is the other question.
+        """
         return self.db.execute(
-            "SELECT COALESCE(SUM(input_tokens),0) AS input,"
-            "       COALESCE(SUM(output_tokens),0) AS output,"
+            "SELECT COALESCE(SUM(input_tokens + aux_input_tokens),0) AS input,"
+            "       COALESCE(SUM(output_tokens + aux_output_tokens),0) AS output,"
+            "       COALESCE(SUM(input_tokens),0) AS primary_input,"
+            "       COALESCE(SUM(output_tokens),0) AS primary_output,"
             "       COALESCE(SUM(cached_tokens),0) AS cached,"
             "       COUNT(*) AS turns,"
             "       MIN(created_at) AS since FROM usage").fetchone()
+
+    def usage_by_mode(self) -> list[sqlite3.Row]:
+        """Which modes the tokens actually went to."""
+        return self.db.execute(
+            "SELECT mode,"
+            "       COALESCE(SUM(input_tokens + aux_input_tokens),0) AS input,"
+            "       COALESCE(SUM(output_tokens + aux_output_tokens),0) AS output,"
+            "       COUNT(*) AS turns FROM usage"
+            " GROUP BY mode ORDER BY output DESC").fetchall()
 
     # ---------------------------------------------------------- promotion
     def promote(self, session_id: int, vault_path: Path, rel_path: str,

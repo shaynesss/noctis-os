@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from orchestrator.driver import MODE_MODELS, PERMISSION_CYCLE, SessionSpec
 from orchestrator.events import EngineError
 from orchestrator.manager import SessionManager
+from orchestrator.store import ConversationStore
 from orchestrator.wire import to_sse
 
 router = APIRouter(prefix="/v2/sessions", tags=["sessions"])
@@ -30,6 +31,12 @@ router = APIRouter(prefix="/v2/sessions", tags=["sessions"])
 # One manager per process: it owns the concurrency budget, and two of them
 # would each independently believe they may run the cap.
 _manager = SessionManager()
+
+# History outlives the window: the shell can be closed and reopened, and the
+# transcript is still there. Also what Stats reads -- every number on that
+# page comes from rows written here, never from an in-memory tally that a
+# restart would reset to zero.
+_store = ConversationStore()
 
 # A session's cwd becomes a subprocess working directory, so it is a path
 # from the client reaching exec -- the same class of input as the job_slug
@@ -81,20 +88,36 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
         cwd=_safe_cwd(req.cwd),
     )
 
+    # Opened before the stream so the row exists even if the engine fails
+    # immediately -- a session that died on spawn is still something that
+    # happened, and hiding it would make the failure invisible in history.
+    row_id = _store.open_session(req.mode, cwd=str(spec.cwd), title=req.prompt[:120])
+
     async def stream():
+        state = "done"
         try:
             async for _handle, event in _manager.start(spec):
+                _store.record(row_id, req.mode, event)
+                if getattr(event, "fatal", False):
+                    state = "failed"
                 yield to_sse(event)
         except asyncio.CancelledError:
             # The window closed or the tab went away. Let it unwind: the
             # manager's `finally` still marks the handle, so a disconnect
             # cannot leave a session looking permanently "running".
+            state = "cancelled"
             raise
         except Exception as exc:  # noqa: BLE001 - must reach the transcript
             # An orchestrator bug would otherwise end the stream with no
             # explanation, which the UI cannot distinguish from a session
             # that finished silently.
+            state = "failed"
             yield to_sse(EngineError(message=f"orchestrator failure: {exc}", fatal=True))
+        finally:
+            # In `finally` so a disconnect or a crash still closes the row.
+            # A session left as 'running' forever is the silently-frozen
+            # state CLAUDE.md's failure containment exists to prevent.
+            _store.close_session(row_id, state)
 
     return StreamingResponse(
         stream(),
@@ -146,4 +169,42 @@ def limits() -> dict:
         "five_hour": {"used": lim.five_hour_used, "resets_at": lim.five_hour_resets_at},
         "seven_day": {"used": lim.seven_day_used, "resets_at": lim.seven_day_resets_at},
         "using_overage": lim.using_overage,
+    }
+
+
+@router.get("/stats")
+def stats() -> dict:
+    """Everything the Stats page shows, from recorded rows.
+
+    Read from the store rather than from the manager's memory: a restart
+    would zero an in-process tally, and a lifetime figure that resets when
+    the backend reloads is worse than no figure at all.
+    """
+    life = _store.lifetime_tokens()
+    return {
+        # Totals include the CLI's background tier. Leaving it out is exactly
+        # the undercount the parser had until 2026-09-08 -- ~900 input tokens
+        # a turn -- and "what have I used" is the question these answer.
+        "lifetime": {
+            "input": life["input"],
+            "output": life["output"],
+            "cached": life["cached"],
+            "turns": life["turns"],
+            "since": life["since"],
+            # Kept separate so the page can show what the background tier
+            # cost rather than burying it inside a larger number.
+            "aux_input": life["input"] - life["primary_input"],
+            "aux_output": life["output"] - life["primary_output"],
+        },
+        "by_mode": [
+            {"mode": r["mode"], "input": r["input"], "output": r["output"], "turns": r["turns"]}
+            for r in _store.usage_by_mode()
+        ],
+        # Sessions per day for the contribution grid. Only days with activity
+        # are returned; the grid fills the gaps, which keeps the payload
+        # proportional to what happened rather than to the window.
+        "activity": [
+            {"day": r["day"], "sessions": r["sessions"]}
+            for r in _store.daily_activity(days=365)
+        ],
     }

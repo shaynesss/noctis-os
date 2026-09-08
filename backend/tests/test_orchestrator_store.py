@@ -115,3 +115,40 @@ def test_store_is_not_the_vault(store):
     """The whole point of the split: nothing here writes markdown unless
     promote() is called deliberately."""
     assert store.path.endswith(".db")
+
+
+def test_store_is_usable_from_more_than_one_thread(tmp_path):
+    """FastAPI runs sync routes on a threadpool, so a store opened at import
+    time is never on the thread that later reads it. A single shared
+    connection raises ProgrammingError there -- caught only because a route
+    test happened to exercise it, not by any unit test."""
+    import threading
+
+    from orchestrator.events import TurnEnd, Usage
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("faber", cwd="/tmp")
+    store.record(sid, "faber", TurnEnd(
+        session_id="s", duration_ms=1,
+        usage=Usage(input_tokens=5, output_tokens=6, cached_tokens=0, model="m"),
+    ))
+
+    seen: list[int] = []
+    errors: list[BaseException] = []
+
+    def read():
+        try:
+            seen.append(store.lifetime_tokens()["output"])
+        except BaseException as e:      # noqa: BLE001 - the point is to catch it
+            errors.append(e)
+
+    threads = [threading.Thread(target=read) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"cross-thread access failed: {errors[0]}"
+    assert seen == [6, 6, 6, 6]
+    store.close()
