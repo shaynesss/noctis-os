@@ -13,6 +13,10 @@ import { Activity } from './Activity'
 import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
 import { emptyFold, fold, get, runSession, type Stats as StatsPayload, type Window } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
+import {
+  Brief, Inbox, Settings,
+  type BriefPayload, type ConfigPayload, type InboxPayload,
+} from './Panels'
 import { Transcript } from './Transcript'
 import {
   MODE_ACCENT, MODE_LABEL, PERMISSION_CYCLE, SESSIONS, TABS,
@@ -344,14 +348,36 @@ function Pane({ view, limits }: { view: string; limits?: { five_hour: Window; se
   if (view === 'stats') return <Stats limits={limits} />
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[840px] px-8 pt-7">
-        <h2 className="m-0 mb-[14px] font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
-          {view}
-        </h2>
-        <p className="text-ink-dim">Not built yet — Stage 2 items 5–6.</p>
+      <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
+        {view === 'brief' && <Fetched<BriefPayload> path="/v2/brief" what="the brief" render={(d) => <Brief data={d} />} />}
+        {view === 'inbox' && <Fetched<InboxPayload> path="/v2/inbox" what="the inbox" render={(d) => <Inbox data={d} />} />}
+        {view === 'settings' && <Fetched<ConfigPayload> path="/v2/config" what="settings" render={(d) => <Settings data={d} />} />}
       </div>
     </div>
   )
+}
+
+/** Load a route, then render it. Loading, loaded and unreachable are three
+ *  states: an empty panel that means "the backend is down" must not look
+ *  like one that means "you have nothing waiting". */
+function Fetched<T>({
+  path,
+  what,
+  render,
+}: {
+  path: string
+  what: string
+  render: (data: T) => React.ReactNode
+}) {
+  const data = useFetched<T>(path)
+  if (data === false) return <Unreachable what={what} />
+  if (data === null)
+    return (
+      <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
+        Loading…
+      </div>
+    )
+  return <>{render(data)}</>
 }
 
 /** Fetch a route once on mount. `null` while loading, `false` when the

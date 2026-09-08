@@ -158,3 +158,18 @@ def list_dir(relative_path: str) -> list[str]:
     if not dir_path.is_dir():
         return []
     return sorted(p.stem for p in dir_path.glob("*.md"))
+
+
+def list_subdirs(relative_path: str) -> list[str]:
+    """Subdirectory names in a vault subdirectory, sorted.
+
+    `list_dir` returns markdown *stems* and ignores directories, which is
+    right for Design Lodge entries and wrong for anything addressed by
+    folder — modes, and the jobs inside them. Using the wrong one returns an
+    empty list rather than an error, so the caller looks like it found
+    nothing instead of like it asked the wrong question.
+    """
+    dir_path = _resolve_within_vault(relative_path)
+    if not dir_path.is_dir():
+        return []
+    return sorted(p.name for p in dir_path.iterdir() if p.is_dir())

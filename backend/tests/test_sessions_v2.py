@@ -238,3 +238,83 @@ def test_stats_route_shape(client):
 
 def test_stats_requires_auth(client):
     assert client.get("/v2/sessions/stats").status_code == 401
+
+
+# ------------------------------------------------------------------ panels
+
+def test_brief_reports_absence_rather_than_inventing_one(client):
+    """The generator is build-order item 6. A panel that invents a morning
+    brief is worse than one that says it has not run, because the invented
+    one gets believed."""
+    body = client.get("/v2/brief", headers=AUTH).json()
+    assert body["brief"]["generated"] is False
+    assert body["brief"]["markdown"] is None
+    assert body["brief"]["path"] == "brief/today.md"
+
+
+def test_config_reports_what_the_orchestrator_will_really_run(client):
+    """Read from driver.py rather than restated, so Settings cannot drift
+    into describing a system that no longer exists."""
+    from orchestrator.driver import MODE_MODELS
+
+    body = client.get("/v2/config", headers=AUTH).json()
+    assert {m["mode"]: m["model"] for m in body["modes"]} == MODE_MODELS
+    assert "bypassPermissions" in body["excluded_from_cycle"]
+    assert "bypassPermissions" not in body["permission_cycle"]
+
+
+def test_maintenance_is_shown_as_unable_to_edit(client):
+    """The one policy that decides what a session can do to your files."""
+    body = client.get("/v2/config", headers=AUTH).json()
+    maint = next(m for m in body["modes"] if m["mode"] == "maintenance")
+    assert "Edit" in maint["disallowed"] and "Write" in maint["disallowed"]
+
+
+def test_finished_jobs_are_not_inbox_items(monkeypatch):
+    """Most of the vault's flagged jobs are settings work completed in July.
+    Including them produced 22 entries, 20 long resolved -- which is how an
+    inbox stops being read."""
+    from routers import panels
+
+    jobs = {
+        "modes": ["dev"],
+        "modes/dev/jobs": ["done-one", "open-one"],
+    }
+    meta = {
+        "modes/dev/jobs/done-one/context.md": {"flagged": True, "stage": "Done", "name": "Done one"},
+        "modes/dev/jobs/open-one/context.md": {"flagged": True, "stage": "Build", "name": "Open one"},
+    }
+    monkeypatch.setattr(panels.vault_io, "list_subdirs", lambda p: jobs.get(p, []))
+    monkeypatch.setattr(panels.vault_io, "file_exists", lambda p: True)
+    monkeypatch.setattr(panels, "_safe_frontmatter", lambda p: meta.get(p))
+
+    titles = [j["title"] for j in panels._flagged_jobs()]
+    assert titles == ["Open one"]
+
+
+def test_one_unparseable_job_does_not_take_down_the_panel(monkeypatch):
+    """A YAML scalar containing ': ' parses as a mapping and raises -- a real
+    file in modes/dev/jobs was failing exactly that way."""
+    from routers import panels
+
+    monkeypatch.setattr(panels.vault_io, "list_subdirs",
+                        lambda p: ["dev"] if p == "modes" else ["broken"])
+    monkeypatch.setattr(panels.vault_io, "file_exists", lambda p: True)
+    monkeypatch.setattr(panels, "_safe_frontmatter", lambda p: None)
+
+    items = panels._flagged_jobs()
+    assert len(items) == 1
+    assert items[0]["kind"] == "unreadable"
+
+
+def test_the_inbox_readme_is_not_a_proposal(monkeypatch):
+    """The staging folder holds its own README; listing it put a docs file in
+    a queue of things awaiting a decision."""
+    from routers import panels
+
+    monkeypatch.setattr(panels.vault_io, "file_exists", lambda p: True)
+    monkeypatch.setattr(panels.vault_io, "list_dir", lambda p: ["README", "real-proposal"])
+    monkeypatch.setattr(panels, "_safe_frontmatter", lambda p: {"description": "d"})
+    monkeypatch.setattr(panels.vault_io, "read_frontmatter", lambda p: ({}, "body"))
+
+    assert [p["id"] for p in panels._proposals()] == ["real-proposal"]
