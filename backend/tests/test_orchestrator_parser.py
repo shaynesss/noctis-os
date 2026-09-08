@@ -6,6 +6,7 @@ idea of it does. Regenerate the fixture with:
 
     claude -p "..." --output-format stream-json --verbose > fixture.jsonl
 """
+import json
 from pathlib import Path
 
 import pytest
@@ -132,3 +133,62 @@ def test_thinking_text_is_empty_by_default_and_that_is_expected(events):
 def test_thinking_progress_gives_a_live_counter():
     (ev,) = parse_line('{"type":"system","subtype":"thinking_tokens","estimated_tokens":250}')
     assert isinstance(ev, ThinkingProgress) and ev.estimated_tokens == 250
+
+
+# --------------------------------------------------- multi-model turns
+
+def _multi_model_result():
+    """A real `result` line captured live on 2026-09-08, where the CLI billed
+    a background haiku task alongside the opus turn."""
+    return (Path(__file__).parent / "fixtures" / "result_multi_model.json").read_text()
+
+
+def test_turn_end_names_the_model_that_actually_answered():
+    """`modelUsage` is keyed by model and its first key was the *background*
+    tier, so the turn was labelled haiku while the token counts beside it
+    were opus's -- the name and the numbers disagreed."""
+    (end,) = [e for e in parse_line(_multi_model_result()) if isinstance(e, TurnEnd)]
+    assert end.usage.model == "claude-opus-5"
+
+
+def test_background_model_tokens_are_not_silently_dropped():
+    """Top-level `usage` is only the primary model's, so reporting it alone
+    lost ~900 input tokens per turn from any lifetime total."""
+    (end,) = [e for e in parse_line(_multi_model_result()) if isinstance(e, TurnEnd)]
+    assert end.usage.aux_input_tokens == 903
+    assert end.usage.aux_output_tokens == 12
+    assert end.usage.total_input == end.usage.input_tokens + 903
+
+
+def test_primary_falls_back_to_largest_output_when_nothing_matches():
+    """The exact match is on top-level usage; if that shape ever stops
+    holding, the model that produced the most output is the one that
+    answered -- never dict order again."""
+    line = json.dumps({
+        "type": "result", "session_id": "s", "duration_ms": 1,
+        "usage": {"input_tokens": 999, "output_tokens": 999},
+        "modelUsage": {
+            "cheap-model": {"inputTokens": 900, "outputTokens": 12},
+            "real-model": {"inputTokens": 2, "outputTokens": 500},
+        },
+    })
+    (end,) = [e for e in parse_line(line) if isinstance(e, TurnEnd)]
+    assert end.usage.model == "real-model"
+
+
+def test_single_model_turn_reports_no_aux():
+    line = json.dumps({
+        "type": "result", "session_id": "s", "duration_ms": 1,
+        "usage": {"input_tokens": 2, "output_tokens": 4},
+        "modelUsage": {"claude-opus-5": {"inputTokens": 2, "outputTokens": 4}},
+    })
+    (end,) = [e for e in parse_line(line) if isinstance(e, TurnEnd)]
+    assert end.usage.model == "claude-opus-5"
+    assert end.usage.aux_input_tokens == 0
+
+
+def test_missing_model_usage_does_not_crash():
+    line = json.dumps({"type": "result", "session_id": "s", "duration_ms": 1,
+                       "usage": {"input_tokens": 1, "output_tokens": 1}})
+    (end,) = [e for e in parse_line(line) if isinstance(e, TurnEnd)]
+    assert end.usage.model == ""

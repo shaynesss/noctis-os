@@ -69,10 +69,16 @@ def to_dict(e: Event) -> dict[str, Any]:
     if isinstance(e, TurnEnd):
         return {"t": "turn_end", "session_id": e.session_id,
                 "duration_ms": e.duration_ms, "stop_reason": e.stop_reason,
+                # `model` names the model these counts describe. `aux` is
+                # what the turn also spent on the CLI's background tier --
+                # separate, because per-turn and per-day are different
+                # questions and summing makes the first one wrong.
                 "usage": {"input": e.usage.input_tokens,
                           "output": e.usage.output_tokens,
                           "cached": e.usage.cached_tokens,
-                          "model": e.usage.model}}
+                          "model": e.usage.model,
+                          "aux_input": e.usage.aux_input_tokens,
+                          "aux_output": e.usage.aux_output_tokens}}
 
     if isinstance(e, EngineError):
         return {"t": "error", "message": e.message, "fatal": e.fatal}

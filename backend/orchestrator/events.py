@@ -107,11 +107,33 @@ class Limits:
 class Usage:
     """Per-turn token counts. No cost field — under a subscription engine a
     dollar figure is notional and never charged, so showing it would be
-    noise at best. Limits are the real currency; see `Limits`."""
+    noise at best. Limits are the real currency; see `Limits`.
+
+    A turn can bill more than one model: the CLI runs small background tasks
+    on a cheaper tier alongside the model doing the work. The first three
+    fields describe the model named in `model` — the one that answered — and
+    `aux_*` carries everything else the turn spent.
+
+    They are kept apart rather than summed because they answer different
+    questions. "What did this reply cost" is the primary model; "what did my
+    day cost" is both. Summing into one number would make the per-turn
+    figure wrong, and reporting only the primary — which is what this did
+    until 2026-09-08 — silently loses ~900 input tokens on every turn.
+    """
     input_tokens: int
     output_tokens: int
     cached_tokens: int
     model: str
+    aux_input_tokens: int = 0
+    aux_output_tokens: int = 0
+
+    @property
+    def total_input(self) -> int:
+        return self.input_tokens + self.aux_input_tokens
+
+    @property
+    def total_output(self) -> int:
+        return self.output_tokens + self.aux_output_tokens
 
 
 @dataclass(frozen=True)

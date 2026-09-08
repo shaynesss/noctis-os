@@ -31,6 +31,40 @@ from .events import (
 IGNORED_SUBTYPES = {"hook_started", "hook_response", "status"}
 
 
+def _split_model_usage(
+    model_usage: dict[str, Any], usage: dict[str, Any]
+) -> tuple[str, int, int]:
+    """Name the model that answered, and total what the others spent.
+
+    `modelUsage` is keyed by model and routinely holds two entries: the
+    session's model, and a cheaper tier the CLI uses for background tasks.
+    This used to take `next(iter(keys))` — the first key in dict order —
+    which named the *background* model while the token counts beside it came
+    from top-level `usage`, i.e. the primary. The name and the numbers
+    disagreed, verified live on 2026-09-08.
+
+    Top-level `usage` is exactly the primary model's entry, so the primary is
+    identified by matching it rather than guessed at: an exact match, with
+    largest-output as the fallback for a shape that stops holding.
+    """
+    if not model_usage:
+        return "", 0, 0
+
+    want = (int(usage.get("input_tokens", -1)), int(usage.get("output_tokens", -1)))
+    primary = ""
+    for name, m in model_usage.items():
+        if (int(m.get("inputTokens", -2)), int(m.get("outputTokens", -2))) == want:
+            primary = name
+            break
+    if not primary:
+        # The model that produced the most output is the one that answered.
+        primary = max(model_usage, key=lambda k: int(model_usage[k].get("outputTokens", 0)))
+
+    aux_in = sum(int(m.get("inputTokens", 0)) for n, m in model_usage.items() if n != primary)
+    aux_out = sum(int(m.get("outputTokens", 0)) for n, m in model_usage.items() if n != primary)
+    return primary, aux_in, aux_out
+
+
 def parse_line(line: str) -> list[Event]:
     """Zero or more Events from one stream-json line. Never raises: a bad
     line becomes an EngineError, because an orchestrator that dies on one
@@ -106,13 +140,16 @@ def parse_line(line: str) -> list[Event]:
 
     if kind == "result":
         u = d.get("usage") or {}
+        primary, aux_in, aux_out = _split_model_usage(d.get("modelUsage") or {}, u)
         ev: list[Event] = [TurnEnd(
             session_id=d.get("session_id", ""),
             usage=Usage(
                 input_tokens=int(u.get("input_tokens", 0)),
                 output_tokens=int(u.get("output_tokens", 0)),
                 cached_tokens=int(u.get("cache_read_input_tokens", 0)),
-                model=next(iter((d.get("modelUsage") or {}).keys()), ""),
+                model=primary,
+                aux_input_tokens=aux_in,
+                aux_output_tokens=aux_out,
             ),
             duration_ms=int(d.get("duration_ms", 0)),
             stop_reason=d.get("stop_reason"),
