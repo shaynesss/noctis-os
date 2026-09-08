@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncIterator, Sequence
@@ -53,6 +54,41 @@ MODE_TOOLS: dict[str, dict[str, str]] = {
 PERMISSION_CYCLE = ("plan", "manual", "acceptEdits", "auto")
 
 
+# Where `claude` actually lives, checked in order. PATH is searched first,
+# but it cannot be relied on: launchd starts processes with a bare
+# /usr/bin:/bin:/usr/sbin:/sbin, which contains no Homebrew and no npm
+# prefix -- so a backend started by the scheduler would fail to find the
+# engine even though it runs fine from a terminal. That failure surfaced as
+# a bare "[Errno 2] No such file or directory" with nothing naming the
+# binary, which is why the error below says what was looked for.
+_CLAUDE_FALLBACKS = (
+    Path("/opt/homebrew/bin/claude"),
+    Path("/usr/local/bin/claude"),
+    Path.home() / ".local/bin/claude",
+    Path.home() / ".claude/local/claude",
+)
+
+
+def claude_binary() -> str:
+    """Absolute path to the engine.
+
+    NOCTIS_CLAUDE_BIN overrides everything, for a non-standard install or to
+    pin a specific build.
+    """
+    override = os.environ.get("NOCTIS_CLAUDE_BIN")
+    if override:
+        return override
+    if found := shutil.which("claude"):
+        return found
+    for candidate in _CLAUDE_FALLBACKS:
+        if candidate.exists():
+            return str(candidate)
+    # Returned rather than raised: the caller turns a failed spawn into an
+    # EngineError in the transcript, and a raise here would instead be an
+    # unhandled 500 with the same information in a place nobody is looking.
+    return "claude"
+
+
 @dataclass
 class SessionSpec:
     mode: str
@@ -71,7 +107,7 @@ class SessionSpec:
 def build_command(spec: SessionSpec) -> list[str]:
     """The exact argv for a spawn. Pure, so it can be asserted on."""
     cmd = [
-        "claude", "-p", spec.prompt,
+        claude_binary(), "-p", spec.prompt,
         "--model", MODE_MODELS[spec.mode],
         "--output-format", "stream-json",
         "--verbose",                 # required for stream-json to emit events
@@ -123,7 +159,10 @@ async def launch(
             cwd=str(cwd) if cwd else None,
         )
     except (OSError, FileNotFoundError) as e:
-        yield EngineError(f"could not start engine: {e}", fatal=True)
+        # Naming the binary matters: the bare errno says only "No such file
+        # or directory", which reads like a bad cwd rather than a missing
+        # engine and sends you looking in the wrong place.
+        yield EngineError(f"could not start engine {command[0]!r}: {e}", fatal=True)
         return
 
     assert proc.stdout is not None

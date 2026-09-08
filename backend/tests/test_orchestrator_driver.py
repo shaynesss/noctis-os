@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 
 from orchestrator.driver import (
-    MODE_MODELS, SessionSpec, build_command, build_env, launch, session_id_of,
+    MODE_MODELS, SessionSpec, build_command, build_env, claude_binary, launch,
+    session_id_of,
 )
 from orchestrator.events import EngineError, SessionStart, TurnEnd
 from orchestrator.manager import SessionManager
@@ -26,11 +27,37 @@ async def _collect(agen):
 
 def test_command_carries_the_flags_stream_json_needs():
     cmd = build_command(SessionSpec(mode="faber", prompt="go"))
-    assert cmd[:3] == ["claude", "-p", "go"]
+    # Resolved path, not the bare name -- see test_engine_is_resolved_...
+    assert Path(cmd[0]).name == "claude"
+    assert cmd[1:3] == ["-p", "go"]
     assert "--output-format" in cmd and "stream-json" in cmd
     # stream-json emits nothing useful without --verbose; easy to lose in a
     # refactor and the failure looks like an empty session.
     assert "--verbose" in cmd
+
+
+def test_engine_is_resolved_to_a_path_not_left_to_path_lookup(monkeypatch):
+    """launchd starts processes with a bare /usr/bin:/bin:/usr/sbin:/sbin --
+    no Homebrew, no npm prefix. A backend started by the scheduler would
+    therefore fail to find `claude` even though it runs fine from a
+    terminal, which is exactly what happened on 2026-09-08."""
+    monkeypatch.setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+    monkeypatch.delenv("NOCTIS_CLAUDE_BIN", raising=False)
+    resolved = claude_binary()
+    # Either an absolute fallback was found, or the bare name is returned so
+    # the caller can report a proper EngineError -- never a silent crash.
+    assert resolved.endswith("claude")
+
+
+def test_explicit_binary_override_wins(monkeypatch):
+    monkeypatch.setenv("NOCTIS_CLAUDE_BIN", "/custom/path/claude")
+    assert claude_binary() == "/custom/path/claude"
+
+
+def test_failed_spawn_names_the_binary_it_tried(monkeypatch):
+    """A bare errno reads like a bad cwd rather than a missing engine."""
+    events = asyncio.run(_collect(launch(["/nope/definitely-not-real"])))
+    assert "/nope/definitely-not-real" in events[0].message
 
 
 def test_each_mode_gets_its_production_model():
