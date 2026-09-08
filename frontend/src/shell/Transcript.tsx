@@ -80,7 +80,16 @@ function Rich({ text }: { text: string }) {
   return <>{nodes}</>
 }
 
-export function Transcript({ blocks, accent }: { blocks: Block[]; accent: string }) {
+export function Transcript({
+  blocks,
+  accent,
+  thinking,
+}: {
+  blocks: Block[]
+  accent: string
+  /** Live thinking-token estimate, or null when not reasoning. */
+  thinking?: number | null
+}) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
@@ -134,6 +143,26 @@ export function Transcript({ blocks, accent }: { blocks: Block[]; accent: string
               </div>
             )
           }
+          if (b.kind === 'error') {
+            /* In the transcript rather than a toast: a failed turn is
+             * exactly the thing you scroll back to find, and a toast puts it
+             * somewhere the session's own history does not record. */
+            return (
+              <div
+                key={i}
+                className="mb-[22px] rounded-[3px] border px-[11px] py-[9px] text-[12.5px] leading-[1.6]"
+                style={{
+                  borderColor: 'color-mix(in srgb, var(--color-faber) 40%, var(--color-surface))',
+                  background: 'color-mix(in srgb, var(--color-faber) 8%, var(--color-surface))',
+                }}
+              >
+                <div className="mb-[4px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-faber">
+                  {b.fatal ? 'Session failed' : 'Engine error'}
+                </div>
+                <div className="text-ink-dim">{b.message}</div>
+              </div>
+            )
+          }
           if (b.kind === 'tool') {
             return (
               <Disclosure
@@ -162,6 +191,20 @@ export function Transcript({ blocks, accent }: { blocks: Block[]; accent: string
             </div>
           )
         })}
+
+        {/* The one honest signal during a long pause. The model's reasoning
+          * text is never returned (display:"omitted"), so this counts tokens
+          * rather than pretending to show thought -- a transcript that
+          * simply stops looks identical to one that has crashed. */}
+        {thinking != null && (
+          <div className="mb-[22px] flex items-center gap-[9px] font-mono text-[11.5px] text-ink-faint">
+            <span
+              className="h-[7px] w-[7px] animate-pulse rounded-full motion-reduce:animate-none"
+              style={{ background: accent }}
+            />
+            thinking · {thinking.toLocaleString()} tokens
+          </div>
+        )}
       </div>
     </div>
   )

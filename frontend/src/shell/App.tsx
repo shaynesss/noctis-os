@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
+import { emptyFold, fold, runSession, type Window } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { Transcript } from './Transcript'
 import {
@@ -54,8 +55,22 @@ export default function App() {
   const tabsRef = useRef(tabs)
   const launcherRef = useRef(launcher)
   const handoffRef = useRef(() => {})
+  const sessionsRef = useRef(sessions)
+  const permissionRef = useRef(permission)
   tabsRef.current = tabs
   launcherRef.current = launcher
+  sessionsRef.current = sessions
+  permissionRef.current = permission
+
+  /* One abort per tab. Closing a tab or quitting has to actually stop the
+   * stream: an orphaned reader keeps the connection open and the session
+   * keeps burning the 5h window with nothing rendering it. */
+  const aborts = useRef<Record<string, AbortController>>({})
+
+  // Newest rolling-window report, for the status bar. Null until a session
+  // has reported one -- see the backend's known:false for why that is not
+  // the same as zero.
+  const [limits, setLimits] = useState<{ five_hour: Window; seven_day: Window } | null>(null)
 
   // The panels are not conversations. While one is open the composer binds
   // to General rather than to whichever tab you happened to leave behind --
@@ -70,15 +85,80 @@ export default function App() {
   const composerMode = sessions[composerTab].mode
   const accent = MODE_ACCENT[session.mode]
 
+  /* One turn: append what was typed, then stream the engine's reply into
+   * the same session.
+   *
+   * The user block is appended before the request rather than on the first
+   * response event -- otherwise a slow or failing backend leaves the screen
+   * showing nothing happened, and the most likely reaction is to type it
+   * again. */
+  const turn = async (tabId: string, prompt: string, seed?: SessionState) => {
+    // `seed` is how a just-launched session runs its opening prompt: it does
+    // not exist in the ref yet, because that follows a render and this is
+    // called before one. Waiting a tick instead would be a race that passes
+    // on a fast machine.
+    const current = seed ?? sessionsRef.current[tabId]
+    if (!current || current.busy) return
+
+    const withUser: SessionState = {
+      ...current,
+      busy: true,
+      thinking: null,
+      blocks: [...current.blocks, { kind: 'user', text: prompt, at: now() }],
+    }
+    setSessions((s) => ({ ...s, [tabId]: withUser }))
+
+    const ctrl = new AbortController()
+    aborts.current[tabId] = ctrl
+
+    let state = emptyFold(withUser.blocks)
+    try {
+      for await (const ev of runSession(
+        {
+          mode: current.mode,
+          prompt,
+          cwd: current.cwd,
+          permission_mode: permissionRef.current,
+          // Absent on the first turn, so the engine starts a session; present
+          // afterwards, so the rest continue it instead of forgetting.
+          resume_id: current.engineId,
+        },
+        ctrl.signal,
+      )) {
+        state = fold(state, ev)
+        if (ev.t === 'limits') setLimits(ev)
+        // Written on every event rather than batched: the point of streaming
+        // is that the transcript moves while the model works.
+        setSessions((s) => ({
+          ...s,
+          [tabId]: {
+            ...s[tabId],
+            blocks: state.blocks,
+            thinking: state.thinking,
+            engineId: state.sessionId ?? s[tabId].engineId,
+          },
+        }))
+      }
+    } finally {
+      // In `finally` so an abort or a throw cannot strand a session as
+      // permanently busy, which would lock its composer with no way back.
+      delete aborts.current[tabId]
+      setSessions((s) => ({ ...s, [tabId]: { ...s[tabId], busy: false, thinking: null } }))
+    }
+  }
+
   // Sending from a panel takes you to the conversation it went to. Leaving
   // you on Settings while a reply arrives somewhere unseen would be worse
   // than the extra navigation.
   const send = () => {
+    const prompt = (drafts[composerTab] ?? '').trim()
+    if (!prompt) return
     setDrafts({ ...drafts, [composerTab]: '' })
     if (!inChat) {
       setActiveTab(composerTab)
       setView('chat')
     }
+    void turn(composerTab, prompt)
   }
 
   /* A launch always lands in a new tab, whether it came from + or from a
@@ -100,12 +180,17 @@ export default function App() {
     blocks.push({ kind: 'user', text: req.prompt, at: now() })
 
     setTabs([...tabs, { id, mode: req.mode, label }])
-    setSessions({ ...sessions, [id]: { mode: req.mode, blocks, draft: '' } })
+    // The provenance block only; the opening prompt is appended by `turn`,
+    // so a launched session and a typed one build their transcript the same
+    // way rather than through two paths that can drift.
+    setSessions({ ...sessions, [id]: { mode: req.mode, cwd: req.cwd, blocks, draft: '' } })
     setDrafts({ ...drafts, [id]: '' })
     setActiveTab(id)
     setView('chat')
     setLauncher(null)
     composerRef.current?.focus()
+
+    void turn(id, req.prompt, { mode: req.mode, cwd: req.cwd, blocks, draft: '' })
   }
 
   /* What a handoff carries is a summary, not the transcript -- so it is
@@ -188,6 +273,13 @@ export default function App() {
     composerRef.current?.focus()
   }, [])
 
+  // Abort every live stream when the shell goes away. Without this the
+  // window can close on running readers, which keeps the connections open.
+  useEffect(() => {
+    const live = aborts.current
+    return () => Object.values(live).forEach((c) => c.abort())
+  }, [])
+
   return (
     <div className="relative flex h-full flex-col" style={{ ['--accent' as string]: accent }}>
       <TitleStrip />
@@ -208,7 +300,7 @@ export default function App() {
         />
 
         {view === 'chat' ? (
-          <Transcript blocks={session.blocks} accent={accent} />
+          <Transcript blocks={session.blocks} accent={accent} thinking={session.thinking} />
         ) : (
           <Pane view={view} />
         )}
@@ -216,13 +308,14 @@ export default function App() {
         </div>
       </div>
 
-      <BottomBar>
+      <BottomBar limits={limits}>
         <Composer
             ref={composerRef}
             mode={composerMode}
             value={drafts[composerTab] ?? ''}
             onChange={(v) => setDrafts({ ...drafts, [composerTab]: v })}
             onSend={send}
+            busy={sessions[composerTab].busy}
             permission={permission}
             onCyclePermission={() =>
               setPermission(PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length])

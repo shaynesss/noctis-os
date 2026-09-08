@@ -59,7 +59,14 @@ export type Block =
   | { kind: 'user'; text: string; at: string }
   | { kind: 'text'; text: string }
   | { kind: 'thinking'; tokens: number; ms: number }
-  | { kind: 'tool'; name: string; target: string; meta: string; body: string; open?: boolean }
+  /* `id` pairs a call with the result that arrives later -- results can be
+   * interleaved with text and can land out of order, so they are matched by
+   * id rather than by "the most recent tool block". */
+  | { kind: 'tool'; id?: string; name: string; target: string; meta: string; body: string; open?: boolean }
+  /* An engine failure belongs in the transcript, where the work was. A
+   * toast would put it somewhere the session's own history does not record,
+   * and a failed turn is exactly the thing you scroll back to find. */
+  | { kind: 'error'; message: string; fatal: boolean }
   /* A handed-off session opens with its provenance rather than a blank
    * transcript, so a tab you return to an hour later says where it came
    * from instead of looking like something you started and forgot. */
@@ -76,6 +83,17 @@ export interface SessionState {
   mode: Mode
   blocks: Block[]
   draft: string
+  /** Where the engine runs. Sent on every turn; the backend confines it. */
+  cwd: string
+  /** The engine's own id, learned from the first event. `--resume` takes
+   *  it, so a turn without one starts a fresh session rather than
+   *  continuing -- which is why it is stored per session, not per app. */
+  engineId?: string
+  /** A turn is in flight. The composer disables on it: a second prompt sent
+   *  mid-turn would race the first rather than queue behind it. */
+  busy?: boolean
+  /** Live thinking-token estimate during a pause, null otherwise. */
+  thinking?: number | null
 }
 
 export const TABS: Tab[] = [
@@ -86,6 +104,7 @@ export const TABS: Tab[] = [
 
 export const SESSIONS: Record<string, SessionState> = {
   t0: {
+    cwd: '~/Developer/noctis-os',
     mode: 'general',
     blocks: [
       { kind: 'user', text: 'can you compare postgres and sqlite for the history store', at: '12:02' },
@@ -99,6 +118,7 @@ export const SESSIONS: Record<string, SessionState> = {
     draft: '',
   },
   t1: {
+    cwd: '~/Developer/noctis-os',
     mode: 'faber',
     blocks: [
       { kind: 'user', text: 'start stage 1 item 3 — the mode merge', at: '12:19' },
@@ -144,6 +164,7 @@ export const SESSIONS: Record<string, SessionState> = {
       'yes — two files. but call them audit.md and schedule.md so the split is obvious from the filename alone',
   },
   t2: {
+    cwd: '~/Developer/second-brain',
     mode: 'vesper',
     blocks: [
       { kind: 'user', text: 'which mcp servers are worth adopting for the vault?', at: '09:41' },

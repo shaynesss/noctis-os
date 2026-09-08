@@ -193,9 +193,11 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   value: string
   onChange: (v: string) => void
   onSend: () => void
+  /** A turn is in flight. Sending again would race it, not queue behind it. */
+  busy?: boolean
   permission: Permission
   onCyclePermission: () => void
-}>(function Composer({ mode, value, onChange, onSend, permission, onCyclePermission }, forwarded) {
+}>(function Composer({ mode, value, onChange, onSend, busy, permission, onCyclePermission }, forwarded) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useImperativeHandle(forwarded, () => ref.current as HTMLTextAreaElement)
 
@@ -266,19 +268,35 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
-              if (value.trim()) onSend()
+              if (value.trim() && !busy) onSend()
             }
           }}
           rows={1}
           spellCheck={false}
           aria-label="Message"
+          /* Readonly rather than disabled: a disabled textarea loses focus
+             and drops the caret, so the keyboard lands nowhere the moment a
+             turn starts. Readonly keeps focus and still refuses input. */
+          readOnly={busy}
           className="max-h-[160px] min-h-[21px] flex-1 resize-none border-0 bg-transparent font-mono text-[12.5px] leading-[21px] text-ink outline-none"
           style={{ caretColor: accent }}
         />
 
         <span className="flex shrink-0 items-center gap-[6px] self-end">
           <IconButton title="Attach" d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8" />
-          <IconButton title="Send" d="M4 12h15M13 6l6 6-6 6" onClick={() => value.trim() && onSend()} />
+          {busy ? (
+            /* The prompt glyph would keep inviting input while the engine is
+               mid-turn. A spinner in its place says the session is working
+               without adding a control that does nothing. */
+            <span
+              aria-label="Working"
+              role="status"
+              className="mr-[3px] h-[13px] w-[13px] animate-spin rounded-full border border-line motion-reduce:animate-none"
+              style={{ borderTopColor: accent }}
+            />
+          ) : (
+            <IconButton title="Send" d="M4 12h15M13 6l6 6-6 6" onClick={() => value.trim() && onSend()} />
+          )}
         </span>
       </div>
 
@@ -322,8 +340,20 @@ function Meter({ pct, tone = 'var(--color-good)' }: { pct: number; tone?: string
  * cycling in headless -p, and Noctis produces no artifacts -- and neither
  * appears in the spec's status-line list. A status bar that reports things
  * the app cannot know is worse than a shorter one. */
-export function StatusBar() {
+export interface LiveLimits {
+  five_hour: { used: number; resets_at: number }
+  seven_day: { used: number; resets_at: number }
+}
+
+export function StatusBar({ limits }: { limits?: LiveLimits | null }) {
   const s = STATUS
+  /* Real windows once a session has reported them, mock until then. The
+   * engine only sends `rate_limit_event` during a run, so before the first
+   * one there is genuinely nothing to show -- and these are the only numbers
+   * here that govern a decision (whether there is room to start another
+   * session), so they must never be invented. */
+  const fiveHour = limits ? Math.round(limits.five_hour.used * 100) : s.fiveHourPct
+  const sevenDay = limits ? Math.round(limits.seven_day.used * 100) : s.sevenDayPct
   return (
     <div className="flex min-w-0 flex-col gap-[2px] font-mono text-[10.5px] text-ink-faint">
       {/* Each row stays on one line. The cwd is the only variable-length
@@ -341,10 +371,10 @@ export function StatusBar() {
           ctx <Meter pct={s.contextPct} tone="var(--color-noctua)" /> {s.contextPct}%
         </Seg>
         <Seg>
-          5h <Meter pct={s.fiveHourPct} /> {s.fiveHourPct}%
+          5h <Meter pct={fiveHour} /> {fiveHour}%
         </Seg>
         <Seg last>
-          7d <Meter pct={s.sevenDayPct} /> {s.sevenDayPct}%
+          7d <Meter pct={sevenDay} /> {sevenDay}%
         </Seg>
       </div>
     </div>
@@ -361,7 +391,7 @@ export function StatusBar() {
  * overlap for an absence -- worse, because the quota numbers are the ones
  * that govern whether to start another session. Information that matters at
  * every width should move when it does not fit, not vanish. */
-export function BottomBar({ children }: { children: React.ReactNode }) {
+export function BottomBar({ children, limits }: { children: React.ReactNode; limits?: LiveLimits | null }) {
   return (
     <div className="flex shrink-0 border-t border-line bg-surface">
       {/* Rail-width cell, always present. It was previously only rendered in
@@ -377,7 +407,7 @@ export function BottomBar({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-[14px] py-[10px]">
           <div className="hidden min-w-0 justify-self-start overflow-hidden min-[1620px]:flex">
-            <StatusBar />
+            <StatusBar limits={limits} />
           </div>
           {children}
           <div className="hidden justify-self-end min-[1620px]:flex">
@@ -388,7 +418,7 @@ export function BottomBar({ children }: { children: React.ReactNode }) {
         {/* Same components, second position -- rendered twice rather than
             moved with JS, since only one is ever displayed. */}
         <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
-          <StatusBar />
+          <StatusBar limits={limits} />
           <div className="ml-auto">
             <CharacterStrip />
           </div>
