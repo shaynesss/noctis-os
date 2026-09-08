@@ -216,3 +216,31 @@ export function fold(state: Fold, e: WireEvent): Fold {
       return state
   }
 }
+
+/* ----------------------------------------------------------------- reads */
+
+export interface Stats {
+  lifetime: {
+    input: number; output: number; cached: number; turns: number
+    since: string | null; aux_input: number; aux_output: number
+  }
+  by_mode: { mode: string; input: number; output: number; turns: number }[]
+  activity: { day: string; sessions: number }[]
+}
+
+/** GET a JSON route. Returns null on any failure rather than throwing.
+ *
+ * A panel whose data did not load should say so, not crash the shell -- the
+ * backend being down is the ordinary case during development, and the whole
+ * window going white because Stats could not fetch would be a worse failure
+ * than an empty panel. */
+export async function get<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${API_TOKEN}` },
+    })
+    return res.ok ? ((await res.json()) as T) : null
+  } catch {
+    return null
+  }
+}

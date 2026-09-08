@@ -11,11 +11,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
-import { emptyFold, fold, runSession, type Window } from './engine'
+import { emptyFold, fold, get, runSession, type Stats as StatsPayload, type Window } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { Transcript } from './Transcript'
 import {
-  MODE_ACCENT, MODE_LABEL, PERMISSION_CYCLE, SESSIONS, TABS, USAGE,
+  MODE_ACCENT, MODE_LABEL, PERMISSION_CYCLE, SESSIONS, TABS,
   type Mode, type Permission, type SessionState, type Tab,
 } from './mock'
 import './tokens.css'
@@ -302,7 +302,7 @@ export default function App() {
         {view === 'chat' ? (
           <Transcript blocks={session.blocks} accent={accent} thinking={session.thinking} />
         ) : (
-          <Pane view={view} />
+          <Pane view={view} limits={limits} />
         )}
 
         </div>
@@ -340,8 +340,8 @@ export default function App() {
 /* The non-chat views are stubs at this stage. They exist so the rail is
  * honest -- a nav item that goes nowhere is worse than one that says "not
  * built yet" -- and so the shell's layout is exercised at every width. */
-function Pane({ view }: { view: string }) {
-  if (view === 'stats') return <Stats />
+function Pane({ view, limits }: { view: string; limits?: { five_hour: Window; seven_day: Window } | null }) {
+  if (view === 'stats') return <Stats limits={limits} />
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pt-7">
@@ -354,9 +354,52 @@ function Pane({ view }: { view: string }) {
   )
 }
 
-function Stats() {
-  const { windows, lifetime } = USAGE
+/** Fetch a route once on mount. `null` while loading, `false` when the
+ *  request failed -- three states, because "loading" and "the backend is
+ *  down" must not render the same way. */
+function useFetched<T>(path: string): T | null | false {
+  const [data, setData] = useState<T | null | false>(null)
+  useEffect(() => {
+    let live = true
+    void get<T>(path).then((d) => live && setData(d ?? false))
+    return () => {
+      live = false
+    }
+  }, [path])
+  return data
+}
+
+/** Shown wherever a panel's data could not be loaded. Says what failed and
+ *  what to do about it, rather than rendering an empty state that looks like
+ *  "you have no data" when it means "nothing was asked". */
+function Unreachable({ what }: { what: string }) {
+  return (
+    <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-dim">
+      Could not load {what}. The backend is not responding on{' '}
+      <code className="font-mono text-[11.5px] text-ink-faint">localhost:8000</code>.
+    </div>
+  )
+}
+
+const fmt = (n: number) => n.toLocaleString()
+
+function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } | null }) {
+  const stats = useFetched<StatsPayload>('/v2/sessions/stats')
   const bar = (pct: number) => (pct < 60 ? 'var(--color-good)' : pct < 85 ? 'var(--color-noctua)' : 'var(--color-faber)')
+
+  /* The rolling windows are the only numbers here that govern a decision --
+   * whether there is room to start another session -- so they are shown only
+   * when a session has actually reported them. The engine sends them during
+   * a run and not before, so "no sessions yet" genuinely has nothing to
+   * show, and inventing a plausible number would be worse than a blank. */
+  const windows = limits
+    ? [
+        { label: '5-hour window', pct: Math.round(limits.five_hour.used * 100),
+          sub: `resets ${resetIn(limits.five_hour.resets_at)}` },
+        { label: '7-day window', pct: Math.round(limits.seven_day.used * 100),
+          sub: `resets ${resetIn(limits.seven_day.resets_at)}` },
+      ]
+    : null
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -365,62 +408,140 @@ function Stats() {
           Usage
         </h2>
 
-        <div className="mb-[10px] rounded-[3px] border border-line bg-surface px-4 pb-[6px] pt-1">
-          {windows.map((w, i) => (
-            <div
-              key={w.label}
-              className={`grid grid-cols-[minmax(120px,1fr)_minmax(0,2.2fr)_62px] items-center gap-4 py-[13px] ${
-                i ? 'border-t border-line' : ''
-              }`}
-            >
-              <div className="min-w-0">
-                <div className="mb-[2px] text-[13px] text-ink">{w.label}</div>
-                <div className="font-mono text-[10.5px] text-ink-faint">{w.sub}</div>
+        {windows ? (
+          <div className="mb-[10px] rounded-[3px] border border-line bg-surface px-4 pb-[6px] pt-1">
+            {windows.map((w, i) => (
+              <div
+                key={w.label}
+                className={`grid grid-cols-[minmax(120px,1fr)_minmax(0,2.2fr)_62px] items-center gap-4 py-[13px] ${
+                  i ? 'border-t border-line' : ''
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="mb-[2px] text-[13px] text-ink">{w.label}</div>
+                  <div className="font-mono text-[10.5px] text-ink-faint">{w.sub}</div>
+                </div>
+                <div className="h-[6px] overflow-hidden rounded-sm border border-line bg-ground">
+                  <div className="h-full rounded-sm" style={{ width: `${w.pct}%`, background: bar(w.pct) }} />
+                </div>
+                <div className="text-right font-mono text-[12px] tabular-nums" style={{ color: bar(w.pct) }}>
+                  {w.pct}%
+                </div>
               </div>
-              <div className="h-[6px] overflow-hidden rounded-sm border border-line bg-ground">
-                <div className="h-full rounded-sm" style={{ width: `${w.pct}%`, background: bar(w.pct) }} />
-              </div>
-              <div className="text-right font-mono text-[12px] tabular-nums" style={{ color: bar(w.pct) }}>
-                {w.pct}%
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mb-[10px] rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-dim">
+            The engine reports the rolling windows during a session. Run one and they appear here.
+          </div>
+        )}
 
-        <Activity />
+        <Activity days={stats ? stats.activity : []} />
 
         <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           Lifetime tokens
         </h2>
-        <div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
-          <div className="mb-4 flex items-baseline gap-[9px]">
-            <b className="font-mono text-[29px] font-bold tabular-nums tracking-[-0.02em] text-ink">
-              {lifetime.total}
-            </b>
-            <span className="font-mono text-[11px] text-ink-faint">total · since {lifetime.since}</span>
+
+        {stats === false ? (
+          <Unreachable what="usage history" />
+        ) : stats === null ? (
+          <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
+            Loading…
           </div>
-          <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-[14px] gap-y-[9px] font-mono text-[11.5px]">
-            {[
-              ['input', lifetime.input, 'var(--color-ink-dim)'],
-              ['output', lifetime.output, 'var(--color-faber)'],
-              ['cache read', lifetime.cacheRead, 'var(--color-good)'],
-              ['cache write', lifetime.cacheWrite, 'var(--color-noctua)'],
-            ].map(([label, val, tone]) => (
-              <Row key={label as string} label={label as string} value={val as number} tone={tone as string} />
-            ))}
-          </div>
-          {/* The ratio is the diagnostic number on this page -- a drop means
-              prompt or context structure has begun thrashing the cache -- but
-              it is shown as a stat, not explained. The reasoning belongs in
-              the spec, not on screen. */}
-          <div className="mt-[13px] flex items-baseline gap-2 border-t border-line pt-[11px] font-mono text-[11.5px]">
-            <span className="text-ink-dim">cache hit rate</span>
-            <span className="ml-auto tabular-nums text-good">94%</span>
-          </div>
-        </div>
+        ) : (
+          <>
+            <div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
+              <div className="mb-4 flex items-baseline gap-[9px]">
+                <b className="font-mono text-[29px] font-bold tabular-nums tracking-[-0.02em] text-ink">
+                  {fmt(stats.lifetime.input + stats.lifetime.output)}
+                </b>
+                <span className="font-mono text-[11px] text-ink-faint">
+                  total{stats.lifetime.since ? ` · since ${stats.lifetime.since.slice(0, 10)}` : ''}
+                  {' · '}
+                  {fmt(stats.lifetime.turns)} turns
+                </span>
+              </div>
+              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-[14px] gap-y-[9px] font-mono text-[11.5px]">
+                <Row label="input" value={stats.lifetime.input} tone="var(--color-ink-dim)" />
+                <Row label="output" value={stats.lifetime.output} tone="var(--color-faber)" />
+                <Row label="cache read" value={stats.lifetime.cached} tone="var(--color-good)" />
+              </div>
+
+              {/* Shown rather than folded into the totals above. The CLI runs
+                  small background tasks on a cheaper tier, and on a measured
+                  turn that was 899 of 901 input tokens -- so a page that
+                  reported only the model you chose would be wrong by two
+                  orders of magnitude while looking perfectly reasonable. */}
+              {stats.lifetime.aux_input > 0 && (
+                <div className="mt-[13px] flex items-baseline gap-2 border-t border-line pt-[11px] font-mono text-[11.5px]">
+                  <span className="text-ink-dim">of which background tier</span>
+                  <span className="tabular-nums text-ink">
+                    {fmt(stats.lifetime.aux_input + stats.lifetime.aux_output)}
+                  </span>
+                  <span className="text-ink-faint">
+                    ({Math.round(
+                      ((stats.lifetime.aux_input + stats.lifetime.aux_output) /
+                        Math.max(1, stats.lifetime.input + stats.lifetime.output)) * 100,
+                    )}%)
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {stats.by_mode.length > 0 && (
+              <>
+                <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+                  By mode
+                </h2>
+                <div className="rounded-[3px] border border-line bg-surface px-4 py-[6px]">
+                  {stats.by_mode.map((m, i) => {
+                    const top = Math.max(...stats.by_mode.map((x) => x.input + x.output))
+                    const total = m.input + m.output
+                    return (
+                      <div
+                        key={m.mode}
+                        className={`grid grid-cols-[minmax(96px,1fr)_minmax(0,2.4fr)_auto] items-center gap-4 py-[11px] ${
+                          i ? 'border-t border-line' : ''
+                        }`}
+                      >
+                        <span className="flex items-center gap-[8px] text-[12.5px] text-ink">
+                          <span
+                            className="h-[8px] w-[8px] shrink-0 rounded-[1px]"
+                            style={{ background: MODE_ACCENT[m.mode as Mode] ?? 'var(--color-ink-dim)' }}
+                          />
+                          {MODE_LABEL[m.mode as Mode] ?? m.mode}
+                        </span>
+                        <div className="h-[6px] overflow-hidden rounded-sm border border-line bg-ground">
+                          <div
+                            className="h-full rounded-sm"
+                            style={{
+                              width: `${Math.round((total / Math.max(1, top)) * 100)}%`,
+                              background: MODE_ACCENT[m.mode as Mode] ?? 'var(--color-ink-dim)',
+                            }}
+                          />
+                        </div>
+                        <span className="text-right font-mono text-[11.5px] tabular-nums text-ink-dim">
+                          {fmt(total)}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </>
+        )}
       </div>
     </div>
   )
+}
+
+/** "in 2h 40m" from a unix timestamp. */
+function resetIn(epoch: number): string {
+  const mins = Math.max(0, Math.round((epoch * 1000 - Date.now()) / 60000))
+  if (mins < 60) return `in ${mins}m`
+  const h = Math.floor(mins / 60)
+  return `in ${h}h ${mins % 60}m`
 }
 
 function Row({ label, value, tone }: { label: string; value: number; tone: string }) {

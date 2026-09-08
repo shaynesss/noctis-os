@@ -25,47 +25,48 @@ interface Cell {
 
 /** Deterministic sample data — a fixed seed so the grid does not reshuffle on
  *  every render, which would make a layout problem look like a data problem. */
-function buildGrid(today: Date): Cell[][] {
-  let seed = 20260907
-  const rnd = () => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff
-    return seed / 0x7fffffff
-  }
-
+/** The 53-week grid, filled from real per-day session counts.
+ *
+ * Only days with activity come from the backend, so the grid supplies the
+ * gaps rather than the payload carrying 365 mostly-zero rows. Dates are
+ * matched on local YYYY-MM-DD, which is what SQLite's date() produces and
+ * what the person looking at the grid means by "that day".
+ */
+function buildGrid(today: Date, counts: Map<string, number>): Cell[][] {
   const start = new Date(today)
   start.setDate(start.getDate() - 364 - today.getDay())
 
   const weeks: Cell[][] = []
   for (let w = 0; w < WEEKS; w++) {
     const col: Cell[] = []
-    const recency = w / WEEKS
     for (let d = 0; d < 7; d++) {
       const date = new Date(start)
       date.setDate(date.getDate() + w * 7 + d)
-      const weekday = d > 0 && d < 6 ? 1 : 0.35
-      const burst = rnd() < 0.1 ? 2.2 : 1
-      let count = 0
-      if (date <= today && rnd() < 0.1 + recency * 0.42 * weekday) {
-        count = Math.max(1, Math.round(rnd() * 4 * recency * weekday * burst))
-      }
-      col.push({ date, count, future: date > today })
+      const future = date > today
+      col.push({ date, future, count: future ? 0 : (counts.get(iso(date)) ?? 0) })
     }
     weeks.push(col)
   }
   return weeks
 }
 
-function level(n: number): string {
-  if (n === 0) return LEVELS[0]
-  if (n < 2) return LEVELS[1]
-  if (n < 4) return LEVELS[2]
-  if (n < 6) return LEVELS[3]
-  return LEVELS[4]
+/** Count to swatch. The ramp is Faber red because the grid measures work,
+ *  and work is what Faber is; the empty cell is the page's own surface so
+ *  quiet days recede rather than reading as a value. */
+function level(count: number): string {
+  if (count <= 0) return LEVELS[0]
+  return LEVELS[Math.min(LEVELS.length - 1, count)]
 }
 
-export function Activity() {
+/** Local YYYY-MM-DD. `toISOString` would shift the date across a timezone
+ *  boundary and put a late-evening session on the following day. */
+function iso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+export function Activity({ days = [] }: { days?: { day: string; sessions: number }[] }) {
   const today = new Date(2026, 8, 7)
-  const weeks = buildGrid(today)
+  const weeks = buildGrid(today, new Map(days.map((d) => [d.day, d.sessions])))
   const total = weeks.flat().reduce((n, c) => n + c.count, 0)
 
   // A month label sits above the first week that begins that month, which is
