@@ -10,6 +10,19 @@ from fastapi import Header, HTTPException
 
 ALLOWED_ORIGIN = "http://localhost:5180"  # noctis-os frontend's dedicated dev port (pinned, strictPort in vite.config.ts) — not Vite's 5173 default, which collides with other projects' dev servers
 
+# The packaged desktop app is a *different origin* from the dev server: Tauri
+# serves the bundled frontend from tauri://localhost on macOS, not from
+# localhost:5180. Allowing only the dev origin therefore produces a build
+# that works all through development and cannot reach its own backend the
+# moment it is packaged — a failure that only appears at ship time.
+#
+# Both stay narrow: this is still an allowlist of two known origins, and the
+# bearer token remains the actual authentication. Origin checking is the
+# defence against a browser being tricked into making the request, and a
+# packaged Tauri app is not a browser tab someone can be lured into.
+TAURI_ORIGIN = "tauri://localhost"
+ALLOWED_ORIGINS = (ALLOWED_ORIGIN, TAURI_ORIGIN)
+
 
 def require_auth(
     authorization: str = Header(default=""),
@@ -23,5 +36,5 @@ def require_auth(
     if scheme != "Bearer" or not hmac.compare_digest(presented, token):
         raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
 
-    if origin and origin != ALLOWED_ORIGIN:
+    if origin and origin not in ALLOWED_ORIGINS:
         raise HTTPException(status_code=403, detail="Origin not allowed")

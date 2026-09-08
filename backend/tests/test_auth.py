@@ -1,4 +1,4 @@
-from auth import ALLOWED_ORIGIN
+from auth import ALLOWED_ORIGIN, TAURI_ORIGIN
 
 
 def test_missing_token_rejected(client):
@@ -57,3 +57,16 @@ def test_cors_preflight_rejects_other_origins(client):
         },
     )
     assert "access-control-allow-origin" not in response.headers
+
+
+def test_packaged_app_origin_is_accepted(auth_headers, client):
+    """Tauri serves the bundled frontend from tauri://localhost, not from the
+    dev server's port. Allowing only the dev origin ships an app that cannot
+    reach its own backend -- and it passes every test in development."""
+    r = client.get("/mode/dev", headers={**auth_headers, "Origin": TAURI_ORIGIN})
+    assert r.status_code != 403
+
+
+def test_an_unrelated_origin_is_still_refused(auth_headers, client):
+    r = client.get("/mode/dev", headers={**auth_headers, "Origin": "http://evil.example"})
+    assert r.status_code == 403
