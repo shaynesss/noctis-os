@@ -14,14 +14,15 @@ header, and the frontend reads it with fetch + a ReadableStream.
 from __future__ import annotations
 
 import asyncio
-import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from orchestrator.driver import MODE_MODELS, PERMISSION_CYCLE, SessionSpec, one_shot
+from orchestrator.driver import (
+    MODE_MODELS, PERMISSION_CYCLE, Image, SessionSpec, one_shot,
+)
 from orchestrator.events import EngineError
 from orchestrator.manager import SessionManager
 from orchestrator.store import ConversationStore
@@ -62,12 +63,29 @@ def _safe_cwd(raw: str) -> Path:
     return resolved
 
 
+class InlineImage(BaseModel):
+    media_type: str
+    data: str          # base64, no data: prefix
+
+    @field_validator("media_type")
+    @classmethod
+    def _supported(cls, v: str) -> str:
+        if v not in {"image/png", "image/jpeg", "image/gif", "image/webp"}:
+            raise ValueError(f"Unsupported image type: {v}")
+        return v
+
+
 class LaunchRequest(BaseModel):
     mode: str
     prompt: str = Field(min_length=1)
     cwd: str
     permission_mode: str = "manual"
     resume_id: str | None = None
+    # Sent with the turn rather than written to disk first. The engine takes
+    # them in a stream-json message, so there is no file to keep, no path in
+    # the transcript, and no Read call standing between the picture and the
+    # answer.
+    images: list[InlineImage] = Field(default_factory=list, max_length=8)
 
 
 @router.post("")
@@ -87,6 +105,7 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
         permission_mode=req.permission_mode,
         resume_id=req.resume_id,
         cwd=_safe_cwd(req.cwd),
+        images=[Image(media_type=i.media_type, data=i.data) for i in req.images],
     )
 
     # A `sessions` row is the *conversation*, not the turn.
@@ -363,57 +382,46 @@ async def recap(session_id: int) -> dict:
     return {"recap": line, "cached": False}
 
 
-# Where pasted images land. Inside data/, which is gitignored and excluded
-# from the reload watcher, so an attachment neither enters the repo nor
-# restarts the backend.
-ATTACH_DIR = Path(__file__).resolve().parents[1] / "data" / "attachments"
+@router.get("/history/{session_id}/recap")
+async def recap(session_id: int) -> dict:
+    """A one-line reminder of what a conversation is about.
 
-# Generous for a screenshot, far short of anything that would wedge the
-# request. A paste is a screenshot, not a video.
-MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024
+    Generated on the cheap tier and cached on the row, so reopening the same
+    conversation does not pay for it again. Regenerated only once the
+    conversation has moved on enough that the stored line would mislead.
 
-# Extension by magic bytes rather than by a client-supplied filename or
-# content-type, both of which the client controls. The engine reads these
-# back off disk, so the extension has to describe what the bytes actually
-# are.
-_MAGIC = (
-    (b"\x89PNG\r\n\x1a\n", ".png"),
-    (b"\xff\xd8\xff", ".jpg"),
-    (b"GIF87a", ".gif"),
-    (b"GIF89a", ".gif"),
-    (b"RIFF", ".webp"),
-)
-
-
-def _extension(data: bytes) -> str | None:
-    for magic, ext in _MAGIC:
-        if data.startswith(magic):
-            return ext
-    return None
-
-
-@router.post("/attachments")
-async def upload_attachment(request: Request) -> dict:
-    """Store a pasted image and return the path a session can read.
-
-    The engine has no clipboard: a pasted screenshot has to exist as a file
-    before a prompt can refer to it. The path returned goes into the prompt,
-    and the session reads it with the Read tool — which is why Read is on
-    every mode's allowed list.
+    Returns recap: null rather than erroring when there is nothing to
+    summarise or the engine is unavailable — a missing recap should quietly
+    not appear, never break the transcript it sits above.
     """
-    data = await request.body()
-    if not data:
-        raise HTTPException(status_code=400, detail="Empty attachment")
-    if len(data) > MAX_ATTACHMENT_BYTES:
-        raise HTTPException(status_code=413, detail="Attachment too large")
+    row = _store.db.execute(
+        "SELECT id, recap, recap_at FROM sessions WHERE id=?", (session_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No session {session_id}")
 
-    ext = _extension(data)
-    if ext is None:
-        # Refused rather than stored with a guessed extension: this writes a
-        # file the engine will later be told to open.
-        raise HTTPException(status_code=415, detail="Only PNG, JPEG, GIF and WebP images")
+    count = _store.message_count(session_id)
+    if count < 2:
+        return {"recap": None}          # nothing has happened worth recapping
+    if row["recap"] and count - row["recap_at"] < RECAP_STALE_AFTER:
+        return {"recap": row["recap"], "cached": True}
 
-    ATTACH_DIR.mkdir(parents=True, exist_ok=True)
-    name = f"{uuid.uuid4().hex}{ext}"
-    (ATTACH_DIR / name).write_bytes(data)
-    return {"path": str(ATTACH_DIR / name), "bytes": len(data)}
+    # Newest messages, not oldest: the reminder you want is where the
+    # conversation got to, and the tail is also what a long transcript would
+    # otherwise lose to truncation.
+    rows = _store.transcript(session_id)[-40:]
+    body = "\n".join(f"{r['role']}: {(r['content'] or '')[:600]}" for r in rows)
+    if not body.strip():
+        return {"recap": None}
+
+    try:
+        text = await one_shot(RECAP_PROMPT + body[-8000:])
+    except Exception:  # noqa: BLE001 - a recap must never break the transcript
+        return {"recap": None}
+
+    line = " ".join(text.split())
+    if not line:
+        return {"recap": None}
+    _store.save_recap(session_id, line, count)
+    return {"recap": line, "cached": False}
+

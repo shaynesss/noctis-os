@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
 import {
-  del, emptyFold, fold, get, runSession, uploadAttachment,
+  del, emptyFold, fold, get, readImage, runSession,
   type Attachment, type HistorySession, type HistoryTranscript,
   type Stats as StatsPayload, type Window,
 } from './engine'
@@ -51,13 +51,26 @@ export default function App() {
   // mode entry can create them. The constants are the seed, not the store.
   const [tabs, setTabs] = useState<Tab[]>([EMPTY_TAB])
   const [sessions, setSessions] = useState<Record<string, SessionState>>({ t0: EMPTY_SESSION })
-  const [drafts, setDrafts] = useState<Record<string, string>>({ t0: '' })
+  /* Drafts survive a reload.
+   *
+   * A half-written message is work, and the window reloads for reasons that
+   * have nothing to do with you -- a dev-server restart, a crash, closing it
+   * by habit. Losing the text you were composing to any of those is the kind
+   * of small betrayal that makes an app feel unsafe to type into.
+   *
+   * Text only. Pasted images are deliberately not persisted: they are base64
+   * and would fill the store, and re-pasting is one keystroke. */
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => loadDrafts())
 
   /* Pasted images, per draft. Kept beside the draft rather than on the
    * session, because they belong to a message not yet sent -- switching tabs
    * and coming back should find the same half-written message with the same
    * pictures attached. */
   const [attachments, setAttachments] = useState<Record<string, Attachment[]>>({})
+  // Read when deciding the next image's number, so the decision does not
+  // have to happen inside a state updater.
+  const attachmentsRef = useRef(attachments)
+  attachmentsRef.current = attachments
 
   // `null` closed; otherwise a launch, carrying its handoff source if any.
   const [launcher, setLauncher] = useState<null | { handoff?: HandoffSource }>(null)
@@ -121,7 +134,7 @@ export default function App() {
    * response event -- otherwise a slow or failing backend leaves the screen
    * showing nothing happened, and the most likely reaction is to type it
    * again. */
-  const turn = async (tabId: string, prompt: string, seed?: SessionState) => {
+  const turn = async (tabId: string, prompt: string, seed?: SessionState, images: Attachment[] = []) => {
     // `seed` is how a just-launched session runs its opening prompt: it does
     // not exist in the ref yet, because that follows a render and this is
     // called before one. Waiting a tick instead would be a race that passes
@@ -151,6 +164,8 @@ export default function App() {
           prompt,
           cwd: current.cwd,
           permission_mode: permissionRef.current,
+          // Bytes, not a path: the picture is part of what was said.
+          images: images.map(({ media_type, data }) => ({ media_type, data })),
           // Absent on the first turn, so the engine starts a session; present
           // afterwards, so the rest continue it instead of forgetting.
           resume_id: current.engineId,
@@ -245,17 +260,20 @@ export default function App() {
    * at -- the lines under the composer only describe what the text already
    * says. */
   const attach = async (tabId: string, blob: Blob) => {
-    const path = await uploadAttachment(blob)
-    if (!path) return
-    setAttachments((prev) => {
-      const existing = prev[tabId] ?? []
-      const n = (existing.at(-1)?.n ?? 0) + 1
-      setDrafts((d) => {
-        const text = d[tabId] ?? ''
-        const sep = text && !text.endsWith(' ') ? ' ' : ''
-        return { ...d, [tabId]: `${text}${sep}[Image #${n}] ` }
-      })
-      return { ...prev, [tabId]: [...existing, { n, path }] }
+    const image = await readImage(blob)
+    if (!image) return
+
+    /* Both updates are computed from one number decided here, rather than
+     * one state updater calling another. Nesting them put the reference in
+     * the draft twice -- React invokes updaters more than once in
+     * development, and anything with a side effect inside runs twice with
+     * it. That is what produced "[Image #1] [Image #1]". */
+    const n = (attachmentsRef.current[tabId]?.length ?? 0) + 1
+    setAttachments((prev) => ({ ...prev, [tabId]: [...(prev[tabId] ?? []), { ...image, n }] }))
+    setDrafts((d) => {
+      const text = d[tabId] ?? ''
+      const sep = text && !text.endsWith(' ') ? ' ' : ''
+      return { ...d, [tabId]: `${text}${sep}[Image #${n}] ` }
     })
   }
 
@@ -276,19 +294,14 @@ export default function App() {
     const typed = (drafts[composerTab] ?? '').trim()
     if (!typed) return
     const files = attachments[composerTab] ?? []
-    /* The engine has no clipboard, so each reference is followed by the path
-     * it stands for. The visible text keeps the short form; only what is
-     * sent carries the paths, so the transcript does not fill with them. */
-    const prompt = files.length
-      ? `${typed}\n\n${files.map((f) => `[Image #${f.n}] is at: ${f.path}`).join('\n')}`
-      : typed
+    const prompt = typed
     setDrafts({ ...drafts, [composerTab]: '' })
     setAttachments((prev) => ({ ...prev, [composerTab]: [] }))
     if (!inChat) {
       setActiveTab(composerTab)
       setView('chat')
     }
-    void turn(composerTab, prompt)
+    void turn(composerTab, prompt, undefined, files)
   }
 
   /* A launch always lands in a new tab, whether it came from + or from a
@@ -543,6 +556,17 @@ export default function App() {
   useEffect(() => {
     composerRef.current?.focus()
   }, [])
+
+  // Written on change rather than on unload: a crashed or force-quit window
+  // never runs an unload handler, and those are exactly the cases this is
+  // for.
+  useEffect(() => {
+    try {
+      localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts))
+    } catch {
+      // A full or unavailable store must not break typing.
+    }
+  }, [drafts])
 
   // Abort every live stream when the shell goes away. Without this the
   // window can close on running readers, which keeps the connections open.
@@ -895,4 +919,23 @@ const truncate = (s: string) => (s.length > 22 ? `${s.slice(0, 22)}…` : s)
 function shortenHome(path: string): string {
   const m = path.match(/^\/Users\/[^/]+(\/.*)?$/)
   return m ? `~${m[1] ?? ''}` : path
+}
+
+const DRAFTS_KEY = 'noctis.drafts'
+
+/** Drafts from the last session, or an empty General draft. */
+function loadDrafts(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(DRAFTS_KEY)
+    if (!raw) return { t0: '' }
+    const parsed = JSON.parse(raw) as Record<string, string>
+    // Only strings: anything else means the shape changed under us, and a
+    // draft is not worth trusting a stale format for.
+    const clean = Object.fromEntries(
+      Object.entries(parsed).filter(([, v]) => typeof v === 'string'),
+    )
+    return { t0: '', ...clean }
+  } catch {
+    return { t0: '' }
+  }
 }

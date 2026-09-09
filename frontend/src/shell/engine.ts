@@ -43,6 +43,7 @@ export interface LaunchRequest {
   cwd: string
   permission_mode: string
   resume_id?: string
+  images?: { media_type: string; data: string }[]
 }
 
 /* ------------------------------------------------------------------ SSE */
@@ -296,28 +297,30 @@ export async function del(path: string): Promise<boolean> {
 }
 
 export interface Attachment {
-  /** Display index, matching the `[Image #n]` written into the prompt. */
+  /** Display index, matching the `[Image #n]` written into the draft. */
   n: number
-  /** Absolute path on disk. The session reads it with the Read tool. */
-  path: string
+  media_type: string
+  /** Base64, no data: prefix — sent with the turn, never written to disk. */
+  data: string
 }
 
-/** Upload a pasted image; null if it could not be stored.
+/** Read a pasted image into base64.
  *
- * Raw bytes rather than multipart: there is one file and no fields, and the
- * server decides the type from the bytes anyway — a multipart envelope would
- * only carry a filename nobody should trust.
+ * The bytes travel with the turn instead of being uploaded and referenced by
+ * path. That removes a file to keep, a path from the transcript, and a Read
+ * call standing between the picture and the answer.
  */
-export async function uploadAttachment(blob: Blob): Promise<string | null> {
-  try {
-    const res = await fetch(`${API_BASE}/v2/sessions/attachments`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${API_TOKEN}` },
-      body: blob,
-    })
-    if (!res.ok) return null
-    return ((await res.json()) as { path: string }).path
-  } catch {
-    return null
-  }
+export function readImage(blob: Blob): Promise<Attachment | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onerror = () => resolve(null)
+    reader.onload = () => {
+      const result = String(reader.result)
+      const comma = result.indexOf(',')
+      // A data: URL is "data:<type>;base64,<data>" — the engine wants only
+      // the payload, and the type separately.
+      resolve(comma === -1 ? null : { n: 0, media_type: blob.type, data: result.slice(comma + 1) })
+    }
+    reader.readAsDataURL(blob)
+  })
 }

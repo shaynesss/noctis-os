@@ -13,11 +13,12 @@ passes in, and is a pure function so it can be asserted on directly.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator, Sequence
+from typing import Any, AsyncIterator, Sequence
 
 from .events import EngineError, Event, SessionStart, TextDelta
 from .parser import parse_line
@@ -114,6 +115,19 @@ def claude_binary() -> str:
     return "claude"
 
 
+@dataclass(frozen=True)
+class Image:
+    """An image sent with a turn, inline.
+
+    Base64 in the message rather than a file on disk. Writing the image out
+    and telling the session to Read it back worked, but it cost a tool call,
+    put an absolute path in the transcript, and made the reply depend on a
+    file still existing. Inline, the picture is simply part of what was said.
+    """
+    media_type: str
+    data: str          # base64, no data: prefix
+
+
 @dataclass
 class SessionSpec:
     mode: str
@@ -123,6 +137,7 @@ class SessionSpec:
     cwd: Path | None = None
     vault_path: Path | None = None
     extra_args: Sequence[str] = field(default_factory=tuple)
+    images: Sequence[Image] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if self.mode not in MODE_MODELS:
@@ -130,9 +145,19 @@ class SessionSpec:
 
 
 def build_command(spec: SessionSpec) -> list[str]:
-    """The exact argv for a spawn. Pure, so it can be asserted on."""
-    cmd = [
-        claude_binary(), "-p", spec.prompt,
+    """The exact argv for a spawn. Pure, so it can be asserted on.
+
+    With images the prompt moves to stdin: `--input-format stream-json` takes
+    a structured message, which is the only way to attach a picture to a turn
+    without writing it to disk first. Text-only turns keep the positional
+    prompt, which is simpler and is the overwhelmingly common case.
+    """
+    cmd = [claude_binary(), "-p"]
+    if spec.images:
+        cmd += ["--input-format", "stream-json"]
+    else:
+        cmd.append(spec.prompt)
+    cmd += [
         "--model", MODE_MODELS[spec.mode],
         "--output-format", "stream-json",
         "--verbose",                 # required for stream-json to emit events
@@ -165,11 +190,41 @@ def build_env(spec: SessionSpec) -> dict[str, str]:
     return env
 
 
+# asyncio's StreamReader defaults to a 64KB line limit, and `stream-json`
+# puts an entire tool result on one line. A Read of any sizeable file --
+# a log, a base64 image -- overruns it, and readline() then raises
+# "Separator is not found, and chunk exceed the limit", killing the session
+# mid-turn. Found when a pasted screenshot did exactly that.
+#
+# 32MB because the ceiling here is a line the CLI already chose to emit, and
+# refusing to read what it sent is not a limit worth enforcing at this layer.
+STREAM_LIMIT = 32 * 1024 * 1024
+
+
+def build_stdin(spec: SessionSpec) -> bytes | None:
+    """One stream-json user message carrying the prompt and its images.
+
+    None when there are no images, so the ordinary path stays a plain argv
+    with nothing written to the process at all.
+    """
+    if not spec.images:
+        return None
+    content: list[dict[str, Any]] = [{"type": "text", "text": spec.prompt}]
+    for image in spec.images:
+        content.append({
+            "type": "image",
+            "source": {"type": "base64", "media_type": image.media_type, "data": image.data},
+        })
+    message = {"type": "user", "message": {"role": "user", "content": content}}
+    return (json.dumps(message) + "\n").encode()
+
+
 async def launch(
     command: Sequence[str],
     env: dict[str, str] | None = None,
     cwd: Path | None = None,
     timeout: float | None = None,
+    stdin_data: bytes | None = None,
 ) -> AsyncIterator[Event]:
     """Run a command emitting stream-json; yield normalized Events.
 
@@ -180,10 +235,12 @@ async def launch(
     try:
         proc = await asyncio.create_subprocess_exec(
             *command,
+            stdin=asyncio.subprocess.PIPE if stdin_data else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
             cwd=str(cwd) if cwd else None,
+            limit=STREAM_LIMIT,
         )
     except (OSError, FileNotFoundError) as e:
         # Naming the binary matters: the bare errno says only "No such file
@@ -191,6 +248,13 @@ async def launch(
         # engine and sends you looking in the wrong place.
         yield EngineError(f"could not start engine {command[0]!r}: {e}", fatal=True)
         return
+
+    if stdin_data is not None and proc.stdin is not None:
+        # Written and closed before reading: the engine waits for end-of-input
+        # before it starts, so holding stdin open would hang the turn.
+        proc.stdin.write(stdin_data)
+        await proc.stdin.drain()
+        proc.stdin.close()
 
     assert proc.stdout is not None
     try:
@@ -229,7 +293,8 @@ async def run_session(spec: SessionSpec, timeout: float | None = 600) -> AsyncIt
         )
         return
     async for event in launch(
-        build_command(spec), env=build_env(spec), cwd=spec.cwd, timeout=timeout
+        build_command(spec), env=build_env(spec), cwd=spec.cwd, timeout=timeout,
+        stdin_data=build_stdin(spec),
     ):
         yield event
 

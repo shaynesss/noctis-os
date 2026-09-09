@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 
 from orchestrator.driver import (
-    MODE_MODELS, MODE_TOOLS, SessionSpec, build_command, build_env, claude_binary, launch,
+    MODE_MODELS, MODE_TOOLS, Image, SessionSpec, build_command, build_env, build_stdin,
+    claude_binary, launch,
     session_id_of,
 )
-from orchestrator.events import EngineError, SessionStart, TurnEnd
+from orchestrator.events import EngineError, SessionStart, TextDelta, TurnEnd
 from orchestrator.manager import SessionManager
 
 FIXTURE = Path(__file__).parent / "fixtures" / "stream_with_tools.jsonl"
@@ -274,3 +275,60 @@ def test_a_pre_allowed_tool_is_never_also_disallowed():
         allowed = set(policy.get("allowed", "").split())
         disallowed = set(policy.get("disallowed", "").split())
         assert not (allowed & disallowed), f"{mode}: {allowed & disallowed} in both lists"
+
+
+def test_a_line_larger_than_asyncios_default_is_read(tmp_path):
+    """stream-json puts a whole tool result on one line, and asyncio's
+    StreamReader defaults to 64KB. A Read of any sizeable file overran it and
+    readline() raised "Separator is not found, and chunk exceed the limit",
+    killing the session mid-turn -- found when a pasted screenshot did it."""
+    import json as _json
+
+    big = "x" * (300 * 1024)          # ~5x the old limit
+    line = _json.dumps({
+        "type": "assistant",
+        "message": {"content": [{"type": "text", "text": big}]},
+    })
+    fixture = tmp_path / "big.jsonl"
+    fixture.write_text(line + "\n")
+
+    events = asyncio.run(_collect(launch(["cat", str(fixture)])))
+    texts = [e for e in events if isinstance(e, TextDelta)]
+    assert texts and len(texts[0].text) == len(big)
+    assert not any(isinstance(e, EngineError) for e in events)
+
+
+# ------------------------------------------------------- inline images
+
+def _png() -> Image:
+    return Image(media_type="image/png", data="aGVsbG8=")
+
+
+def test_a_turn_with_images_takes_its_prompt_on_stdin():
+    """--input-format stream-json is the only way to attach a picture to a
+    turn without writing it to disk first, and it takes the message from
+    stdin rather than argv."""
+    cmd = build_command(SessionSpec(mode="general", prompt="what is this?", images=[_png()]))
+    assert "--input-format" in cmd and cmd[cmd.index("--input-format") + 1] == "stream-json"
+    assert "what is this?" not in cmd          # the prompt is not on the command line
+
+
+def test_a_text_turn_keeps_the_simple_command():
+    cmd = build_command(SessionSpec(mode="general", prompt="hello"))
+    assert "--input-format" not in cmd
+    assert cmd[2] == "hello"
+
+
+def test_stdin_carries_the_text_and_every_image():
+    import json as _json
+
+    spec = SessionSpec(mode="general", prompt="two pictures", images=[_png(), _png()])
+    content = _json.loads(build_stdin(spec))["message"]["content"]
+    assert content[0] == {"type": "text", "text": "two pictures"}
+    assert [c["type"] for c in content] == ["text", "image", "image"]
+    assert content[1]["source"] == {"type": "base64", "media_type": "image/png", "data": "aGVsbG8="}
+
+
+def test_a_text_turn_writes_nothing_to_the_process():
+    """No images means the ordinary path, with nothing written at all."""
+    assert build_stdin(SessionSpec(mode="general", prompt="hello")) is None

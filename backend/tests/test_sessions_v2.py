@@ -536,55 +536,45 @@ def test_delete_requires_auth(client):
     assert client.delete("/v2/sessions/history/1").status_code == 401
 
 
-# -------------------------------------------------------- attachments
+# ----------------------------------------------------- inline images
 
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+PNG_B64 = "iVBORw0KGgo="
 
 
-def test_a_pasted_png_is_stored_and_its_path_returned(client):
-    """The engine has no clipboard, so a pasted screenshot has to exist as a
-    file before a prompt can refer to it."""
-    r = client.post("/v2/sessions/attachments", headers=AUTH, content=PNG)
+def test_a_turn_can_carry_images_without_a_file(client, monkeypatch):
+    """Writing the image out and telling the session to Read it back worked,
+    but cost a tool call, put an absolute path in the transcript, and made
+    the answer depend on a file still existing."""
+    captured = {}
+
+    async def fake(spec):
+        captured["images"] = spec.images
+        return
+        yield  # pragma: no cover - generator shape
+
+    from routers import sessions_v2
+    monkeypatch.setattr(sessions_v2._manager, "start", lambda spec: fake(spec))
+
+    r = client.post("/v2/sessions", headers=AUTH, json={
+        "mode": "general", "prompt": "what is this?", "cwd": str(Path.home()),
+        "images": [{"media_type": "image/png", "data": PNG_B64}],
+    })
     assert r.status_code == 200
-    body = r.json()
-    assert body["path"].endswith(".png")
-    assert Path(body["path"]).read_bytes() == PNG
-    Path(body["path"]).unlink()
+    assert captured["images"][0].media_type == "image/png"
 
 
-def test_the_extension_comes_from_the_bytes_not_the_client(client):
-    """Content-type and filename are both client-controlled, and this writes
-    a file the engine is later told to open."""
-    r = client.post("/v2/sessions/attachments", headers={**AUTH, "Content-Type": "image/png"},
-                    content=b"\xff\xd8\xff" + b"\x00" * 20)
-    assert r.json()["path"].endswith(".jpg")     # JPEG magic wins over the header
-    Path(r.json()["path"]).unlink()
+def test_an_unsupported_image_type_is_refused(client):
+    r = client.post("/v2/sessions", headers=AUTH, json={
+        "mode": "general", "prompt": "x", "cwd": str(Path.home()),
+        "images": [{"media_type": "image/svg+xml", "data": PNG_B64}],
+    })
+    assert r.status_code == 422
 
 
-def test_a_non_image_is_refused_rather_than_guessed(client):
-    r = client.post("/v2/sessions/attachments", headers=AUTH, content=b"#!/bin/sh\nrm -rf /\n")
-    assert r.status_code == 415
-
-
-def test_an_empty_attachment_is_refused(client):
-    assert client.post("/v2/sessions/attachments", headers=AUTH, content=b"").status_code == 400
-
-
-def test_an_oversized_attachment_is_refused(client):
-    from routers.sessions_v2 import MAX_ATTACHMENT_BYTES
-    big = b"\x89PNG\r\n\x1a\n" + b"\x00" * MAX_ATTACHMENT_BYTES
-    assert client.post("/v2/sessions/attachments", headers=AUTH, content=big).status_code == 413
-
-
-def test_attachments_require_auth(client):
-    assert client.post("/v2/sessions/attachments", content=PNG).status_code == 401
-
-
-def test_attachments_are_not_tracked_by_git():
-    """They live under data/, which is gitignored and excluded from the
-    reload watcher, so a paste neither enters the repo nor restarts the
-    backend mid-turn."""
-    from routers.sessions_v2 import ATTACH_DIR
-    repo = Path(__file__).resolve().parents[2]
-    assert "backend/data/" in (repo / ".gitignore").read_text()
-    assert ATTACH_DIR.is_relative_to(repo / "backend" / "data")
+def test_too_many_images_are_refused(client):
+    """A cap, because every image is base64 in one request and one message."""
+    r = client.post("/v2/sessions", headers=AUTH, json={
+        "mode": "general", "prompt": "x", "cwd": str(Path.home()),
+        "images": [{"media_type": "image/png", "data": PNG_B64}] * 9,
+    })
+    assert r.status_code == 422
