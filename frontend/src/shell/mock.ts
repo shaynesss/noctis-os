@@ -96,6 +96,19 @@ export interface SessionState {
   thinking?: number | null
 }
 
+/* The seed is now only what an empty install starts with: one General tab
+ * and nothing in it. Real conversations are loaded from the backend on
+ * than on a demo.
+ *
+ * TABS/SESSIONS below are the sample transcripts, no longer wired to the
+ * app. They stay because the screens still need something to render when
+ * working on them with no backend running -- import them in place of the
+ * empty seed for that. */
+export const EMPTY_TAB: Tab = { id: 't0', mode: 'general', label: 'General', pinned: true }
+export const EMPTY_SESSION: SessionState = {
+  mode: 'general', blocks: [], draft: '', cwd: '~/Developer/noctis-os',
+}
+
 export const TABS: Tab[] = [
   { id: 't0', mode: 'general', label: 'General', pinned: true },
   { id: 't1', mode: 'faber', label: 'Faber · noctis-os' },

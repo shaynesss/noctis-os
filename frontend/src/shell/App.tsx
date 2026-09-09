@@ -11,7 +11,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
-import { emptyFold, fold, get, runSession, type Stats as StatsPayload, type Window } from './engine'
+import {
+  emptyFold, fold, get, runSession,
+  type HistorySession, type HistoryTranscript, type Stats as StatsPayload, type Window,
+} from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
 import {
   Brief, Inbox, Settings,
@@ -19,7 +22,7 @@ import {
 } from './Panels'
 import { Transcript } from './Transcript'
 import {
-  MODE_ACCENT, MODE_LABEL, PERMISSION_CYCLE, SESSIONS, TABS,
+  EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_LABEL, PERMISSION_CYCLE,
   type Mode, type Permission, type SessionState, type Tab,
 } from './mock'
 import './tokens.css'
@@ -36,17 +39,15 @@ const now = () =>
 
 export default function App() {
   const [view, setView] = useState('chat')
-  const [activeTab, setActiveTab] = useState('t1')
+  const [activeTab, setActiveTab] = useState('t0')
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const [permission, setPermission] = useState<Permission>('manual')
 
   // Tabs and sessions are state rather than the imported constants now that
   // mode entry can create them. The constants are the seed, not the store.
-  const [tabs, setTabs] = useState<Tab[]>(TABS)
-  const [sessions, setSessions] = useState<Record<string, SessionState>>(SESSIONS)
-  const [drafts, setDrafts] = useState<Record<string, string>>(
-    Object.fromEntries(Object.entries(SESSIONS).map(([id, s]) => [id, s.draft])),
-  )
+  const [tabs, setTabs] = useState<Tab[]>([EMPTY_TAB])
+  const [sessions, setSessions] = useState<Record<string, SessionState>>({ t0: EMPTY_SESSION })
+  const [drafts, setDrafts] = useState<Record<string, string>>({ t0: '' })
 
   // `null` closed; otherwise a launch, carrying its handoff source if any.
   const [launcher, setLauncher] = useState<null | { handoff?: HandoffSource }>(null)
@@ -266,6 +267,52 @@ export default function App() {
     // which is what makes it genuinely global -- click anywhere, it works.
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
+
+  /* Reopen the last few conversations on launch.
+   *
+   * The engine's process outlives the web view, and the store outlives both,
+   * so a closed window should not lose work. Only resumable conversations
+   * become tabs -- one that died on spawn is readable history, not somewhere
+   * you can type, and a tab you cannot continue is a trap.
+   *
+   * The empty General tab stays first regardless, so there is always
+   * somewhere to start even on a fresh install or with the backend down. */
+  useEffect(() => {
+    let live = true
+    void (async () => {
+      const listed = await get<{ sessions: HistorySession[] }>('/v2/sessions/history?limit=6')
+      if (!live || !listed) return
+      const open = listed.sessions.filter((s) => s.resumable).slice(0, 4)
+      const loaded = await Promise.all(
+        open.map((s) => get<HistoryTranscript>(`/v2/sessions/history/${s.id}`)),
+      )
+      if (!live) return
+
+      const nextTabs: Tab[] = []
+      const nextSessions: Record<string, SessionState> = {}
+      const labels = labelFor(open)
+      loaded.forEach((full, i) => {
+        if (!full || full.blocks.length === 0) return
+        const meta = open[i]
+        const id = `h${meta.id}`
+        nextTabs.push({ id, mode: meta.mode, label: labels[i] })
+        nextSessions[id] = {
+          mode: meta.mode,
+          blocks: full.blocks,
+          draft: '',
+          cwd: meta.cwd ?? '~',
+          engineId: meta.engine_id ?? undefined,
+        }
+      })
+      if (nextTabs.length === 0) return
+      setTabs([EMPTY_TAB, ...nextTabs])
+      setSessions((s) => ({ ...s, ...nextSessions }))
+      setDrafts((d) => ({ ...d, ...Object.fromEntries(nextTabs.map((t) => [t.id, ''])) }))
+    })()
+    return () => {
+      live = false
+    }
   }, [])
 
   // Focus the composer on mount. Without it the document has no keyboard
@@ -582,3 +629,28 @@ function Row({ label, value, tone }: { label: string; value: number; tone: strin
     </>
   )
 }
+
+/** Tab labels for a set of restored conversations.
+ *
+ * Directory name first, because that is how you actually think about a
+ * session ("the noctis-os one"). But several sessions in one project share a
+ * directory, and four tabs reading "General · noctis-os" name nothing at
+ * all -- so a label is only kept when it is unique, and repeats fall back to
+ * the opening prompt, which is what actually tells them apart.
+ *
+ * Computed over the whole set rather than per session, since uniqueness is
+ * not a property any one of them has on its own.
+ */
+function labelFor(sessions: { mode: Mode; cwd: string | null; title: string }[]): string[] {
+  const dirs = sessions.map((s) => s.cwd?.split('/').filter(Boolean).pop() ?? '')
+  const seen = new Map<string, number>()
+  dirs.forEach((d, i) => seen.set(`${sessions[i].mode}/${d}`, (seen.get(`${sessions[i].mode}/${d}`) ?? 0) + 1))
+
+  return sessions.map((s, i) => {
+    const unique = (seen.get(`${s.mode}/${dirs[i]}`) ?? 0) === 1
+    const tail = unique && dirs[i] ? dirs[i] : truncate(s.title)
+    return `${MODE_LABEL[s.mode]} · ${tail}`
+  })
+}
+
+const truncate = (s: string) => (s.length > 22 ? `${s.slice(0, 22)}…` : s)
