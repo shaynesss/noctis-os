@@ -17,30 +17,48 @@ Spec: `second-brain/wiki/Noctis OS/noctis-v2-SPEC.md`.
 
 ## What works, end to end
 
-Launching a session from the app streams a real reply into the transcript;
-follow-up turns resume the same engine session; closing the window and
-reopening it restores the conversations. Verified live, not only by tests.
+Launching a session streams a real reply; follow-up turns resume the same
+engine session; closing the window and reopening restores the conversations.
+Verified live, not only by tests.
 
 - **Orchestrator** — spawn, stream, resume, queue at 2 concurrent, per-mode
-  models and tool policy, stop mid-turn (no orphaned processes).
+  models and tool policy, per-session model override, stop mid-turn.
 - **MCP server** — 5 tools against the real vault, dependency-free stdio.
 - **Shell** — Tauri v2, Opt+Space summon, tray, launch-at-login. Chat, mode
-  entry (⌘T), handoff (⌘⇧H), search (⌘K), permission cycle (⇧⇥), stop (esc).
-- **History** — conversations and usage in SQLite/FTS5, restored on launch.
-- **Panels** — Stats on real usage; Brief, Inbox, Settings on real routes.
+  entry (⌘T), handoff (⌘⇧H), search (⌘K), permission cycle (⇧⇥), stop (esc),
+  tab close (⌘W), slash commands, pasted images, desktop notifications.
+- **History** — conversations and usage in SQLite/FTS5, restored on launch,
+  recap on resume, deletable from search.
+- **Panels** — Stats on real usage (reconciled against list price), Brief,
+  Inbox and Settings on real routes. A vault reader opens documents found by
+  search.
+- **Typography** — Cascadia Code vendored and loading.
 
-## Not built yet
+## Next
 
-- **Brief + worklist generator** (item 6) — design in progress. The worklist
-  is being changed from spec: hand-kept notes the client reads, not generated
-  from mode state. That amendment has not reached `noctis-v2-SPEC.md` yet.
-- **Scheduler** (launchd on wake) — blocked on the brief's shape.
-- **Settings** — prompt editor, regression runner and schedule controls are
-  stubs; the page says so and names where each lives.
-- **Vault documents have no reader** — search finds them and shows excerpts,
-  but there is nowhere to open one.
-- **Cascadia Code is not vendored** — the UI falls back to Menlo.
-- **Character sprites** are letter marks (F/N/V), not artwork.
+**1. Brief + worklist generator (item 6).** Design half-finished: the shape
+is agreed (overnight line, inbox, three mode-keyed actions, deterministic
+footer), and one fork is open — whether the brief reads email through an MCP
+server on its own session, over IMAP from the backend, or not at all in v1.
+Nothing else on this list is blocked by a decision, so this is where the
+next real conversation is owed.
+
+**2. Scheduler (launchd on wake).** Blocked on the brief's shape; the
+mechanism itself is small.
+
+**3. The worklist spec amendment.** Agreed to become hand-kept notes rather
+than generated from mode state, and has still not reached
+`noctis-v2-SPEC.md`, which by this project's own rule means it does not
+count yet.
+
+**4. Settings stubs** — prompt editor, regression runner, schedule controls.
+The page says so and names where each lives.
+
+**5. Character sprites** — still letter marks (F/N/V), not artwork.
+
+**6. Stage 2 leftovers** — artifacts (item 5), a tiered loading policy
+(item 8), and live session monitoring beyond what the transcript already
+shows (item 7).
 
 ## Open decision: the transcript database in git history
 
