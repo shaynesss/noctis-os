@@ -88,10 +88,23 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
         cwd=_safe_cwd(req.cwd),
     )
 
-    # Opened before the stream so the row exists even if the engine fails
-    # immediately -- a session that died on spawn is still something that
-    # happened, and hiding it would make the failure invisible in history.
-    row_id = _store.open_session(req.mode, cwd=str(spec.cwd), title=req.prompt[:120])
+    # A `sessions` row is the *conversation*, not the turn.
+    #
+    # Opening a new row per turn meant the second turn of a resumed session
+    # tried to claim an engine id the first row already held, and
+    # engine_session_id is UNIQUE -- so every follow-up message failed with a
+    # constraint error. It also scattered one conversation's transcript
+    # across a row per turn, which would have made history unreadable long
+    # after the crash stopped being the obvious symptom.
+    #
+    # Opened before the stream either way, so a session that dies on spawn is
+    # still recorded: that is something that happened, and hiding it would
+    # make the failure invisible in history.
+    row_id = _store.find_by_engine_id(req.resume_id) if req.resume_id else None
+    if row_id is not None:
+        _store.reopen(row_id)
+    else:
+        row_id = _store.open_session(req.mode, cwd=str(spec.cwd), title=req.prompt[:120])
 
     async def stream():
         state = "done"

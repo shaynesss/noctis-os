@@ -167,6 +167,20 @@ class ConversationStore:
         self.db.commit()
         return int(cur.lastrowid)
 
+    def find_by_engine_id(self, engine_session_id: str) -> int | None:
+        """The row for an existing engine session, if we have one."""
+        row = self.db.execute(
+            "SELECT id FROM sessions WHERE engine_session_id=?", (engine_session_id,)
+        ).fetchone()
+        return int(row["id"]) if row else None
+
+    def reopen(self, row_id: int) -> None:
+        """Mark a finished conversation live again for another turn."""
+        self.db.execute(
+            "UPDATE sessions SET state='running', ended_at=NULL WHERE id=?", (row_id,)
+        )
+        self.db.commit()
+
     def add_message(self, session_id: int, role: str, content: str,
                     meta: dict[str, Any] | None = None) -> None:
         if not content.strip():

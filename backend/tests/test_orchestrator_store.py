@@ -152,3 +152,34 @@ def test_store_is_usable_from_more_than_one_thread(tmp_path):
     assert not errors, f"cross-thread access failed: {errors[0]}"
     assert seen == [6, 6, 6, 6]
     store.close()
+
+
+def test_a_resumed_turn_reuses_the_conversation_row(tmp_path):
+    """engine_session_id is UNIQUE, so opening a new row per turn made the
+    second turn of any resumed session fail with a constraint error -- and
+    would have scattered one conversation's transcript across many rows."""
+    from orchestrator.events import SessionStart
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    first = store.open_session("general", cwd="/tmp")
+    store.record(first, "general", SessionStart(session_id="abc", model="m", cwd="/tmp"))
+    store.close_session(first)
+
+    found = store.find_by_engine_id("abc")
+    assert found == first
+
+    # The same engine id arriving again must land on the same row.
+    store.reopen(found)
+    store.record(found, "general", SessionStart(session_id="abc", model="m", cwd="/tmp"))
+    rows = store.db.execute("SELECT COUNT(*) c FROM sessions").fetchone()["c"]
+    assert rows == 1
+    store.close()
+
+
+def test_an_unknown_engine_id_has_no_row(tmp_path):
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    assert store.find_by_engine_id("never-seen") is None
+    store.close()
