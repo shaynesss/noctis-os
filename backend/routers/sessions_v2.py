@@ -277,3 +277,29 @@ def transcript(session_id: int) -> dict:
         "resumable": bool(row["engine_session_id"]) and row["state"] != "failed",
         "blocks": blocks_from_messages(_store.transcript(session_id)),
     }
+
+
+@router.delete("/history/{session_id}")
+def delete_conversation(session_id: int) -> dict:
+    """Delete a conversation and everything recorded under it.
+
+    Real deletion, not a hidden flag: the store exists so history is
+    trustworthy, and a list that quietly withholds rows it still holds is
+    worse than one that forgets. The vault keeps anything promoted out of a
+    session, so this destroys the transcript, not the work.
+
+    Usage rows go too. Leaving them would keep a deleted conversation's
+    tokens in the lifetime totals, so Stats would disagree with History about
+    what happened.
+    """
+    row = _store.db.execute("SELECT id FROM sessions WHERE id=?", (session_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No session {session_id}")
+
+    # messages_fts is an external-content table with a delete trigger on
+    # messages, so removing the rows keeps the search index in step.
+    _store.db.execute("DELETE FROM messages WHERE session_id=?", (session_id,))
+    _store.db.execute("DELETE FROM usage WHERE session_id=?", (session_id,))
+    _store.db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+    _store.db.commit()
+    return {"deleted": session_id}

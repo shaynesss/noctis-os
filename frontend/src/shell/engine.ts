@@ -281,3 +281,16 @@ export interface HistoryTranscript {
   resumable: boolean
   blocks: Block[]
 }
+
+/** DELETE a route. Returns whether it succeeded. */
+export async function del(path: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${API_TOKEN}` },
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}

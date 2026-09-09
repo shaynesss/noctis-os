@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
 import {
-  emptyFold, fold, get, runSession,
+  del, emptyFold, fold, get, runSession,
   type HistorySession, type HistoryTranscript, type Stats as StatsPayload, type Window,
 } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
@@ -212,6 +212,19 @@ export default function App() {
     if (activeTab === id) setActiveTab(remaining[Math.max(0, i - 1)].id)
   }
 
+  /* Close removes the tab; delete removes the conversation.
+   *
+   * They are separate on purpose. Closing something you want to come back to
+   * should not destroy it, and clearing out history you never want again
+   * should not require opening each one first. A tab restored from history
+   * carries its row id in the id (`h<n>`), which is what makes deleting from
+   * here possible at all.
+   */
+  const deleteTab = async (id: string) => {
+    closeTab(id)
+    if (id.startsWith('h')) await del(`/v2/sessions/history/${id.slice(1)}`)
+  }
+
   /** Abort the active session's turn. The stream unwinds, the backend closes
    *  its row as cancelled, and the engine process is killed with it. */
   const stop = (tabId: string) => aborts.current[tabId]?.abort()
@@ -375,10 +388,22 @@ export default function App() {
         return
       }
 
-      const i = ['1', '2', '3'].indexOf(e.key)
-      if (i === -1 || !tabsRef.current[i]) return
+      /* Cmd+1..9 selects a tab.
+       *
+       * Matched on `code` as well as `key`. `code` is the physical key and
+       * does not change with modifiers, layout or an input method, whereas
+       * `key` can arrive as something else entirely on a non-US layout --
+       * and these were reported not working on a machine where the handler
+       * itself is provably correct.
+       */
+      const digit = e.code?.startsWith('Digit')
+        ? Number(e.code.slice(5))
+        : Number(e.key)
+      if (!Number.isInteger(digit) || digit < 1 || digit > 9) return
+      const target = tabsRef.current[digit - 1]
+      if (!target) return
       e.preventDefault()
-      setActiveTab(tabsRef.current[i].id)
+      setActiveTab(target.id)
       setView('chat')
       composerRef.current?.focus()
     }
@@ -492,6 +517,7 @@ export default function App() {
             setView('chat')
           }}
           onClose={closeTab}
+          onDelete={(id) => void deleteTab(id)}
           onNew={() => setLauncher({})}
           onHandoff={openHandoff}
           onSearch={() => setPalette(true)}

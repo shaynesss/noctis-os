@@ -498,3 +498,39 @@ def test_the_ordinary_resolver_still_reaches_the_repo(tmp_path):
 
     repo = pathlib.Path(vault_io.__file__).resolve().parent.parent
     assert vault_io._resolve_within_vault("noctis-os/SPEC.md") == repo / "SPEC.md"
+
+
+# ------------------------------------------------------------ deleting
+
+def test_deleting_a_conversation_removes_its_usage_too(tmp_path):
+    """Leaving usage rows behind would keep a deleted conversation's tokens
+    in the lifetime totals, so Stats would disagree with History about what
+    happened."""
+    from orchestrator.events import TurnEnd, Usage
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("faber", cwd="/tmp")
+    store.add_message(sid, "user", "hello")
+    store.record(sid, "faber", TurnEnd(
+        session_id="s", duration_ms=1,
+        usage=Usage(input_tokens=1, output_tokens=9, cached_tokens=0, model="m"),
+    ))
+    assert store.lifetime_tokens()["output"] == 9
+
+    store.db.execute("DELETE FROM messages WHERE session_id=?", (sid,))
+    store.db.execute("DELETE FROM usage WHERE session_id=?", (sid,))
+    store.db.execute("DELETE FROM sessions WHERE id=?", (sid,))
+    store.db.commit()
+
+    assert store.lifetime_tokens()["output"] == 0
+    assert store.search("hello") == []      # the fts index kept in step
+    store.close()
+
+
+def test_deleting_an_unknown_conversation_404s(client):
+    assert client.delete("/v2/sessions/history/999999", headers=AUTH).status_code == 404
+
+
+def test_delete_requires_auth(client):
+    assert client.delete("/v2/sessions/history/1").status_code == 401
