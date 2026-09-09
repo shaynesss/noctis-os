@@ -42,6 +42,23 @@ reopening it restores the conversations. Verified live, not only by tests.
 - **Cascadia Code is not vendored** — the UI falls back to Menlo.
 - **Character sprites** are letter marks (F/N/V), not artwork.
 
+## Open decision: the transcript database in git history
+
+`backend/data/history.db` was tracked from the moment the conversation store
+was wired up until 2026-09-09 — so two commits carry a binary blob of real
+conversation transcripts, and every commit between them shipped a diff of
+it. The files are untracked now and `backend/data/` is gitignored.
+
+Both commits (`2856b5a`, `ddb2f6e`) are **local and unpushed**, which is the
+only reason this is cheap to fix: a rewrite of unpushed history costs
+nothing but a rebase. Once they are pushed it becomes a force-push and a
+rewrite of shared history.
+
+Not done, because rewriting history is destructive and is Shayne's call. The
+options are: rebase those two commits to drop the file before pushing, or
+accept the blob and push as-is knowing the transcripts are in the repo's
+history permanently.
+
 ## Deploy
 
 Unchanged and deliberate: local, single-user, single-machine. Nothing to
