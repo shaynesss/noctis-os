@@ -12,14 +12,16 @@ import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, OverageBanner, Rail, TabBar, TitleStrip } from './Chrome'
 import {
-  del, emptyFold, fold, get, readImage, runSession,
+  del, emptyFold, fold, get, post, readImage, runSession,
   type Attachment, type HistorySession, type HistoryTranscript,
   type Stats as StatsPayload, type Window,
 } from './engine'
 import { Unreachable } from './Async'
 import { useFetched } from './useFetched'
 import { hasImage } from './clipboard'
-import { CommandMenu, ModelPicker, PermissionPicker, type ModelOption } from './Commands'
+import {
+  CommandMenu, ModelPicker, PermissionPicker, PromotePicker, type ModelOption,
+} from './Commands'
 import { matching } from './slash'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { turnFinished } from './notify'
@@ -327,6 +329,25 @@ export default function App() {
       case 'model':
       case 'permissions':
         setPicker(name)
+        return true
+      case 'promote':
+        /* Only a conversation with history has anything to promote: the
+         * route reads the stored transcript, and a tab that has never been
+         * recorded has none. Saying so beats a dialog that fails on submit. */
+        if (!composerTab.startsWith('h')) {
+          setSessions((prev) => ({
+            ...prev,
+            [composerTab]: {
+              ...prev[composerTab],
+              blocks: [...prev[composerTab].blocks, {
+                kind: 'error', fatal: false,
+                message: 'Nothing to promote yet — send a message first, then this conversation can go to the vault.',
+              }],
+            },
+          }))
+          return true
+        }
+        setPicker('promote')
         return true
       case 'handoff':
         openHandoff()
@@ -658,7 +679,7 @@ export default function App() {
    * `picker` is whichever overlay a command opened. `model` is the session's
    * override, kept per tab because it is a property of this conversation and
    * not of the app. */
-  const [picker, setPicker] = useState<null | 'model' | 'permissions'>(null)
+  const [picker, setPicker] = useState<null | 'model' | 'permissions' | 'promote'>(null)
   const [models, setModels] = useState<ModelOption[]>([])
   const [modeDefaults, setModeDefaults] = useState<Record<string, string>>({})
   const [promptsAnswerable, setPromptsAnswerable] = useState(false)
@@ -818,6 +839,37 @@ export default function App() {
             }))
             setPicker(null)
             composerRef.current?.focus()
+          }}
+          onClose={() => {
+            setPicker(null)
+            composerRef.current?.focus()
+          }}
+        />
+      )}
+
+      {picker === 'promote' && (
+        <PromotePicker
+          /* The opening prompt makes a better title than anything derivable
+             from the reply: it is what you came to the conversation for. */
+          suggestedTitle={promoteTitle(sessions[composerTab])}
+          onPromote={async ({ rel_path, title, note }) => {
+            const id = Number(composerTab.slice(1))
+            const out = await post<{ path: string }>(
+              `/v2/sessions/history/${id}/promote`, { rel_path, title, note },
+            )
+            if ('error' in out) return out.error
+            setPicker(null)
+            setSessions((prev) => ({
+              ...prev,
+              [composerTab]: {
+                ...prev[composerTab],
+                blocks: [...prev[composerTab].blocks, {
+                  kind: 'error', fatal: false,
+                  message: `Promoted to ${out.path} — the vault has it now.`,
+                }],
+              },
+            }))
+            return null
           }}
           onClose={() => {
             setPicker(null)
@@ -1175,3 +1227,12 @@ function ListPrice({ turns }: { turns: number }) {
   return data ? <ListPriceFact data={data} totalTurns={turns} /> : null
 }
 
+
+/** A title from the conversation's first real question — what you came to it
+ *  for, which beats anything derivable from the reply. */
+function promoteTitle(session: SessionState): string {
+  const first = session.blocks.find((b) => b.kind === 'user')
+  if (!first || first.kind !== 'user') return 'Untitled conversation'
+  const line = first.text.trim().split('\n')[0].replace(/[?.!]+$/, '')
+  return line.length > 60 ? `${line.slice(0, 60).trimEnd()}…` : line
+}

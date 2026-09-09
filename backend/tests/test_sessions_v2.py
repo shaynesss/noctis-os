@@ -934,3 +934,94 @@ def test_a_live_session_reports_its_mode_model_and_elapsed(monkeypatch, client):
     assert live["mode"] == "faber"
     assert live["model"] == "claude-haiku-4-5"      # the override, not the mode default
     assert 40 <= live["elapsed"] <= 60
+
+
+# ------------------------------------------------------------- promote
+
+def _promotable(store, tmp_path):
+    sid = store.open_session("faber", cwd="/tmp")
+    store.add_message(sid, "user", "should the store or the vault hold this?")
+    store.add_message(sid, "assistant", "The vault, once it is a decision rather than a chat.")
+    store.add_message(sid, "thinking", "")
+    return sid
+
+
+def test_promoting_writes_a_note_into_the_vault(tmp_path, monkeypatch, client):
+    """The deliberate half of "SQLite with promotion" -- and the route that
+    makes the project's second premise reachable at all. Without it the
+    knowledge never compounds anywhere, it only accumulates in a database."""
+    from orchestrator.store import ConversationStore
+    from routers import sessions_v2
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    store = ConversationStore(tmp_path / "h.db")
+    sid = _promotable(store, tmp_path)
+    monkeypatch.setattr(sessions_v2, "_store", store)
+    monkeypatch.setattr(sessions_v2.vault_io, "get_vault_path", lambda: vault)
+    monkeypatch.setattr(sessions_v2.vault_io, "resolve_vault_only", lambda p: vault / p)
+
+    r = client.post(f"/v2/sessions/history/{sid}/promote", headers=AUTH, json={
+        "rel_path": "wiki/Store vs vault.md", "title": "Store vs vault", "note": "Decided.",
+    })
+    assert r.status_code == 200
+    written = (vault / "wiki" / "Store vs vault.md").read_text()
+    assert "# Store vs vault" in written
+    assert "Decided." in written
+    assert "should the store or the vault hold this?" in written
+    assert "**Claude**" in written
+    # Thinking is empty by design and noise when it is not.
+    assert "`thinking`" not in written
+    store.close()
+
+
+def test_promotion_never_overwrites(tmp_path, monkeypatch, client):
+    """A promoted note may have been edited by hand since, and replacing it
+    would lose work the store never saw."""
+    from orchestrator.store import ConversationStore
+    from routers import sessions_v2
+
+    vault = tmp_path / "vault"
+    (vault / "wiki").mkdir(parents=True)
+    (vault / "wiki" / "taken.md").write_text("edited by hand after promotion")
+    store = ConversationStore(tmp_path / "h.db")
+    sid = _promotable(store, tmp_path)
+    monkeypatch.setattr(sessions_v2, "_store", store)
+    monkeypatch.setattr(sessions_v2.vault_io, "get_vault_path", lambda: vault)
+    monkeypatch.setattr(sessions_v2.vault_io, "resolve_vault_only", lambda p: vault / p)
+
+    r = client.post(f"/v2/sessions/history/{sid}/promote", headers=AUTH, json={
+        "rel_path": "wiki/taken.md", "title": "Taken",
+    })
+    assert r.status_code == 409
+    assert (vault / "wiki" / "taken.md").read_text() == "edited by hand after promotion"
+    store.close()
+
+
+def test_promotion_refuses_a_path_outside_the_vault(client):
+    """It writes a file from a client-supplied path -- the same class of
+    input as the reader, which is why it uses the same guard."""
+    r = client.post("/v2/sessions/history/1/promote", headers=AUTH, json={
+        "rel_path": "../../../tmp/escaped.md", "title": "Escape",
+    })
+    assert r.status_code in (403, 404)
+
+
+def test_promotion_refuses_non_markdown(client):
+    r = client.post("/v2/sessions/history/1/promote", headers=AUTH, json={
+        "rel_path": "wiki/note.txt", "title": "Note",
+    })
+    assert r.status_code in (400, 404)
+
+
+def test_promoting_an_unknown_conversation_404s(client):
+    r = client.post("/v2/sessions/history/999999/promote", headers=AUTH, json={
+        "rel_path": "wiki/x.md", "title": "X",
+    })
+    assert r.status_code == 404
+
+
+def test_promote_requires_auth(client):
+    r = client.post("/v2/sessions/history/1/promote",
+                    json={"rel_path": "wiki/x.md", "title": "X"})
+    assert r.status_code == 401

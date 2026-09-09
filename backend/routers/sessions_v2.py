@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
+import vault_io
 from orchestrator.driver import (
     MODE_MODELS, PERMISSION_CYCLE, Image, SessionSpec, one_shot,
 )
@@ -471,3 +472,48 @@ def artifacts(session_id: int) -> dict:
             entry["tools"].append(meta["tool"])
 
     return {"artifacts": list(seen.values())}
+
+
+class PromoteRequest(BaseModel):
+    # Where in the vault. Validated against the vault root and required to be
+    # markdown, the same rule the reader uses: a promote endpoint that can
+    # write any path is an arbitrary-write endpoint with a friendly name.
+    rel_path: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    note: str = ""
+
+
+@router.post("/history/{session_id}/promote")
+def promote(session_id: int, req: PromoteRequest) -> dict:
+    """Write a conversation into the vault as a real note.
+
+    The deliberate half of "SQLite with promotion". Nothing reaches the vault
+    automatically — the store is a cache of what was said, the vault is what
+    was decided, and only a person can tell those apart. This is the route
+    that makes the second half of the project's premise reachable at all:
+    without it the knowledge never compounds anywhere, it just accumulates in
+    a database.
+    """
+    row = _store.db.execute("SELECT id FROM sessions WHERE id=?", (session_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No session {session_id}")
+
+    if not req.rel_path.endswith(".md"):
+        raise HTTPException(status_code=400, detail="Promoted notes are markdown")
+    try:
+        vault_io.resolve_vault_only(req.rel_path)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Path escapes the vault")
+
+    try:
+        written = _store.promote(
+            session_id, vault_io.get_vault_path(), req.rel_path, req.title, req.note,
+        )
+    except FileExistsError:
+        # Never silently: a promoted note may have been edited by hand since,
+        # and replacing it would lose work the store never saw.
+        raise HTTPException(status_code=409, detail=f"{req.rel_path} already exists")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {"path": req.rel_path, "bytes": written.stat().st_size}

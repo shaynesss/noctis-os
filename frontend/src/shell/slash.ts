@@ -22,6 +22,7 @@ export const COMMANDS: Command[] = [
   { name: 'permissions', summary: 'Set what this session may do without asking' },
   { name: 'handoff', summary: 'Hand this conversation to another mode' },
   { name: 'search', summary: 'Search conversations and the vault' },
+  { name: 'promote', summary: 'Write this conversation into the vault as a note' },
   { name: 'clear', summary: 'Start a fresh conversation in this tab' },
 ]
 

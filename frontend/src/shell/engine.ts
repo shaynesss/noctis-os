@@ -340,3 +340,21 @@ export async function put(path: string, body: unknown): Promise<boolean> {
     return false
   }
 }
+
+/** POST JSON. Returns the parsed body, or an error message to show. */
+export async function post<T>(path: string, body: unknown): Promise<T | { error: string }> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_TOKEN}` },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) return (await res.json()) as T
+    // The backend's own detail, not a generic failure: "already exists" and
+    // "escapes the vault" need different reactions from the person reading.
+    const detail = await res.json().catch(() => null)
+    return { error: (detail?.detail as string) ?? `Failed (${res.status})` }
+  } catch {
+    return { error: 'Cannot reach the backend' }
+  }
+}

@@ -252,3 +252,107 @@ function Overlay({
     </div>
   )
 }
+
+
+/* Promoting a conversation into the vault.
+ *
+ * The deliberate half of "SQLite with promotion": the store is a cache of
+ * what was said, the vault is what was decided, and only a person can tell
+ * those apart. So this asks rather than inferring — a title, where it goes,
+ * and optionally the point of it, which is the part worth writing while you
+ * still remember why the conversation mattered.
+ */
+export function PromotePicker({
+  suggestedTitle,
+  onPromote,
+  onClose,
+}: {
+  suggestedTitle: string
+  onPromote: (req: { rel_path: string; title: string; note: string }) => Promise<string | null>
+  onClose: () => void
+}) {
+  const [title, setTitle] = useState(suggestedTitle)
+  const [folder, setFolder] = useState('wiki')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  // Derived rather than a second field to keep in step. Slashes out, because
+  // a title containing one would silently become a directory.
+  const relPath = `${folder}/${title.replace(/[\\/]/g, '-').trim() || 'Untitled'}.md`
+
+  return (
+    <Overlay label="Promote to vault" onClose={onClose}>
+      <p className="m-0 mb-[14px] text-[12.5px] leading-[1.6] text-ink-faint">
+        Writes this conversation into the vault as a note. The transcript stays in the store —
+        this is the curated copy, and nothing overwrites an existing file.
+      </p>
+
+      <label className="mb-[10px] block">
+        <span className="mb-[4px] block font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-faint">
+          Title
+        </span>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          autoFocus
+          className="w-full rounded-[4px] border border-line bg-ground px-[10px] py-[6px] font-mono text-[12px] text-ink outline-none focus:border-[var(--color-noctua)]"
+        />
+      </label>
+
+      <label className="mb-[10px] block">
+        <span className="mb-[4px] block font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-faint">
+          Folder
+        </span>
+        <input
+          value={folder}
+          onChange={(e) => setFolder(e.target.value.replace(/^\/+|\/+$/g, ''))}
+          spellCheck={false}
+          className="w-full rounded-[4px] border border-line bg-ground px-[10px] py-[6px] font-mono text-[12px] text-ink outline-none focus:border-[var(--color-noctua)]"
+        />
+      </label>
+
+      <label className="mb-[12px] block">
+        <span className="mb-[4px] block font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-faint">
+          Why it matters <span className="normal-case tracking-normal">— optional, sits above the transcript</span>
+        </span>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={3}
+          className="w-full resize-none rounded-[4px] border border-line bg-ground px-[10px] py-[8px] text-[12.5px] leading-[1.6] text-ink-dim outline-none focus:border-[var(--color-noctua)]"
+        />
+      </label>
+
+      <div className="flex items-center gap-[10px] border-t border-line pt-[11px]">
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
+          {error ? (
+            <span className="text-faber">{error}</span>
+          ) : (
+            <span className="text-ink-faint">{relPath}</span>
+          )}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-[4px] px-[11px] py-[5px] font-mono text-[11.5px] text-ink-dim hover:bg-elevated"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy || !title.trim()}
+          onClick={async () => {
+            setBusy(true)
+            setError(await onPromote({ rel_path: relPath, title: title.trim(), note }))
+            setBusy(false)
+          }}
+          className="rounded-[4px] px-[11px] py-[5px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+          style={{ background: 'var(--color-noctua)' }}
+        >
+          {busy ? 'Writing…' : 'Promote'}
+        </button>
+      </div>
+    </Overlay>
+  )
+}

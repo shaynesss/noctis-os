@@ -36,8 +36,11 @@ Verified live, not only by tests.
   sprites, with expression variants carrying idle/working state.
 - **Artifacts** — files a conversation created or changed, derived from its
   own tool calls, shown as chips under the transcript.
-- **Live monitoring** — running/max sessions in the status bar beside the
-  limit windows, amber at the cap.
+- **Live monitoring** — running/max sessions beside the character strip,
+  amber at the cap.
+- **Promotion** — `/promote` writes a conversation into the vault as a
+  curated note. The store is a cache of what was said; the vault is what was
+  decided, and only a person can tell those apart, so nothing is automatic.
 
 ## Next
 
