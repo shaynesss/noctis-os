@@ -122,6 +122,9 @@ export default function App() {
       ...current,
       busy: true,
       thinking: null,
+      // Stamped once here rather than derived from `busy`, so the elapsed
+      // timer measures the turn and not the moment the component mounted.
+      startedAt: Date.now(),
       blocks: [...current.blocks, { kind: 'user', text: prompt, at: now() }],
     }
     setSessions((s) => ({ ...s, [tabId]: withUser }))
@@ -169,6 +172,7 @@ export default function App() {
           ...s[tabId],
           busy: false,
           thinking: null,
+          startedAt: null,
           // Recorded in the transcript rather than left silent. A reply that
           // simply stops mid-sentence is indistinguishable from one that
           // finished badly, and you would not know whether to retry.
@@ -456,7 +460,13 @@ export default function App() {
         />
 
         {view === 'chat' ? (
-          <Transcript blocks={session.blocks} accent={accent} thinking={session.thinking} />
+          <Transcript
+            blocks={session.blocks}
+            accent={accent}
+            thinking={session.thinking}
+            mode={session.mode}
+            startedAt={session.startedAt}
+          />
         ) : (
           <Pane view={view} limits={limits} />
         )}

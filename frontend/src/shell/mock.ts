@@ -96,6 +96,8 @@ export interface SessionState {
   thinking?: number | null
   /** 0-1 of the context window, from the last turn that reported one. */
   context?: number | null
+  /** Epoch ms when the running turn began, null when nothing is running. */
+  startedAt?: number | null
 }
 
 /* The seed is now only what an empty install starts with: one General tab

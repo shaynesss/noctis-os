@@ -5,7 +5,8 @@
  * That is why the Design Brief takes Ghostty for *rendering* and not for its
  * stream model: a terminal-shaped transcript would fight the data. */
 import { useState } from 'react'
-import { MODE_ACCENT, MODE_LABEL, type Block } from './mock'
+import { Working } from './Working'
+import { MODE_ACCENT, MODE_LABEL, type Block, type Mode } from './mock'
 
 function Caret({ open }: { open: boolean }) {
   return (
@@ -40,7 +41,7 @@ function Disclosure({
   const [open, setOpen] = useState(defaultOpen)
   const canOpen = Boolean(body)
   return (
-    <div className="mb-[7px] overflow-hidden rounded-[3px] border border-line bg-surface">
+    <div className="mb-[8px] overflow-hidden rounded-[3px] border border-line bg-surface">
       <button
         type="button"
         onClick={() => canOpen && setOpen(!open)}
@@ -84,24 +85,37 @@ export function Transcript({
   blocks,
   accent,
   thinking,
+  mode,
+  startedAt,
 }: {
   blocks: Block[]
   accent: string
   /** Live thinking-token estimate, or null when not reasoning. */
   thinking?: number | null
+  mode: Mode
+  /** When the running turn began, or null when nothing is running. */
+  startedAt?: number | null
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
         {blocks.map((b, i) => {
           if (b.kind === 'user') {
+            /* A prompt glyph and dimmer ink instead of a YOU label: it is
+             * already obvious which turn is yours, and a caption on every
+             * one of them was two lines of furniture per exchange. The time
+             * moves to a tooltip -- worth having, not worth a line. */
             return (
-              <div key={i} className="mb-[22px]">
-                <div className="mb-2 flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-                  <span className="h-[6px] w-[6px] rounded-[1px] bg-ink-dim" />
-                  You · {b.at}
+              <div key={i} className="mb-[16px] flex gap-[9px]" title={b.at}>
+                <span
+                  aria-hidden
+                  className="select-none font-mono text-[13px] leading-[1.6] text-ink-faint"
+                >
+                  ›
+                </span>
+                <div className="min-w-0 whitespace-pre-wrap font-mono text-[13px] leading-[1.6] text-ink-dim">
+                  {b.text}
                 </div>
-                <div className="border-l-2 border-line pl-3 text-[13.5px] leading-[1.68]">{b.text}</div>
               </div>
             )
           }
@@ -125,7 +139,7 @@ export function Transcript({
              * distinction between the two is the point: the new session got
              * the summary, not the conversation. */
             return (
-              <div key={i} className="mb-[22px] rounded-[3px] border border-line bg-surface">
+              <div key={i} className="mb-[16px] rounded-[3px] border border-line bg-surface">
                 <div className="flex items-center gap-[7px] border-b border-line px-[11px] py-[7px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
                   Handed off from
                   <span
@@ -150,7 +164,7 @@ export function Transcript({
             return (
               <div
                 key={i}
-                className="mb-[22px] rounded-[3px] border px-[11px] py-[9px] text-[12.5px] leading-[1.6]"
+                className="mb-[16px] rounded-[3px] border px-[11px] py-[9px] text-[12.5px] leading-[1.6]"
                 style={{
                   borderColor: 'color-mix(in srgb, var(--color-faber) 40%, var(--color-surface))',
                   background: 'color-mix(in srgb, var(--color-faber) 8%, var(--color-surface))',
@@ -175,35 +189,24 @@ export function Transcript({
               />
             )
           }
+          /* No CLAUDE label. The reply is the page's main column -- full
+           * width, normal ink -- and the dimmed, glyph-prefixed user turn
+           * above it is what marks the boundary. Naming the speaker on every
+           * turn is the kind of thing that reads as helpful once and as
+           * clutter for the rest of the session. */
           return (
-            <div key={i} className="mb-[22px]">
-              <div className="mb-2 flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-                <span className="h-[6px] w-[6px] rounded-[1px]" style={{ background: accent }} />
-                Claude
-              </div>
-              <div className="space-y-[11px] text-[13.5px] leading-[1.68]">
-                {b.text.split('\n\n').map((p, j) => (
-                  <p key={j} className="m-0">
-                    <Rich text={p} />
-                  </p>
-                ))}
-              </div>
+            <div key={i} className="mb-[18px] space-y-[9px] text-[13.5px] leading-[1.65]">
+              {b.text.split('\n\n').map((p, j) => (
+                <p key={j} className="m-0">
+                  <Rich text={p} />
+                </p>
+              ))}
             </div>
           )
         })}
 
-        {/* The one honest signal during a long pause. The model's reasoning
-          * text is never returned (display:"omitted"), so this counts tokens
-          * rather than pretending to show thought -- a transcript that
-          * simply stops looks identical to one that has crashed. */}
-        {thinking != null && (
-          <div className="mb-[22px] flex items-center gap-[9px] font-mono text-[11.5px] text-ink-faint">
-            <span
-              className="h-[7px] w-[7px] animate-pulse rounded-full motion-reduce:animate-none"
-              style={{ background: accent }}
-            />
-            thinking · {thinking.toLocaleString()} tokens
-          </div>
+        {startedAt != null && (
+          <Working key={startedAt} mode={mode} startedAt={startedAt} thinking={thinking} accent={accent} />
         )}
       </div>
     </div>
