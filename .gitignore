@@ -55,3 +55,10 @@ backend/launch_config/nondev/*
 # Tauri build artifacts and generated schemas
 frontend/src-tauri/target/
 frontend/src-tauri/gen/
+
+# Conversation history and anything else the running backend writes into it.
+# These were tracked until 2026-09-09, so every commit shipped a binary diff
+# of the transcripts and the history is still in past commits — see
+# STATUS.md. The vault is the record for anything worth keeping; this is a
+# local cache the app rebuilds.
+backend/data/

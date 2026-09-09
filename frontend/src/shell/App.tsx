@@ -12,8 +12,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
 import {
-  del, emptyFold, fold, get, runSession,
-  type HistorySession, type HistoryTranscript, type Stats as StatsPayload, type Window,
+  del, emptyFold, fold, get, runSession, uploadAttachment,
+  type Attachment, type HistorySession, type HistoryTranscript,
+  type Stats as StatsPayload, type Window,
 } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { turnFinished } from './notify'
@@ -51,6 +52,12 @@ export default function App() {
   const [tabs, setTabs] = useState<Tab[]>([EMPTY_TAB])
   const [sessions, setSessions] = useState<Record<string, SessionState>>({ t0: EMPTY_SESSION })
   const [drafts, setDrafts] = useState<Record<string, string>>({ t0: '' })
+
+  /* Pasted images, per draft. Kept beside the draft rather than on the
+   * session, because they belong to a message not yet sent -- switching tabs
+   * and coming back should find the same half-written message with the same
+   * pictures attached. */
+  const [attachments, setAttachments] = useState<Record<string, Attachment[]>>({})
 
   // `null` closed; otherwise a launch, carrying its handoff source if any.
   const [launcher, setLauncher] = useState<null | { handoff?: HandoffSource }>(null)
@@ -231,13 +238,52 @@ export default function App() {
    *  its row as cancelled, and the engine process is killed with it. */
   const stop = (tabId: string) => aborts.current[tabId]?.abort()
 
+  /* Paste an image: upload it, then write its reference into the draft.
+   *
+   * The reference goes into the text at the caret's end rather than being
+   * held separately, because it is what the model is actually told to look
+   * at -- the lines under the composer only describe what the text already
+   * says. */
+  const attach = async (tabId: string, blob: Blob) => {
+    const path = await uploadAttachment(blob)
+    if (!path) return
+    setAttachments((prev) => {
+      const existing = prev[tabId] ?? []
+      const n = (existing.at(-1)?.n ?? 0) + 1
+      setDrafts((d) => {
+        const text = d[tabId] ?? ''
+        const sep = text && !text.endsWith(' ') ? ' ' : ''
+        return { ...d, [tabId]: `${text}${sep}[Image #${n}] ` }
+      })
+      return { ...prev, [tabId]: [...existing, { n, path }] }
+    })
+  }
+
+  /* Removing an attachment takes its reference out of the text too, or the
+   * prompt would tell the model to look at something no longer attached. */
+  const removeAttachment = (tabId: string, n: number) => {
+    setAttachments((prev) => ({ ...prev, [tabId]: (prev[tabId] ?? []).filter((a) => a.n !== n) }))
+    setDrafts((d) => ({
+      ...d,
+      [tabId]: (d[tabId] ?? '').replace(new RegExp(`\\[Image #${n}\\]\\s*`), ''),
+    }))
+  }
+
   // Sending from a panel takes you to the conversation it went to. Leaving
   // you on Settings while a reply arrives somewhere unseen would be worse
   // than the extra navigation.
   const send = () => {
-    const prompt = (drafts[composerTab] ?? '').trim()
-    if (!prompt) return
+    const typed = (drafts[composerTab] ?? '').trim()
+    if (!typed) return
+    const files = attachments[composerTab] ?? []
+    /* The engine has no clipboard, so each reference is followed by the path
+     * it stands for. The visible text keeps the short form; only what is
+     * sent carries the paths, so the transcript does not fill with them. */
+    const prompt = files.length
+      ? `${typed}\n\n${files.map((f) => `[Image #${f.n}] is at: ${f.path}`).join('\n')}`
+      : typed
     setDrafts({ ...drafts, [composerTab]: '' })
+    setAttachments((prev) => ({ ...prev, [composerTab]: [] }))
     if (!inChat) {
       setActiveTab(composerTab)
       setView('chat')
@@ -558,6 +604,9 @@ export default function App() {
             value={drafts[composerTab] ?? ''}
             onChange={(v) => setDrafts({ ...drafts, [composerTab]: v })}
             onSend={send}
+            attachments={attachments[composerTab] ?? []}
+            onAttach={(blob) => void attach(composerTab, blob)}
+            onRemoveAttachment={(n) => removeAttachment(composerTab, n)}
             busy={sessions[composerTab].busy}
             onStop={() => stop(composerTab)}
             permission={permission}

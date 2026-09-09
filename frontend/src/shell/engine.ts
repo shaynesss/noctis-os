@@ -294,3 +294,30 @@ export async function del(path: string): Promise<boolean> {
     return false
   }
 }
+
+export interface Attachment {
+  /** Display index, matching the `[Image #n]` written into the prompt. */
+  n: number
+  /** Absolute path on disk. The session reads it with the Read tool. */
+  path: string
+}
+
+/** Upload a pasted image; null if it could not be stored.
+ *
+ * Raw bytes rather than multipart: there is one file and no fields, and the
+ * server decides the type from the bytes anyway — a multipart envelope would
+ * only carry a filename nobody should trust.
+ */
+export async function uploadAttachment(blob: Blob): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/v2/sessions/attachments`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${API_TOKEN}` },
+      body: blob,
+    })
+    if (!res.ok) return null
+    return ((await res.json()) as { path: string }).path
+  } catch {
+    return null
+  }
+}

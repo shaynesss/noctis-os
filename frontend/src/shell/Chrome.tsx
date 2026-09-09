@@ -1,5 +1,6 @@
 /* Rail, tabs, composer, status, characters — the shell around the transcript. */
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import type { Attachment } from './engine'
 import { Logo } from './Logo'
 import {
   CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE,
@@ -238,12 +239,16 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   value: string
   onChange: (v: string) => void
   onSend: () => void
+  /** Images pasted into this draft, in the order they were pasted. */
+  attachments: Attachment[]
+  onAttach: (blob: Blob) => void
+  onRemoveAttachment: (n: number) => void
   /** A turn is in flight. Sending again would race it, not queue behind it. */
   busy?: boolean
   onStop: () => void
   permission: Permission
   onCyclePermission: () => void
-}>(function Composer({ mode, value, onChange, onSend, busy, onStop, permission, onCyclePermission }, forwarded) {
+}>(function Composer({ mode, value, onChange, onSend, busy, onStop, attachments, onAttach, onRemoveAttachment, permission, onCyclePermission }, forwarded) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useImperativeHandle(forwarded, () => ref.current as HTMLTextAreaElement)
 
@@ -261,6 +266,28 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   // column); BottomBar centres it and fills the space either side.
   return (
     <div className="w-[776px] max-w-full">
+      {/* Above the input, not inside it. The reference in the text is the
+          authoritative thing -- it is what the model is told to open -- and
+          these lines only say which file each one is, the way the CLI shows
+          a pasted image. */}
+      {attachments.length > 0 && (
+        <div className="mb-[6px] flex flex-col gap-[2px] pl-[10px]">
+          {attachments.map((a) => (
+            <span key={a.n} className="flex items-center gap-[7px] font-mono text-[11px] text-ink-faint">
+              <span aria-hidden>└</span>
+              <span className="underline decoration-line underline-offset-2">[Image #{a.n}]</span>
+              <button
+                type="button"
+                onClick={() => onRemoveAttachment(a.n)}
+                aria-label={`Remove image ${a.n}`}
+                className="rounded-[3px] px-[3px] leading-none transition-colors hover:bg-line hover:text-ink"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="flex items-start gap-[9px] rounded-[4px] border border-line bg-ground px-[10px] py-[7px] focus-within:border-[#3a3a3a]">
         <span
           className="flex shrink-0 self-start items-center gap-[5px] rounded-[3px] border px-[7px] py-[2px] font-mono text-[10.5px] uppercase leading-[1.5] tracking-[0.06em]"
@@ -311,6 +338,18 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
           ref={ref}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          /* Images off the clipboard. A screenshot is how you show what is
+             actually on screen, and describing one in words is the slow path
+             around a picture you already have. */
+          onPaste={(e) => {
+            for (const item of e.clipboardData?.items ?? []) {
+              if (!item.type.startsWith('image/')) continue
+              const blob = item.getAsFile()
+              if (!blob) continue
+              e.preventDefault()   // or the paste also drops a filename in
+              onAttach(blob)
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()

@@ -14,9 +14,10 @@ header, and the frontend reads it with fetch + a ReadableStream.
 from __future__ import annotations
 
 import asyncio
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -360,3 +361,59 @@ async def recap(session_id: int) -> dict:
         return {"recap": None}
     _store.save_recap(session_id, line, count)
     return {"recap": line, "cached": False}
+
+
+# Where pasted images land. Inside data/, which is gitignored and excluded
+# from the reload watcher, so an attachment neither enters the repo nor
+# restarts the backend.
+ATTACH_DIR = Path(__file__).resolve().parents[1] / "data" / "attachments"
+
+# Generous for a screenshot, far short of anything that would wedge the
+# request. A paste is a screenshot, not a video.
+MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024
+
+# Extension by magic bytes rather than by a client-supplied filename or
+# content-type, both of which the client controls. The engine reads these
+# back off disk, so the extension has to describe what the bytes actually
+# are.
+_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"GIF87a", ".gif"),
+    (b"GIF89a", ".gif"),
+    (b"RIFF", ".webp"),
+)
+
+
+def _extension(data: bytes) -> str | None:
+    for magic, ext in _MAGIC:
+        if data.startswith(magic):
+            return ext
+    return None
+
+
+@router.post("/attachments")
+async def upload_attachment(request: Request) -> dict:
+    """Store a pasted image and return the path a session can read.
+
+    The engine has no clipboard: a pasted screenshot has to exist as a file
+    before a prompt can refer to it. The path returned goes into the prompt,
+    and the session reads it with the Read tool — which is why Read is on
+    every mode's allowed list.
+    """
+    data = await request.body()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty attachment")
+    if len(data) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=413, detail="Attachment too large")
+
+    ext = _extension(data)
+    if ext is None:
+        # Refused rather than stored with a guessed extension: this writes a
+        # file the engine will later be told to open.
+        raise HTTPException(status_code=415, detail="Only PNG, JPEG, GIF and WebP images")
+
+    ATTACH_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"{uuid.uuid4().hex}{ext}"
+    (ATTACH_DIR / name).write_bytes(data)
+    return {"path": str(ATTACH_DIR / name), "bytes": len(data)}
