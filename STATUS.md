@@ -51,14 +51,17 @@ than generated from mode state, and has still not reached
 `noctis-v2-SPEC.md`, which by this project's own rule means it does not
 count yet.
 
-**4. Settings stubs** — prompt editor, regression runner, schedule controls.
-The page says so and names where each lives.
+**4. Stage 2 leftovers** — artifacts (item 5) and live session monitoring
+beyond what the transcript already shows (item 7).
 
-**5. Character sprites** — still letter marks (F/N/V), not artwork.
+**5. Item 8, "tiered loading policy", is undefined.** It appears in the
+build-order table and nowhere else in the spec — no description, no
+reasoning, no acceptance condition. It cannot be built from what is written,
+so it needs either a definition or removal.
 
-**6. Stage 2 leftovers** — artifacts (item 5), a tiered loading policy
-(item 8), and live session monitoring beyond what the transcript already
-shows (item 7).
+**6. Running the regression suite from Settings.** The cases are listed with
+what running them would cost; firing them needs the orchestrator to host
+thirteen sessions and report back, which is real work rather than a button.
 
 ## Open decision: the transcript database in git history
 

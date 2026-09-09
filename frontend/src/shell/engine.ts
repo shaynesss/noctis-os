@@ -326,3 +326,17 @@ export function readImage(blob: Blob): Promise<Attachment | null> {
     reader.readAsDataURL(blob)
   })
 }
+
+/** PUT JSON to a route. Returns whether it succeeded. */
+export async function put(path: string, body: unknown): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${API_TOKEN}` },
+      body: JSON.stringify(body),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}

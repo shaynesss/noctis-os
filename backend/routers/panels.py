@@ -15,8 +15,10 @@ import subprocess
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
 
 import vault_io
+from prompts.render import render
 from orchestrator.driver import MODEL_CATALOG, MODE_MODELS, MODE_TOOLS, PERMISSION_CYCLE
 
 router = APIRouter(prefix="/v2", tags=["panels"])
@@ -316,3 +318,90 @@ def _safe_home_dir(raw: str) -> Path:
     if resolved != home and home not in resolved.parents:
         raise ValueError("Directory must be inside the home directory")
     return resolved
+
+
+# The prompt files, and nothing else. A prompt editor that can open any vault
+# path is a vault editor with a narrow label; naming the four files it may
+# touch is what keeps it the thing it claims to be.
+def _prompt_files() -> dict[str, str]:
+    files = {"system": "prompts/system.md"}
+    for mode in sorted(MODE_MODELS):
+        files[mode] = f"prompts/overlays/{mode}.md"
+    return files
+
+
+@router.get("/prompts")
+def list_prompts() -> dict:
+    """The system prompt and each mode's overlay."""
+    return {
+        "prompts": [
+            {"id": key, "path": path,
+             "markdown": vault_io.read_file(path) if vault_io.file_exists(path) else None}
+            for key, path in _prompt_files().items()
+        ]
+    }
+
+
+class PromptUpdate(BaseModel):
+    markdown: str = Field(min_length=1)
+
+
+@router.put("/prompts/{prompt_id}")
+def save_prompt(prompt_id: str, body: PromptUpdate) -> dict:
+    """Write a prompt and re-render the config dirs that use it.
+
+    Re-rendering here rather than at next launch is the point: an edit that
+    only takes effect the next time a session starts is an edit you cannot
+    check, and the whole reason to edit prompts in the app is a short loop
+    between changing one and running the regression suite against it.
+
+    `prompt_id` is matched against the known set rather than joined into a
+    path, so it cannot address anything but these files.
+    """
+    files = _prompt_files()
+    if prompt_id not in files:
+        raise HTTPException(status_code=404, detail=f"No such prompt: {prompt_id}")
+
+    vault_io.write_file(files[prompt_id], body.markdown)
+
+    # The system prompt is composed into every mode; an overlay into one.
+    affected = sorted(MODE_MODELS) if prompt_id == "system" else [prompt_id]
+    rendered = []
+    for mode in affected:
+        changed, message = render(mode)
+        rendered.append({"mode": mode, "changed": changed, "message": message})
+    return {"saved": prompt_id, "rendered": rendered}
+
+
+@router.get("/regression")
+def regression_suite() -> dict:
+    """The regression cases, without running any of them.
+
+    Reading the suite is free; running it is thirteen real sessions on
+    production models. Those are different enough that they are different
+    routes — a page that fires the expensive one just by being opened would
+    spend the 5h window every time you glanced at Settings.
+    """
+    import json
+
+    path = "prompts/regression.jsonl"
+    if not vault_io.file_exists(path):
+        return {"cases": [], "path": path}
+
+    cases = []
+    for line in vault_io.read_file(path).splitlines():
+        if not line.strip():
+            continue
+        try:
+            case = json.loads(line)
+        except ValueError:
+            continue
+        cases.append({
+            "id": case.get("id"),
+            "mode": case.get("mode"),
+            "prompt": case.get("prompt"),
+            "tests": case.get("tests"),
+        })
+    return {"cases": cases, "path": path,
+            # What running it will actually cost, stated before you press it.
+            "sessions": len(cases)}

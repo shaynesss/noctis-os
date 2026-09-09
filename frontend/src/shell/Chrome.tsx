@@ -638,19 +638,37 @@ function Seg({ children, last, className = '' }: { children: React.ReactNode; la
 /* The characters sit here rather than in a bar of their own: with the pixel
  * world retired they are status indicators, and a full-width strip cost
  * ~54px of permanent vertical space to say what a dot can. */
-/* The three mode characters, lit when that mode has a turn in flight.
+/* The three mode characters, drawn rather than lettered.
  *
- * Was hardcoded, and so Faber sat lit with no Faber session anywhere -- the
- * one thing this strip exists to tell you, reported wrongly. It now reads
- * the live sessions, which is the only thing that makes an indicator worth
- * having.
+ * These were F/N/V initials standing in for artwork that already existed —
+ * real pixel sprites have been sitting in assets/characters since July,
+ * reachable at /assets because public/assets is a symlink to them, which is
+ * how the vault stays their single source of truth.
+ *
+ * State is carried by the sprite itself, not only by a dot beside it: each
+ * character has expression variants, so an idle Noctua is the sleepy one and
+ * a working Faber is the one holding tools. The dot stays as the
+ * unambiguous signal, because a drowsy owl is a charming way to say "idle"
+ * and a poor way to be *sure*.
  */
+const SPRITE: Record<Mode, { idle: string; working: string } | null> = {
+  general: null,          // the front door has no character; it is you
+  faber: { idle: '/assets/characters/faber.png',
+           working: '/assets/characters/expressions/faber-building.png' },
+  noctua: { idle: '/assets/characters/expressions/noctua-sleepy.png',
+            working: '/assets/characters/noctua.png' },
+  vesper: { idle: '/assets/characters/expressions/vesper-drowsy.png',
+            working: '/assets/characters/expressions/vesper-alert.png' },
+  maintenance: null,      // its character was retired with the persona
+}
+
 function CharacterStrip({ working = [] }: { working?: Mode[] }) {
   return (
     <div className="flex shrink-0 items-center gap-[10px]">
       {CHARACTERS.map((c) => {
         const accent = MODE_ACCENT[c.mode]
         const live = working.includes(c.mode)
+        const sprite = SPRITE[c.mode]
         return (
           <button
             key={c.mode}
@@ -658,14 +676,27 @@ function CharacterStrip({ working = [] }: { working?: Mode[] }) {
             title={`${MODE_LABEL[c.mode]} · ${live ? 'working' : 'idle'}`}
             className="group relative grid h-6 w-6 place-items-center rounded-[3px] hover:bg-elevated"
           >
+            {sprite ? (
+              <img
+                src={live ? sprite.working : sprite.idle}
+                alt=""
+                /* pixelated, or the browser smooths a 16-grade sprite into
+                   mush at this size — the whole point of the art direction
+                   is hard edges. Dimmed rather than greyed when idle, so the
+                   character stays itself. */
+                className="h-[20px] w-[20px] object-contain transition-opacity"
+                style={{ imageRendering: 'pixelated', opacity: live ? 1 : 0.45 }}
+              />
+            ) : (
+              <span
+                className="font-mono text-[11px] font-bold"
+                style={{ color: live ? accent : 'var(--color-ink-faint)', opacity: live ? 1 : 0.55 }}
+              >
+                {MODE_LABEL[c.mode][0]}
+              </span>
+            )}
             <span
-              className="font-mono text-[11px] font-bold"
-              style={{ color: live ? accent : 'var(--color-ink-faint)', opacity: live ? 1 : 0.55 }}
-            >
-              {MODE_LABEL[c.mode][0]}
-            </span>
-            <span
-              className={`absolute -bottom-px -right-px h-[6px] w-[6px] rounded-full border-[1.5px] border-surface ${live ? 'animate-pulse' : ''}`}
+              className={`absolute -bottom-px -right-px h-[6px] w-[6px] rounded-full border-[1.5px] border-surface ${live ? 'animate-pulse motion-reduce:animate-none' : ''}`}
               style={{ background: live ? accent : 'var(--color-ink-faint)' }}
             />
           </button>
@@ -674,3 +705,4 @@ function CharacterStrip({ working = [] }: { working?: Mode[] }) {
     </div>
   )
 }
+

@@ -6,6 +6,10 @@
  * placeholder content. An invented morning brief is worse than a missing
  * one, because the invented one gets believed.
  */
+import { useState } from 'react'
+import { Unreachable } from './Async'
+import { put } from './engine'
+import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
 import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
@@ -239,16 +243,21 @@ export function Settings({ data }: { data: ConfigPayload }) {
         </div>
       </Card>
 
-      <Heading className="mt-7">Prompts and schedule</Heading>
+      <Heading className="mt-7">Prompts</Heading>
+      <Prompts />
+
+      <Heading className="mt-7">Regression suite</Heading>
+      <Regression />
+
+      <Heading className="mt-7">Schedule</Heading>
       <Card>
+        {/* Honest rather than a control panel for nothing: the scheduler is
+            build-order item 6 and does not exist, so there is nothing here
+            to switch on. Naming what it will run is more use than a row of
+            dead toggles. */}
         <div className="px-4 py-[13px] text-[12.5px] leading-[1.6] text-ink-dim">
-          The prompt editor, regression runner and schedule controls are not built yet. Prompts
-          live in <code className="font-mono text-[11.5px] text-ink-faint">second-brain/prompts/</code>{' '}
-          and the regression suite runs with{' '}
-          <code className="font-mono text-[11.5px] text-ink-faint">
-            python prompts/run_regression.py
-          </code>
-          .
+          No scheduler yet. It will run three launchd jobs on wake — the morning brief, the
+          vault commit, and maintenance — and this is where they will be turned on and off.
         </div>
       </Card>
     </>
@@ -293,6 +302,177 @@ export function ListPriceFact({
       {/* Short, because a long disclaimer under a number makes the number
           itself look disputed. */}
       <span className="text-ink-faint">· the subscription covered it</span>
+    </div>
+  )
+}
+
+
+interface PromptFile {
+  id: string
+  path: string
+  markdown: string | null
+}
+
+/* The prompt editor.
+ *
+ * Editing here rather than in the vault is worth it for one reason: saving
+ * re-renders the config dirs immediately, so the loop between changing a
+ * prompt and running the suite against it is short. Editing the file in
+ * Obsidian and waiting for the next launch is the long version of the same
+ * thing.
+ */
+function Prompts() {
+  const data = useFetched<{ prompts: PromptFile[] }>('/v2/prompts')
+  const [selected, setSelected] = useState('system')
+  const [draft, setDraft] = useState<string | null>(null)
+  const [saving, setSaving] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+
+  if (data === false) return <Unreachable what="the prompts" />
+  if (data === null) return <Loading />
+
+  const file = data.prompts.find((p) => p.id === selected)
+  const text = draft ?? file?.markdown ?? ''
+  const dirty = draft !== null && draft !== (file?.markdown ?? '')
+
+  return (
+    <Card>
+      <div className="flex items-center gap-[6px] border-b border-line px-[10px] py-[7px]">
+        {data.prompts.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => {
+              setSelected(p.id)
+              setDraft(null)          // an unsaved edit is not carried to another file
+              setSaving('idle')
+            }}
+            className={`rounded-[4px] px-[8px] py-[3px] font-mono text-[11.5px] transition-colors ${
+              p.id === selected ? 'bg-elevated text-ink' : 'text-ink-faint hover:text-ink-dim'
+            }`}
+          >
+            {p.id}
+          </button>
+        ))}
+        <span className="ml-auto font-mono text-[10.5px] text-ink-faint">{file?.path}</span>
+      </div>
+
+      <textarea
+        value={text}
+        onChange={(e) => setDraft(e.target.value)}
+        spellCheck={false}
+        className="h-[280px] w-full resize-y border-0 bg-ground px-[12px] py-[10px] font-mono text-[11.5px] leading-[1.65] text-ink-dim outline-none"
+      />
+
+      <div className="flex items-center gap-[10px] border-t border-line px-[12px] py-[8px]">
+        <span className="font-mono text-[11px] text-ink-faint">
+          {/* Saving re-renders every config dir that composes this file, so
+              the change is live for the next session rather than the next
+              launch — said plainly, because that is the reason to edit here
+              at all. */}
+          {saving === 'saved'
+            ? 'Saved and re-rendered — live for the next session'
+            : saving === 'failed'
+              ? 'Could not save'
+              : dirty
+                ? 'Unsaved changes'
+                : 'Saving re-renders every mode that uses this file'}
+        </span>
+        <button
+          type="button"
+          disabled={!dirty || saving === 'saving'}
+          onClick={async () => {
+            setSaving('saving')
+            const ok = await put(`/v2/prompts/${selected}`, { markdown: text })
+            setSaving(ok ? 'saved' : 'failed')
+            if (ok) setDraft(null)
+          }}
+          className="ml-auto rounded-[4px] px-[11px] py-[4px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+          style={{ background: 'var(--color-noctua)' }}
+        >
+          Save
+        </button>
+      </div>
+    </Card>
+  )
+}
+
+interface RegressionCase {
+  id: string
+  mode: string
+  prompt: string
+  tests: string
+}
+
+/* The regression suite, listed but not run.
+ *
+ * Reading it is free; running it is one real session per case on production
+ * models. Those are different enough to be different routes — and the button
+ * says what it will spend before you press it, because a suite that quietly
+ * burns the 5h window is one you stop trusting yourself to click.
+ */
+function Regression() {
+  const data = useFetched<{ cases: RegressionCase[]; sessions: number; path: string }>(
+    '/v2/regression',
+  )
+  const [open, setOpen] = useState(false)
+
+  if (data === false) return <Unreachable what="the regression suite" />
+  if (data === null) return <Loading />
+
+  return (
+    <Card>
+      <div className="flex items-center gap-[10px] px-4 py-[12px]">
+        <span className="text-[13px] text-ink">
+          {data.cases.length} case{data.cases.length === 1 ? '' : 's'}
+        </span>
+        <span className="font-mono text-[11px] text-ink-faint">
+          {/* The cost, before the click. */}
+          running spends {data.sessions} sessions on production models
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="ml-auto font-mono text-[11px] text-ink-faint underline decoration-line underline-offset-2 hover:text-ink-dim"
+        >
+          {open ? 'hide' : 'show cases'}
+        </button>
+      </div>
+
+      {open && (
+        <div className="border-t border-line">
+          {data.cases.map((c) => (
+            <div key={c.id} className="border-b border-line px-4 py-[9px] last:border-b-0">
+              <div className="flex items-baseline gap-[8px]">
+                <span className="font-mono text-[11px] text-ink-faint">{c.id}</span>
+                <span
+                  className="font-mono text-[11px]"
+                  style={{ color: MODE_ACCENT[c.mode as Mode] ?? 'var(--color-ink-dim)' }}
+                >
+                  {c.mode}
+                </span>
+              </div>
+              <div className="mt-[3px] text-[12px] leading-[1.5] text-ink-dim">{c.tests}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Not built rather than hidden: running it needs the orchestrator to
+          host thirteen sessions and report them back, which is real work and
+          not a button. */}
+      <div className="border-t border-line px-4 py-[10px] font-mono text-[11px] text-ink-faint">
+        Running from here is not built yet — use{' '}
+        <span className="text-ink-dim">python prompts/run_regression.py</span> in{' '}
+        <span className="text-ink-dim">backend/</span>.
+      </div>
+    </Card>
+  )
+}
+
+function Loading() {
+  return (
+    <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
+      Loading…
     </div>
   )
 }

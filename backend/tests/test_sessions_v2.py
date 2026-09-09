@@ -799,3 +799,66 @@ def test_billing_reports_how_many_turns_its_figure_covers(tmp_path, monkeypatch,
     assert life["turns"] == 2
     assert life["priced_turns"] == 1        # the figure covers half of them
     store.close()
+
+
+# ------------------------------------------------------------- prompts
+
+def test_prompts_lists_the_system_prompt_and_every_overlay(client):
+    body = client.get("/v2/prompts", headers=AUTH).json()
+    ids = {p["id"] for p in body["prompts"]}
+    from orchestrator.driver import MODE_MODELS
+    assert ids == {"system", *MODE_MODELS}
+
+
+def test_a_prompt_id_cannot_address_anything_else(client):
+    """Matched against the known set rather than joined into a path: an
+    editor that can open any vault file is a vault editor with a narrow
+    label."""
+    for attempt in ("../../../etc/passwd", "log", "system/../../secrets"):
+        r = client.put(f"/v2/prompts/{attempt}", headers=AUTH, json={"markdown": "x"})
+        assert r.status_code in (404, 405), attempt
+
+
+def test_saving_a_prompt_rerenders_the_modes_that_use_it(client, monkeypatch):
+    """An edit that only takes effect at the next launch is an edit you
+    cannot check, and the point of editing here is a short loop to the
+    regression suite."""
+    from routers import panels
+
+    written = {}
+    rendered = []
+    monkeypatch.setattr(panels.vault_io, "write_file", lambda p, c: written.update({p: c}))
+    monkeypatch.setattr(panels, "render", lambda m, *a, **k: (rendered.append(m), (True, "ok"))[1])
+
+    body = client.put("/v2/prompts/faber", headers=AUTH, json={"markdown": "new overlay"}).json()
+    assert written == {"prompts/overlays/faber.md": "new overlay"}
+    assert rendered == ["faber"]                    # only the mode it belongs to
+    assert body["saved"] == "faber"
+
+
+def test_editing_the_system_prompt_rerenders_every_mode(client, monkeypatch):
+    """It is composed into all of them, so one of them going stale would be
+    a silent divergence between modes."""
+    from routers import panels
+    from orchestrator.driver import MODE_MODELS
+
+    rendered = []
+    monkeypatch.setattr(panels.vault_io, "write_file", lambda p, c: None)
+    monkeypatch.setattr(panels, "render", lambda m, *a, **k: (rendered.append(m), (True, "ok"))[1])
+
+    client.put("/v2/prompts/system", headers=AUTH, json={"markdown": "base"})
+    assert sorted(rendered) == sorted(MODE_MODELS)
+
+
+def test_reading_the_regression_suite_runs_nothing(client):
+    """Reading is free; running is thirteen real sessions on production
+    models. A page that fired the expensive one just by being opened would
+    spend the window every time you glanced at Settings."""
+    body = client.get("/v2/regression", headers=AUTH).json()
+    assert body["sessions"] == len(body["cases"])
+    assert all("mode" in c and "tests" in c for c in body["cases"])
+
+
+def test_prompt_routes_require_auth(client):
+    assert client.get("/v2/prompts").status_code == 401
+    assert client.get("/v2/regression").status_code == 401
