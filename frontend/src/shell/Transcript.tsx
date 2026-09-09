@@ -5,6 +5,7 @@
  * That is why the Design Brief takes Ghostty for *rendering* and not for its
  * stream model: a terminal-shaped transcript would fight the data. */
 import { useState } from 'react'
+import { Markdown } from './Markdown'
 import { Working } from './Working'
 import { MODE_ACCENT, MODE_LABEL, type Block, type Mode } from './mock'
 
@@ -61,24 +62,6 @@ function Disclosure({
       )}
     </div>
   )
-}
-
-/** Minimal inline formatting. A full markdown renderer is a Stage 2 table
- *  stake; this covers what a transcript actually contains — bold, emphasis
- *  and inline code — without pulling a dependency in at design time. */
-function Rich({ text }: { text: string }) {
-  const nodes = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g).map((part, i) => {
-    if (part.startsWith('**')) return <strong key={i} className="font-semibold text-white">{part.slice(2, -2)}</strong>
-    if (part.startsWith('`'))
-      return (
-        <code key={i} className="rounded-[3px] border border-line bg-elevated px-[4px] py-px font-mono text-[0.88em] text-ink">
-          {part.slice(1, -1)}
-        </code>
-      )
-    if (part.startsWith('*')) return <em key={i} className="text-ink-dim">{part.slice(1, -1)}</em>
-    return <span key={i}>{part}</span>
-  })
-  return <>{nodes}</>
 }
 
 export function Transcript({
@@ -194,15 +177,7 @@ export function Transcript({
            * above it is what marks the boundary. Naming the speaker on every
            * turn is the kind of thing that reads as helpful once and as
            * clutter for the rest of the session. */
-          return (
-            <div key={i} className="mb-[18px] space-y-[9px] text-[13.5px] leading-[1.65]">
-              {b.text.split('\n\n').map((p, j) => (
-                <p key={j} className="m-0">
-                  <Rich text={p} />
-                </p>
-              ))}
-            </div>
-          )
+          return <Markdown key={i} src={b.text} className="mb-[18px]" />
         })}
 
         {startedAt != null && (
