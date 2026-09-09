@@ -4,10 +4,28 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Noctis</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Visible until React mounts and replaces it. If the bundle fails to
+         load at all -- a module that will not resolve, a syntax error at
+         import time -- no error boundary can run, because React never
+         starts. Without this the window is simply white, which says nothing
+         and looks like a hang. -->
+    <div id="root">
+      <div id="boot" style="font:13px ui-monospace,Menlo,monospace;color:#666;padding:26px;background:#0f0f0f;height:100vh;margin:0">
+        Starting Noctis&hellip;
+        <div id="boot-error" style="color:#e53311;margin-top:10px;white-space:pre-wrap"></div>
+      </div>
+    </div>
+    <script>
+      // Surfaces the failure in the window rather than only in a console
+      // nobody has open.
+      window.addEventListener('error', function (e) {
+        var el = document.getElementById('boot-error')
+        if (el) el.textContent = 'Failed to start: ' + (e.message || e.error)
+      })
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
