@@ -155,7 +155,10 @@ describe('fonts', () => {
 
     for (const file of readdirSync(fontsDir)) {
       if (!/\.(woff2?|ttf)$/.test(file)) continue
-      const family = file.replace(/-.*$/, '')          // JetBrainsMono-Regular → JetBrainsMono
+      // Extension first, then any -Weight suffix: stripping from the first
+      // hyphen alone leaves "CascadiaCode.woff2", which matches no family
+      // and silently skips the file this test exists to check.
+      const family = file.replace(/\.(woff2?|ttf)$/, '').replace(/-.*$/, '')
       const wanted = requested.some((r) => r.replace(/\s/g, '').startsWith(family))
       if (!wanted) continue                            // retired, kept until the v1 cutover
       expect(css, `${file} is vendored and requested but never declared`).toContain(file)

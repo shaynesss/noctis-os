@@ -1,15 +1,26 @@
-JetBrains Mono (JetBrains, Apache 2.0) — the Design Brief's fallback mono,
-declared in `src/shell/tokens.css`. Self-hosted rather than linked from
-Google Fonts so the app has no runtime network dependency, consistent with
-this project's local-only scope.
+Fonts are self-hosted rather than linked from a CDN, so the app has no
+runtime network dependency — it is a local-only tool, and a webfont request
+is a way for the interface to be worse exactly when the network is.
 
-Press Start 2P (Cody "CodeMan38" Boisclair, SIL OFL 1.1) is **retired for
-v2** — it served v1's game world, and a pixel face is a reading burden in a
-text-dense tool. Kept here, unreferenced, until the v1 cutover removes it
-with the rest of that surface.
+**Cascadia Code** (Microsoft, SIL OFL 1.1 — licence in `CascadiaCode-OFL.txt`)
+is the Design Brief's locked mono: transcript, tool calls, code, status bar,
+labels. Taken from Microsoft's own release (`v2407.24`) rather than a
+third-party repackage. This is the variable font, so one file covers weights
+200–700 and asking for bold interpolates instead of synthesising a smear.
 
-**Cascadia Code is the locked mono and is not vendored yet.** It is not on
-this machine and not on Google Fonts, so it needs its woff2 fetched from
-Microsoft's release (SIL OFL) and an @font-face beside the existing one.
-Until then the chain resolves to JetBrains Mono, which is the declared
-fallback rather than the locked choice.
+The release ships `CascadiaCode` (with programming ligatures) and
+`CascadiaMono` (without). The Design Brief names Code, so that is what is
+here; swapping to Mono is a one-file change if the ligatures ever grate in a
+transcript full of paths and operators.
+
+**JetBrains Mono** (JetBrains, Apache 2.0) is the fallback beneath it. Worth
+knowing: it was vendored and shipping for months while never being loaded at
+all — its `@font-face` lived in v1's `index.css`, which stopped being
+imported at the v2 cutover, so everything fell through to Menlo. Both faces
+are declared in `src/shell/tokens.css` now, and a test fails if a vendored,
+requested font is not.
+
+**Press Start 2P** (Cody "CodeMan38" Boisclair, SIL OFL 1.1) is retired for
+v2 — it served v1's game world, and a pixel face is a reading burden in a
+text-dense tool. Kept, unreferenced, until the v1 cutover removes it with the
+rest of that surface.

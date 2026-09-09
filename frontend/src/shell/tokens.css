@@ -5,19 +5,30 @@
  * (Cursor-dark rather than VS Code's lighter grey) and the character accents
  * become the only chromatic events on screen.
  *
- * Fonts: Cascadia Code is the Design Brief's locked mono and is not vendored
- * yet — it is not on this machine and not on Google Fonts, so it needs its
- * woff2 fetched from Microsoft's release (SIL OFL) and an @font-face beside
- * the one below.
+ * Fonts: both self-hosted, so the app has no runtime network dependency —
+ * it is a local-only tool and a webfont request is a way for the interface
+ * to be worse when the network is.
  *
- * JetBrains Mono, the declared fallback, *was* already vendored — and was
- * never loaded. Its @font-face lived in v1's index.css, which stopped being
- * imported at the v2 cutover, so the whole app fell through to Menlo while
- * shipping a 92KB font nothing referenced. Declared here now, where the
- * stylesheet that is actually loaded can see it.
+ * Cascadia Code is the Design Brief's locked mono, vendored from Microsoft's
+ * own release rather than a repackage (SIL OFL, licence beside it).
+ * JetBrains Mono stays as the fallback beneath it — it was vendored and
+ * shipping for months while never being loaded at all, because its
+ * @font-face lived in v1's index.css, which stopped being imported at the v2
+ * cutover.
  */
 
 @import "tailwindcss";
+
+@font-face {
+  font-family: "Cascadia Code";
+  src: url("/fonts/CascadiaCode.woff2") format("woff2");
+  /* The variable font covers the whole range in one file, so no separate
+     bold: asking for 700 interpolates rather than falling back to a
+     synthesised smear. */
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 @font-face {
   font-family: "JetBrains Mono";
