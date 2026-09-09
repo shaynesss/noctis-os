@@ -124,7 +124,7 @@ describe('activity grid', () => {
  * module beside a same-named component file. On a case-insensitive
  * filesystem the wrong one wins the import, and the failure is a build error
  * or — worse — a dev server serving the stale module and a blank window. */
-import { readdirSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 describe('module names', () => {
@@ -137,6 +137,28 @@ describe('module names', () => {
       expect(previous, `${previous} and ${file} collide on a case-insensitive filesystem`)
         .toBeUndefined()
       seen.set(stem, file)
+    }
+  })
+})
+
+/* A font can be vendored, shipped and never loaded. JetBrains Mono was: its
+ * @font-face lived in v1's index.css, which stopped being imported at the v2
+ * cutover, so the app fell through to Menlo while serving a 92KB file
+ * nothing referenced. Nothing failed — it just quietly looked wrong. */
+describe('fonts', () => {
+  it('declares every vendored font the loaded stylesheet uses', () => {
+    const fontsDir = join(process.cwd(), 'public', 'fonts')
+    const css = readFileSync(join(process.cwd(), 'src', 'shell', 'tokens.css'), 'utf8')
+
+    // The families the stylesheet asks for, from --font-mono / --font-sans.
+    const requested = [...css.matchAll(/"([A-Za-z][A-Za-z0-9 ]+)"/g)].map((m) => m[1])
+
+    for (const file of readdirSync(fontsDir)) {
+      if (!/\.(woff2?|ttf)$/.test(file)) continue
+      const family = file.replace(/-.*$/, '')          // JetBrainsMono-Regular → JetBrainsMono
+      const wanted = requested.some((r) => r.replace(/\s/g, '').startsWith(family))
+      if (!wanted) continue                            // retired, kept until the v1 cutover
+      expect(css, `${file} is vendored and requested but never declared`).toContain(file)
     }
   })
 })

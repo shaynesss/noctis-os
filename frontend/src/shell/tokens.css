@@ -5,14 +5,30 @@
  * (Cursor-dark rather than VS Code's lighter grey) and the character accents
  * become the only chromatic events on screen.
  *
- * TODO(fonts): Cascadia Code is not installed on this machine and is not on
- * Google Fonts. It is SIL OFL, so vendor the woff2 into public/fonts and add
- * an @font-face here — a shipping app cannot depend on a font the user may
- * not have. Until then the chain falls through to Menlo, which is close
- * enough to develop against but is not the locked choice.
+ * Fonts: Cascadia Code is the Design Brief's locked mono and is not vendored
+ * yet — it is not on this machine and not on Google Fonts, so it needs its
+ * woff2 fetched from Microsoft's release (SIL OFL) and an @font-face beside
+ * the one below.
+ *
+ * JetBrains Mono, the declared fallback, *was* already vendored — and was
+ * never loaded. Its @font-face lived in v1's index.css, which stopped being
+ * imported at the v2 cutover, so the whole app fell through to Menlo while
+ * shipping a 92KB font nothing referenced. Declared here now, where the
+ * stylesheet that is actually loaded can see it.
  */
 
 @import "tailwindcss";
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400 800;
+  font-style: normal;
+  /* swap, not block: a transcript that is briefly Menlo is better than one
+     that is briefly blank, and the metrics are close enough that the reflow
+     is not jarring. */
+  font-display: swap;
+}
 
 @theme {
   /* ground — deliberately unsaturated so accents are the only colour */
