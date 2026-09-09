@@ -16,6 +16,7 @@ import {
   type HistorySession, type HistoryTranscript, type Stats as StatsPayload, type Window,
 } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
+import { turnFinished } from './notify'
 import { Palette } from './Palette'
 import { Reader } from './Reader'
 import {
@@ -168,6 +169,20 @@ export default function App() {
       // In `finally` so an abort or a throw cannot strand a session as
       // permanently busy, which would lock its composer with no way back.
       const stopped = ctrl.signal.aborted
+
+      /* Tell you it landed, if you are not looking. Skipped when the turn
+       * was stopped: you were there, you stopped it, and being notified
+       * about your own action is the definition of noise. */
+      if (!stopped) {
+        const last = [...state.blocks].reverse().find((b) => b.kind === 'text')
+        void turnFinished({
+          mode: current.mode,
+          text: last && last.kind === 'text' ? last.text : '',
+          seconds: (Date.now() - (withUser.startedAt ?? Date.now())) / 1000,
+          failed: state.blocks.some((b) => b.kind === 'error' && b.fatal),
+        })
+      }
+
       delete aborts.current[tabId]
       setSessions((s) => ({
         ...s,
