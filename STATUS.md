@@ -77,10 +77,17 @@ only reason this is cheap to fix: a rewrite of unpushed history costs
 nothing but a rebase. Once they are pushed it becomes a force-push and a
 rewrite of shared history.
 
-Not done, because rewriting history is destructive and is Shayne's call. The
-options are: rebase those two commits to drop the file before pushing, or
-accept the blob and push as-is knowing the transcripts are in the repo's
-history permanently.
+**`noctis-os` is a public repo** — deliberately, it is the portfolio
+artifact — so pushing those commits puts 10 conversations and 21 messages of
+real transcript into public history permanently. The sampled content is
+innocuous (session greetings), but the exposure is not the point; the point
+is that it is free to prevent now and impossible to undo later.
+
+**Decided 2026-09-09: hold `noctis-os`.** The vault was pushed (private, and
+clean). 78 `noctis-os` commits are held locally until the blob is dealt
+with. The options remain: rewrite the two commits to drop `backend/data`
+then push clean, or accept the blob. Nothing is lost by waiting — everything
+is committed.
 
 ## Deploy
 
