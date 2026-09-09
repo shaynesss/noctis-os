@@ -10,8 +10,8 @@
  * browser has no notification plugin, and a shell that throws there would be
  * harder to work on for a feature you cannot see anyway.
  */
-import type { Mode } from './mock'
-import { MODE_LABEL } from './mock'
+import type { Mode } from './domain'
+import { MODE_LABEL } from './domain'
 
 /** True in the desktop shell, false in a plain browser tab. */
 const inTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window

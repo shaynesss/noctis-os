@@ -7,7 +7,7 @@
  * one, because the invented one gets believed.
  */
 import { Markdown } from './Markdown'
-import { MODE_ACCENT, MODE_LABEL, type Mode } from './mock'
+import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
 export interface BriefPayload {
   brief: Doc

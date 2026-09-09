@@ -318,6 +318,22 @@ class ConversationStore:
             "       COUNT(*) AS turns,"
             "       MIN(created_at) AS since FROM usage").fetchone()
 
+    def recent_cwds(self, limit: int = 8) -> list[str]:
+        """Working directories actually used, most recent first.
+
+        The launcher offered a hardcoded list of three, which was fiction
+        wearing the shape of history — it named the same directories whether
+        or not you had ever opened them, and would not learn a new project.
+        """
+        # Ordered by id, not by started_at: the timestamp has one-second
+        # resolution, so two sessions begun in the same second tie and the
+        # order becomes arbitrary. The id is monotonic and cannot.
+        rows = self.db.execute(
+            "SELECT cwd, MAX(id) AS last FROM sessions"
+            " WHERE cwd IS NOT NULL AND cwd != ''"
+            " GROUP BY cwd ORDER BY last DESC LIMIT ?", (limit,)).fetchall()
+        return [r["cwd"] for r in rows]
+
     def usage_by_mode(self) -> list[sqlite3.Row]:
         """Which modes the tokens actually went to."""
         return self.db.execute(

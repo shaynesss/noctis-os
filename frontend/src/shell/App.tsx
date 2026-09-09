@@ -33,7 +33,7 @@ import { Transcript } from './Transcript'
 import {
   EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL, PERMISSION_CYCLE,
   type Mode, type Permission, type SessionState, type Tab,
-} from './mock'
+} from './domain'
 import './tokens.css'
 
 interface HandoffSource {
@@ -835,6 +835,7 @@ export default function App() {
       {launcher && (
         <Launcher
           handoff={launcher.handoff}
+          modeModels={modeDefaults}
           onLaunch={launch}
           onClose={() => {
             setLauncher(null)

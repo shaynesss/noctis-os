@@ -10,7 +10,7 @@
  * commands · read 2 files" has to stay true, and phrasing that quietly drops
  * or double-counts a call is worse than the boxes it replaced.
  */
-import type { Block } from './mock'
+import type { Block } from './domain'
 
 export type ToolBlock = Extract<Block, { kind: 'tool' }>
 

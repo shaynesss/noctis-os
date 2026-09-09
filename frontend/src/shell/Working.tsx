@@ -11,7 +11,7 @@
  * told convincingly.
  */
 import { useEffect, useState } from 'react'
-import { MODE_LABEL, type Mode } from './mock'
+import { MODE_LABEL, type Mode } from './domain'
 
 /* Each mode says what it is doing, so the line also tells you which session
  * is working when several are open. General has no craft of its own — it is

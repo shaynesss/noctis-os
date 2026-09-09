@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { emptyFold, fold, readSSE, type WireEvent } from './engine'
-import type { Block } from './mock'
+import type { Block } from './domain'
 
 const run = (events: WireEvent[]) => events.reduce(fold, emptyFold())
 

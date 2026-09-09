@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { get } from './engine'
-import { MODE_ACCENT, MODE_LABEL, type Mode } from './mock'
+import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
 interface Results {
   conversations: { session_id: number; mode: Mode; role: string; excerpt: string; at: string }[]

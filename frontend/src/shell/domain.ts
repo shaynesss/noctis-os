@@ -1,14 +1,17 @@
-/* Mocked data — Noctis v2 Stage 2 item 3.
+/* Shared types and UI constants for the shell.
  *
- * dev.md §3.0 is explicit that screens get built against fake data first,
- * and only once approved does the UI's data shape become the API contract,
- * never the reverse. So these types are the proposal: the backend's
- * Event/Usage/Limits dataclasses already match, and where they don't, this
- * file is what moves.
+ * This was mock.ts, and held the fake transcripts and status values the
+ * screens were built against — dev.md §3.0 is explicit that screens come
+ * first and only then does the UI's data shape become the API contract.
+ * Every one of those values is now real, so what remains is the domain:
+ * modes and their colours, block shapes, permission levels.
  *
- * Content is real work rather than lorem, because placeholder text hides
- * exactly the layout problems a transcript has — long tool paths, a wall of
- * prose, a collapsed block next to an expanded one. */
+ * Renamed because a file called mock.ts that holds no mocks is the same
+ * stale signal as a hardcoded clock. Four of those shipped as bugs before
+ * being caught — the frozen clock, a lit Faber light with no Faber session,
+ * an activity grid measuring against a fixed date, and a status bar naming a
+ * model the session was not running.
+ */
 
 export type Mode = 'general' | 'faber' | 'noctua' | 'vesper' | 'maintenance'
 
@@ -36,6 +39,9 @@ export const MODE_LABEL: Record<Mode, string> = {
  * Mirrors MODE_MODELS and MODE_TOOLS in orchestrator/driver.py. Duplicated
  * here only while the shell is on mocks; item 3's wiring reads it from the
  * backend and this constant goes. */
+/* The model here is a *fallback* only, shown before /v2/config answers.
+ * The orchestrator is the authority — a duplicate that silently drifts is
+ * how the status bar came to claim opus while the session ran sonnet. */
 export const MODE_INFO: Record<Mode, { blurb: string; model: string; policy?: string }> = {
   general: { blurb: 'Questions, comparisons, anything unscoped', model: 'opus-5' },
   faber: { blurb: 'Build: spec, implement, ship', model: 'opus-5' },
@@ -47,13 +53,6 @@ export const MODE_INFO: Record<Mode, { blurb: string; model: string; policy?: st
     policy: 'proposes only — cannot edit',
   },
 }
-
-/** Recent working directories. Real ones come from session history. */
-export const CWD_RECENTS = [
-  '~/Developer/noctis-os',
-  '~/Developer/second-brain',
-  '~/Developer/portfolio-platform',
-]
 
 export type Block =
   | { kind: 'user'; text: string; at: string }
@@ -119,90 +118,6 @@ export const EMPTY_SESSION: SessionState = {
   mode: 'general', blocks: [], draft: '', cwd: '~/Developer/noctis-os',
 }
 
-export const TABS: Tab[] = [
-  { id: 't0', mode: 'general', label: 'General', pinned: true },
-  { id: 't1', mode: 'faber', label: 'Faber · noctis-os' },
-  { id: 't2', mode: 'vesper', label: 'Vesper · mcp-servers' },
-]
-
-export const SESSIONS: Record<string, SessionState> = {
-  t0: {
-    cwd: '~/Developer/noctis-os',
-    mode: 'general',
-    blocks: [
-      { kind: 'user', text: 'can you compare postgres and sqlite for the history store', at: '12:02' },
-      {
-        kind: 'text',
-        text:
-          'This is research — hand off to **Vesper**? If you\'d rather stay here, tell me the ' +
-          'access pattern and I\'ll take a run at it.',
-      },
-    ],
-    draft: '',
-  },
-  t1: {
-    cwd: '~/Developer/noctis-os',
-    mode: 'faber',
-    blocks: [
-      { kind: 'user', text: 'start stage 1 item 3 — the mode merge', at: '12:19' },
-      { kind: 'thinking', tokens: 206, ms: 4200 },
-      {
-        kind: 'tool',
-        name: 'vault_search',
-        target: '"mode methodology structure"',
-        meta: '4 hits · 31ms',
-        open: true,
-        body:
-          'modes/dev/dev.md                 bm25 −8.42\n' +
-          'wiki/Noctis OS/Modes.md          bm25 −7.91\n' +
-          'modes/settings/settings.md       bm25 −7.10\n' +
-          'modes/nightshift/nightshift.md   bm25 −6.88',
-      },
-      {
-        kind: 'tool',
-        name: 'Read',
-        target: 'modes/settings/settings.md',
-        meta: '218 lines',
-        body: 'Custos — audit → propose → apply, propose-never-commit.\nOwns: methodology diffs, trigger thresholds, the proposal inbox.',
-      },
-      {
-        kind: 'tool',
-        name: 'job_context',
-        target: 'read · noctis-os',
-        meta: 'ok',
-        body: 'stage: Build · track: Overhaul\nNext: Stage 1 item 3 — mode merge, by hand.',
-      },
-      {
-        kind: 'text',
-        text:
-          'Both files are read. The split is cleaner than the spec implies — Custos and Nightshift ' +
-          'barely overlap: `settings.md` owns the *judgement* half, `nightshift.md` the ' +
-          '*scheduling* half.\n\nSo `maintenance/` takes both, but as two files rather than one. ' +
-          'Merging them would lose the propose-never-commit boundary that exists *because* they ' +
-          'were separate.\n\nFlagging that as a deviation before I write anything — the spec says ' +
-          '"collapsed into `maintenance/`", which I read as one directory, not one file. Confirm?',
-      },
-    ],
-    draft:
-      'yes — two files. but call them audit.md and schedule.md so the split is obvious from the filename alone',
-  },
-  t2: {
-    cwd: '~/Developer/second-brain',
-    mode: 'vesper',
-    blocks: [
-      { kind: 'user', text: 'which mcp servers are worth adopting for the vault?', at: '09:41' },
-      { kind: 'thinking', tokens: 512, ms: 8100 },
-      { kind: 'text', text: 'Two candidates left unscored — I paused mid-comparison. Want me to finish?' },
-    ],
-    draft: '',
-  },
-}
-
-/* Mirrors orchestrator/driver.py's PERMISSION_CYCLE. bypassPermissions is
- * deliberately absent: it stays a settable flag but must not be reachable by
- * tapping a key. Order escalates -- each step lets a session do more without
- * asking -- so cycling forward is always the direction that grants, which is
- * the direction worth being deliberate about. */
 export const PERMISSION_CYCLE = ['plan', 'manual', 'acceptEdits', 'auto'] as const
 export type Permission = (typeof PERMISSION_CYCLE)[number]
 
@@ -232,21 +147,3 @@ export const CHARACTERS: { mode: Mode }[] = [
   { mode: 'vesper' },
 ]
 
-export const STATUS = {
-  cwd: '~/Developer/noctis-os',
-  branch: 'main',
-  model: 'Opus 5',
-  clock: '12:23',
-  contextPct: 41,
-  fiveHourPct: 20,
-  fiveHourResets: '3h44m',
-  sevenDayPct: 24,
-}
-
-export const USAGE = {
-  windows: [
-    { label: 'Current session', sub: '5h window · resets in 3h 44m', pct: 20 },
-    { label: 'Weekly · all models', sub: 'resets in 2d 6h', pct: 24 },
-  ],
-  lifetime: { total: '950.5M', since: '9 May 2026', input: 8.4, output: 4.1, cacheRead: 892.0, cacheWrite: 46.0 },
-}

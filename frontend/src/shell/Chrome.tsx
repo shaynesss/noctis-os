@@ -5,7 +5,7 @@ import { Logo } from './Logo'
 import {
   CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE,
   type Mode, type Permission, type Tab,
-} from './mock'
+} from './domain'
 
 /* ------------------------------------------------------------------ rail */
 const RAIL = [

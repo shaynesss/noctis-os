@@ -9,7 +9,7 @@
  * call that arrived earlier -- get it wrong and the transcript is subtly
  * wrong in ways no type checker can see.
  */
-import type { Block, Mode } from './mock'
+import type { Block, Mode } from './domain'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 const API_TOKEN = import.meta.env.VITE_API_TOKEN ?? ''

@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { Markdown } from './Markdown'
 import { failures, groupTools, summarise, type ToolBlock } from './tools'
 import { Finished, Working } from './Working'
-import { MODE_ACCENT, MODE_LABEL, type Block, type Mode } from './mock'
+import { MODE_ACCENT, MODE_LABEL, type Block, type Mode } from './domain'
 
 function Caret({ open }: { open: boolean }) {
   return (

@@ -12,8 +12,9 @@
  * boundary: Faber *consumes* Vesper's verdict. Two artifacts, not one that
  * quietly became the other.
  */
-import { useEffect, useRef, useState } from 'react'
-import { CWD_RECENTS, MODE_ACCENT, MODE_INFO, MODE_LABEL, type Mode } from './mock'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFetched } from './useFetched'
+import { MODE_ACCENT, MODE_INFO, MODE_LABEL, type Mode } from './domain'
 
 const MODES: Mode[] = ['general', 'faber', 'noctua', 'vesper', 'maintenance']
 
@@ -27,9 +28,12 @@ export interface LaunchRequest {
 
 export function Launcher({
   handoff,
+  modeModels,
   onLaunch,
   onClose,
 }: {
+  /** Each mode's model, as the orchestrator reports it. */
+  modeModels?: Record<string, string>
   /** Present when handing off: the source session and what it carries. */
   handoff?: { mode: Mode; label: string; cwd: string; carried: string }
   onLaunch: (req: LaunchRequest) => void
@@ -41,7 +45,20 @@ export function Launcher({
   const choices = handoff ? MODES.filter((m) => m !== handoff.mode) : MODES
 
   const [mode, setMode] = useState<Mode>(choices[0])
-  const [cwd, setCwd] = useState(handoff?.cwd ?? CWD_RECENTS[0])
+  /* Directories from real session history, not a hardcoded list. The old
+   * one named the same three whether or not you had ever opened them, and
+   * never learned a project you started using. */
+  const recents = useFetched<{ dirs: string[] }>('/v2/recent-dirs')
+  const dirs = useMemo(() => (recents ? recents.dirs : []), [recents])
+  const [cwd, setCwd] = useState(handoff?.cwd ?? '')
+
+  /* Filled in once history arrives, and only while untouched — typing a
+   * directory and having it replaced a moment later would be maddening.
+   * `dirs` is memoised on the fetch result, or a fresh array each render
+   * would re-run this effect forever. */
+  useEffect(() => {
+    if (!cwd && dirs.length > 0) setCwd(dirs[0])
+  }, [cwd, dirs])
   const [prompt, setPrompt] = useState('')
   const [carried, setCarried] = useState(handoff?.carried ?? '')
   const promptRef = useRef<HTMLTextAreaElement>(null)
@@ -159,7 +176,11 @@ export function Launcher({
                       {info.policy}
                     </span>
                   )}
-                  <span className="shrink-0 font-mono text-[10.5px] text-ink-faint">{info.model}</span>
+                  {/* From the backend, so this cannot drift into naming a
+                      model the orchestrator no longer runs. */}
+                  <span className="shrink-0 font-mono text-[10.5px] text-ink-faint">
+                    {modeModels?.[m] ?? info.model}
+                  </span>
                   <kbd className="shrink-0 font-mono text-[10px] text-ink-faint">⌘{i + 1}</kbd>
                 </button>
               )
@@ -196,7 +217,7 @@ export function Launcher({
               className="w-full rounded-[4px] border border-line bg-ground px-[10px] py-[7px] font-mono text-[11.5px] text-ink outline-none focus:border-[var(--accent)]"
             />
             <datalist id="cwd-recents">
-              {CWD_RECENTS.map((d) => (
+              {dirs.map((d) => (
                 <option key={d} value={d} />
               ))}
             </datalist>

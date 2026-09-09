@@ -2,7 +2,7 @@
  * call is worse than the eleven boxes it replaced. */
 import { describe, expect, it } from 'vitest'
 import { failures, groupTools, summarise, type ToolBlock } from './tools'
-import type { Block } from './mock'
+import type { Block } from './domain'
 
 const tool = (name: string, meta = 'done'): Block =>
   ({ kind: 'tool', id: Math.random().toString(36), name, target: '', meta, body: '' })

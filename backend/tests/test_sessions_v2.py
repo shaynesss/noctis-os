@@ -732,3 +732,26 @@ def test_limits_report_overage_even_before_anything_is_known(client):
 
 def test_billing_requires_auth(client):
     assert client.get("/v2/billing").status_code == 401
+
+
+def test_recent_dirs_come_from_real_sessions(tmp_path):
+    """The launcher's list was hardcoded, so it named the same directories
+    whether or not you had opened them and never learned a new project."""
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    for cwd in ("/a", "/b", "/a"):
+        store.close_session(store.open_session("faber", cwd=cwd))
+    dirs = store.recent_cwds()
+    assert set(dirs) == {"/a", "/b"}      # deduplicated
+    assert dirs[0] == "/a"                # most recently used first
+    store.close()
+
+
+def test_recent_dirs_ignores_sessions_with_no_directory(tmp_path):
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    store.close_session(store.open_session("faber", cwd=None))
+    assert store.recent_cwds() == []
+    store.close()

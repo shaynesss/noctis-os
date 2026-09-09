@@ -187,6 +187,22 @@ def billing() -> dict:
         store.close()
 
 
+@router.get("/recent-dirs")
+def recent_dirs() -> dict:
+    """Working directories from real session history.
+
+    The launcher used a hardcoded list, which never learned a directory you
+    started using and kept offering ones you had abandoned.
+    """
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore()
+    try:
+        return {"dirs": store.recent_cwds()}
+    finally:
+        store.close()
+
+
 @router.get("/config")
 def config() -> dict:
     """What each mode actually runs — read from the driver, not restated.

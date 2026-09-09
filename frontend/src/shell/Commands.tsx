@@ -11,7 +11,7 @@
  */
 import { useEffect, useState } from 'react'
 import { matching } from './slash'
-import { MODE_LABEL, PERMISSION_LABEL, PERMISSION_CYCLE, type Mode, type Permission } from './mock'
+import { MODE_LABEL, PERMISSION_LABEL, PERMISSION_CYCLE, type Mode, type Permission } from './domain'
 
 /** The list shown above the composer while a command is being typed. */
 export function CommandMenu({
