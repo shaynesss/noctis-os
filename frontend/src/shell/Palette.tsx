@@ -21,9 +21,11 @@ interface Results {
 
 export function Palette({
   onOpenSession,
+  onOpenDoc,
   onClose,
 }: {
   onOpenSession: (id: number) => void
+  onOpenDoc: (path: string) => void
   onClose: () => void
 }) {
   const [q, setQ] = useState('')
@@ -62,13 +64,9 @@ export function Palette({
   const total = sessions.length + docs.length
 
   const activate = (i: number) => {
-    if (i < sessions.length) {
-      onOpenSession(sessions[i].session_id)
-      onClose()
-    }
-    // A vault document has nowhere to open yet: there is no reader, and
-    // sending it to the composer would put someone else's words in your
-    // mouth. The excerpt is the result until a reader exists.
+    if (i < sessions.length) onOpenSession(sessions[i].session_id)
+    else onOpenDoc(docs[i - sessions.length].path)
+    onClose()
   }
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -141,6 +139,7 @@ export function Palette({
                   key={d.path + d.heading + i}
                   selected={cursor === sessions.length + i}
                   onHover={() => setCursor(sessions.length + i)}
+                  onClick={() => activate(sessions.length + i)}
                   accent="var(--color-ink-faint)"
                   title={`${d.path}${d.heading ? ` · ${d.heading}` : ''}`}
                   excerpt={d.excerpt}
@@ -151,7 +150,7 @@ export function Palette({
         </div>
 
         <div className="border-t border-line px-[14px] py-[9px] font-mono text-[10.5px] text-ink-faint">
-          ↑↓ to move · ↵ opens a conversation
+          ↑↓ to move · ↵ opens
         </div>
       </div>
     </div>
@@ -180,7 +179,7 @@ function Row({
 }: {
   selected: boolean
   onHover: () => void
-  onClick?: () => void
+  onClick: () => void
   accent: string
   title: string
   excerpt: string
@@ -190,11 +189,9 @@ function Row({
       type="button"
       onMouseEnter={onHover}
       onClick={onClick}
-      // Rows without a destination are still selectable and readable, but do
-      // not pretend to be actionable.
       className={`flex w-full items-start gap-[10px] px-[14px] py-[9px] text-left ${
         selected ? 'bg-elevated' : ''
-      } ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+      }`}
     >
       <span className="mt-[5px] h-[7px] w-[7px] shrink-0 rounded-[1px]" style={{ background: accent }} />
       <span className="min-w-0 flex-1">

@@ -17,6 +17,7 @@ import {
 } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { Palette } from './Palette'
+import { Reader } from './Reader'
 import {
   Brief, Inbox, Settings,
   type BriefPayload, type ConfigPayload, type InboxPayload,
@@ -53,6 +54,7 @@ export default function App() {
   // `null` closed; otherwise a launch, carrying its handoff source if any.
   const [launcher, setLauncher] = useState<null | { handoff?: HandoffSource }>(null)
   const [palette, setPalette] = useState(false)
+  const [doc, setDoc] = useState<string | null>(null)
 
   /* The key listener is registered once, so its closure would otherwise hold
    * the first render's tabs forever -- Cmd+3 would keep selecting the third
@@ -62,6 +64,7 @@ export default function App() {
   const tabsRef = useRef(tabs)
   const launcherRef = useRef(launcher)
   const paletteRef = useRef(palette)
+  const docRef = useRef(doc)
   const handoffRef = useRef(() => {})
   const sessionsRef = useRef(sessions)
   const permissionRef = useRef(permission)
@@ -71,6 +74,7 @@ export default function App() {
   tabsRef.current = tabs
   launcherRef.current = launcher
   paletteRef.current = palette
+  docRef.current = doc
   sessionsRef.current = sessions
   permissionRef.current = permission
 
@@ -280,7 +284,7 @@ export default function App() {
       // While the launcher is open it owns the keyboard: its own Cmd+1-5
       // picks a mode, and cycling permission for a session you are not
       // looking at would change something you cannot see.
-      if (launcherRef.current || paletteRef.current) return
+      if (launcherRef.current || paletteRef.current || docRef.current) return
 
       // Shift+Tab cycles permission, the affordance carried over from the
       // CLI's TUI. Wrapping past the end returns to `plan`, so the cycle
@@ -452,8 +456,14 @@ export default function App() {
       </BottomBar>
 
       {palette && (
-        <Palette onOpenSession={(id) => void openSession(id)} onClose={() => setPalette(false)} />
+        <Palette
+          onOpenSession={(id) => void openSession(id)}
+          onOpenDoc={setDoc}
+          onClose={() => setPalette(false)}
+        />
       )}
+
+      {doc && <Reader path={doc} onClose={() => setDoc(null)} />}
 
       {launcher && (
         <Launcher

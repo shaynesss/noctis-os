@@ -5,6 +5,7 @@ the frontend reads rather than merely that serialization succeeds -- a
 rename that keeps the shape valid but breaks the UI has to fail here.
 """
 import json
+import pathlib
 from pathlib import Path
 
 import pytest
@@ -434,3 +435,64 @@ def test_search_requires_a_real_query(client):
 
 def test_search_requires_auth(client):
     assert client.get("/v2/search?q=alpha").status_code == 401
+
+
+# ------------------------------------------------------------ vault reader
+
+def test_reader_refuses_the_project_root_prefix(client):
+    """vault_io's ordinary resolver honours a project-root allowlist that
+    also resolves noctis-os/.env -- the file holding this API's own token.
+    Verified by reading it, not assumed. Anything taking a client-supplied
+    path must not go through that resolver."""
+    r = client.get("/v2/vault/doc?path=noctis-os/.env", headers=AUTH)
+    assert r.status_code in (400, 403, 404)
+    assert "NOCTIS_API_TOKEN" not in r.text
+
+
+def test_reader_refuses_a_traversal(client):
+    r = client.get("/v2/vault/doc?path=../../etc/passwd", headers=AUTH)
+    assert r.status_code in (400, 403, 404)
+
+
+def test_reader_refuses_non_markdown(client):
+    """The vault holds binaries; a reader that serves any file is an
+    exfiltration endpoint wearing a document viewer's clothes."""
+    assert client.get("/v2/vault/doc?path=some/image.png", headers=AUTH).status_code == 400
+
+
+def test_reader_404s_for_a_missing_document(client):
+    r = client.get("/v2/vault/doc?path=definitely/not/here.md", headers=AUTH)
+    assert r.status_code == 404
+
+
+def test_reader_returns_a_real_document(client):
+    r = client.get("/v2/vault/doc?path=README.md", headers=AUTH)
+    if r.status_code == 200:
+        assert isinstance(r.json()["markdown"], str)
+
+
+def test_reader_requires_auth(client):
+    assert client.get("/v2/vault/doc?path=README.md").status_code == 401
+
+
+def test_vault_only_resolver_never_reaches_the_repo(tmp_path, monkeypatch):
+    """It does not raise on this input, and should not: the path is treated
+    as vault-relative (second-brain/noctis-os/.env), which is inside the
+    vault and simply does not exist. The property that matters is that it
+    cannot land on the repo's real .env, which the ordinary resolver does."""
+    import vault_io
+
+    resolved = vault_io.resolve_vault_only("noctis-os/.env")
+    vault = vault_io.get_vault_path().resolve()
+    assert vault in resolved.parents
+    assert resolved != (pathlib.Path(vault_io.__file__).resolve().parent.parent / ".env")
+
+
+def test_the_ordinary_resolver_still_reaches_the_repo(tmp_path):
+    """Documents why the two exist. This capability is deliberate -- the
+    apply pipeline writes noctis-os/SPEC.md -- and is exactly why a
+    client-supplied path must not use it."""
+    import vault_io
+
+    repo = pathlib.Path(vault_io.__file__).resolve().parent.parent
+    assert vault_io._resolve_within_vault("noctis-os/SPEC.md") == repo / "SPEC.md"

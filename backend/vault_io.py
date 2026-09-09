@@ -173,3 +173,25 @@ def list_subdirs(relative_path: str) -> list[str]:
     if not dir_path.is_dir():
         return []
     return sorted(p.name for p in dir_path.iterdir() if p.is_dir())
+
+
+def resolve_vault_only(relative_path: str) -> Path:
+    """Like `_resolve_within_vault`, but the project-root allowlist does not
+    apply. For any path that came from a client.
+
+    `_resolve_within_vault` honours `_PROJECT_ROOTS`, which exists so the
+    apply pipeline can write to `noctis-os/SPEC.md` (the 2026-07-27 fix).
+    That is correct for a trusted internal caller and dangerous for an
+    untrusted one: the same prefix resolves `noctis-os/.env`, which holds the
+    API token. Verified, not theorised -- a plain read_file() of that path
+    returned the file.
+
+    Anything that threads an HTTP parameter into the filesystem uses this
+    instead, so the dangerous capability stays reachable only from the code
+    that needs it.
+    """
+    vault_path = get_vault_path().resolve()
+    resolved = (vault_path / relative_path).resolve()
+    if resolved != vault_path and vault_path not in resolved.parents:
+        raise ValueError(f"Path escapes the vault: {relative_path!r}")
+    return resolved

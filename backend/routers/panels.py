@@ -11,7 +11,7 @@ says the generator has not run, because the invented one gets believed.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 
 import vault_io
 from orchestrator.driver import MODE_MODELS, MODE_TOOLS, PERMISSION_CYCLE
@@ -178,3 +178,29 @@ def config() -> dict:
         # state that rather than leave its absence looking like an oversight.
         "excluded_from_cycle": ["bypassPermissions"],
     }
+
+
+@router.get("/vault/doc")
+def vault_doc(path: str = Query(min_length=1)) -> dict:
+    """One vault markdown document, for the reader.
+
+    Two guards, because `path` comes from a client and lands on a filesystem.
+
+    `resolve_vault_only` rather than vault_io's ordinary resolver: that one
+    honours a project-root allowlist which also resolves `noctis-os/.env`,
+    the file holding this API's own token. Confirmed by reading it, not
+    assumed.
+
+    And markdown only. The vault holds binaries (Design Lodge previews) and a
+    reader that will serve any file is a file-exfiltration endpoint wearing a
+    document viewer's clothes.
+    """
+    if not path.endswith(".md"):
+        raise HTTPException(status_code=400, detail="Only markdown documents can be read")
+    try:
+        resolved = vault_io.resolve_vault_only(path)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Path escapes the vault")
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail=f"No such document: {path}")
+    return {"path": path, "markdown": resolved.read_text(encoding="utf-8")}
