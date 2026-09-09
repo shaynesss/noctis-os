@@ -170,12 +170,20 @@ def config() -> dict:
                 # Empty means the full tool surface. Named explicitly so the
                 # page can say "full access" rather than leave a blank that
                 # reads as unknown.
-                "disallowed": MODE_TOOLS.get(mode, {}).get("disallowed", "").split()
-                or [],
+                "disallowed": MODE_TOOLS.get(mode, {}).get("disallowed", "").split() or [],
+                # Pre-approved at spawn, because a hosted session has nobody
+                # to ask. Surfaced so Settings can show what each mode may do
+                # without prompting, rather than leaving it implicit.
+                "allowed": MODE_TOOLS.get(mode, {}).get("allowed", "").split() or [],
             }
             for mode, model in MODE_MODELS.items()
         ],
         "permission_cycle": list(PERMISSION_CYCLE),
+        # The CLI denies anything that would prompt when run with --print,
+        # because there is no interactive session to answer. Reported so the
+        # UI can say what "ask each time" actually means here instead of
+        # implying a prompt that never arrives.
+        "prompts_answerable": False,
         # bypassPermissions is a real flag that stays settable, but is
         # deliberately unreachable by tapping a key. Reported so Settings can
         # state that rather than leave its absence looking like an oversight.

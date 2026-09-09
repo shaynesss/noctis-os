@@ -33,9 +33,10 @@ export interface InboxPayload {
 }
 
 export interface ConfigPayload {
-  modes: { mode: string; model: string; disallowed: string[] }[]
+  modes: { mode: string; model: string; disallowed: string[]; allowed: string[] }[]
   permission_cycle: string[]
   excluded_from_cycle: string[]
+  prompts_answerable: boolean
 }
 
 export function Heading({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -176,11 +177,13 @@ export function Settings({ data }: { data: ConfigPayload }) {
             </span>
             <span className="font-mono text-[11.5px] text-ink-dim">{m.model}</span>
             <span className="font-mono text-[11px] text-ink-faint">
-              {m.disallowed.length === 0 ? (
-                'full tool access'
-              ) : (
+              {m.allowed.length > 0 && (
+                <span className="text-ink-dim">{m.allowed.join(' · ')}</span>
+              )}
+              {m.disallowed.length > 0 && (
                 <>
-                  no <span className="text-ink-dim">{m.disallowed.join(' · ')}</span>
+                  {m.allowed.length > 0 && <span> · </span>}
+                  never <span className="text-ink-dim">{m.disallowed.join(' ')}</span>
                 </>
               )}
             </span>
@@ -204,9 +207,24 @@ export function Settings({ data }: { data: ConfigPayload }) {
           </div>
           {/* Stated rather than left absent: a reader who knows the flag
               exists would otherwise read its absence as an oversight. */}
-          <div className="text-[12px] leading-[1.6] text-ink-faint">
-            {data.excluded_from_cycle.join(', ')} stays settable but is deliberately not in the
-            cycle, so it cannot be reached by tapping a key.
+          <div className="space-y-[7px] text-[12px] leading-[1.6] text-ink-faint">
+            <p className="m-0">
+              {data.excluded_from_cycle.join(', ')} stays settable but is deliberately not in the
+              cycle, so it cannot be reached by tapping a key.
+            </p>
+            {/* Stated because the chip would otherwise imply a prompt that
+                never arrives. A hosted session has nobody to ask, so "ask
+                each time" resolves to a refusal for anything not on the
+                mode's allowed list above. */}
+            {!data.prompts_answerable && (
+              <p className="m-0">
+                A hosted session cannot show a prompt, so{' '}
+                <span className="text-ink-dim">manual</span> denies any tool not listed above
+                rather than asking. Modes that need more use{' '}
+                <span className="text-ink-dim">acceptEdits</span> or{' '}
+                <span className="text-ink-dim">auto</span>.
+              </p>
+            )}
           </div>
         </div>
       </Card>

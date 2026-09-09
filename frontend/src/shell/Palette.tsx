@@ -22,10 +22,12 @@ interface Results {
 export function Palette({
   onOpenSession,
   onOpenDoc,
+  onDelete,
   onClose,
 }: {
   onOpenSession: (id: number) => void
   onOpenDoc: (path: string) => void
+  onDelete: (id: number) => void
   onClose: () => void
 }) {
   const [q, setQ] = useState('')
@@ -59,7 +61,10 @@ export function Palette({
     return () => clearTimeout(timer)
   }, [q])
 
-  const sessions = results?.conversations ?? []
+  // Deleted ids are hidden immediately rather than by re-running the query:
+  // a row that stays until the next search reads as a delete that failed.
+  const [removed, setRemoved] = useState<Set<number>>(new Set())
+  const sessions = (results?.conversations ?? []).filter((s) => !removed.has(s.session_id))
   const docs = results?.documents ?? []
   const total = sessions.length + docs.length
 
@@ -130,6 +135,14 @@ export function Palette({
                   accent={MODE_ACCENT[s.mode] ?? 'var(--color-ink-dim)'}
                   title={`${MODE_LABEL[s.mode] ?? s.mode} · ${s.at.slice(0, 10)}`}
                   excerpt={s.excerpt}
+                  /* Deleting lives here because this is where old
+                     conversations are actually found. The tab strip only
+                     ever holds two, so it was never the place to clear
+                     history from. */
+                  onDelete={() => {
+                    onDelete(s.session_id)
+                    setRemoved((r) => new Set(r).add(s.session_id))
+                  }}
                 />
               ))}
 
@@ -173,6 +186,7 @@ function Row({
   selected,
   onHover,
   onClick,
+  onDelete,
   accent,
   title,
   excerpt,
@@ -180,6 +194,7 @@ function Row({
   selected: boolean
   onHover: () => void
   onClick: () => void
+  onDelete?: () => void
   accent: string
   title: string
   excerpt: string
@@ -198,6 +213,23 @@ function Row({
         <span className="block truncate font-mono text-[11.5px] text-ink-dim">{title}</span>
         <span className="mt-[2px] block text-[12.5px] leading-[1.5] text-ink-faint">{excerpt}</span>
       </span>
+      {onDelete && (
+        <span
+          role="button"
+          aria-label="Delete this conversation"
+          title="Delete this conversation — removes its transcript and usage for good"
+          tabIndex={-1}
+          onClick={(e) => {
+            e.stopPropagation()   // deleting must not also open it
+            onDelete()
+          }}
+          className={`shrink-0 rounded-[3px] px-[5px] py-[2px] text-[12px] leading-none transition-colors hover:bg-line hover:text-faber ${
+            selected ? 'text-ink-faint' : 'text-transparent'
+          }`}
+        >
+          ×
+        </span>
+      )}
     </button>
   )
 }

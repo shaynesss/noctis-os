@@ -212,19 +212,6 @@ export default function App() {
     if (activeTab === id) setActiveTab(remaining[Math.max(0, i - 1)].id)
   }
 
-  /* Close removes the tab; delete removes the conversation.
-   *
-   * They are separate on purpose. Closing something you want to come back to
-   * should not destroy it, and clearing out history you never want again
-   * should not require opening each one first. A tab restored from history
-   * carries its row id in the id (`h<n>`), which is what makes deleting from
-   * here possible at all.
-   */
-  const deleteTab = async (id: string) => {
-    closeTab(id)
-    if (id.startsWith('h')) await del(`/v2/sessions/history/${id.slice(1)}`)
-  }
-
   /** Abort the active session's turn. The stream unwinds, the backend closes
    *  its row as cancelled, and the engine process is killed with it. */
   const stop = (tabId: string) => aborts.current[tabId]?.abort()
@@ -510,7 +497,6 @@ export default function App() {
             setView('chat')
           }}
           onClose={closeTab}
-          onDelete={(id) => void deleteTab(id)}
           onNew={() => setLauncher({})}
           onHandoff={openHandoff}
           onSearch={() => setPalette(true)}
@@ -560,6 +546,12 @@ export default function App() {
         <Palette
           onOpenSession={(id) => void openSession(id)}
           onOpenDoc={setDoc}
+          onDelete={(id) => {
+            // Close the tab too if it happens to be open, so the app never
+            // shows a conversation the store no longer has.
+            closeTab(`h${id}`)
+            void del(`/v2/sessions/history/${id}`)
+          }}
           onClose={() => setPalette(false)}
         />
       )}

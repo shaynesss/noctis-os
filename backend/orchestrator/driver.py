@@ -38,12 +38,37 @@ MODE_MODELS = {
 # is a fact. Maintenance is the one that matters: propose-never-apply is
 # the guardrail the regression suite caught failing on a plainly-worded
 # request, so it gets a cage as well as a rule.
+# Read-only and research tools, pre-allowed wherever a mode should have
+# them. Nothing here mutates anything.
+#
+# **Why this is needed at all.** With `--print`, the CLI's
+# `--permission-prompts` defaults to "none" -- "anything that would prompt is
+# denied automatically". There is no interactive session to ask, so a tool
+# that would normally prompt simply fails. That is why WebSearch and WebFetch
+# came back "you haven't granted it yet" with no way to grant it: the UI's
+# permission chip sets --permission-mode, and "ask each time" means "deny"
+# when nobody can be asked.
+#
+# Mutating tools are deliberately NOT here. Bash, Edit and Write stay
+# governed by the permission mode, so nothing that changes your machine is
+# silently pre-approved to make the app feel like it works.
+_READ_TOOLS = "Read Grep Glob"
+_WEB_TOOLS = "WebSearch WebFetch"
+
 MODE_TOOLS: dict[str, dict[str, str]] = {
-    "general": {"disallowed": "Edit Write"},
-    "faber": {},                                  # full surface; it is the build mode
-    "noctua": {"disallowed": "Edit Write Bash"},
-    "vesper": {"disallowed": "Edit Write Bash"},
-    "maintenance": {"disallowed": "Edit Write Bash"},
+    "general": {"disallowed": "Edit Write",
+                "allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
+    # The build mode: its whole job is changing the repo, so its mutating
+    # tools stay under the permission mode rather than being listed here.
+    "faber": {"allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
+    "noctua": {"disallowed": "Edit Write Bash",
+               "allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
+    "vesper": {"disallowed": "Edit Write Bash",
+               "allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
+    # No web: maintenance audits the vault, and nothing vault-touching
+    # routes outward (Decision Log:76).
+    "maintenance": {"disallowed": "Edit Write Bash",
+                    "allowed": _READ_TOOLS},
 }
 
 
@@ -118,6 +143,8 @@ def build_command(spec: SessionSpec) -> list[str]:
         cmd += ["--resume", spec.resume_id]
     if disallowed := MODE_TOOLS.get(spec.mode, {}).get("disallowed"):
         cmd += ["--disallowedTools", disallowed]
+    if allowed := MODE_TOOLS.get(spec.mode, {}).get("allowed"):
+        cmd += ["--allowedTools", allowed]
     if spec.vault_path:
         cmd += ["--add-dir", str(spec.vault_path)]
     cmd += list(spec.extra_args)

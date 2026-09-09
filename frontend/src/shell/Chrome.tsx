@@ -1,6 +1,5 @@
 /* Rail, tabs, composer, status, characters — the shell around the transcript. */
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { Logo } from './Logo'
 import {
   CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE,
@@ -105,7 +104,6 @@ export function TabBar({
   active,
   onSelect,
   onClose,
-  onDelete,
   onNew,
   onHandoff,
   onSearch,
@@ -114,33 +112,17 @@ export function TabBar({
   active: string
   onSelect: (id: string) => void
   onClose: (id: string) => void
-  onDelete: (id: string) => void
   onNew: () => void
   onHandoff: () => void
   onSearch: () => void
 }) {
-  // Right-click target, or null. Position is where the click landed, so the
-  // menu opens under the pointer rather than under the tab it belongs to --
-  // with the strip scrollable, those are not the same place.
-  const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
-
+  /* No context menu. WKWebView does not deliver right-button events to the
+   * page here -- neither `contextmenu` nor a button-2 mousedown arrives --
+   * so the menu that used to live here was a control that did nothing.
+   * Closing works the way browser tabs work instead: a visible ×.
+   * Deleting a conversation lives in search, where history is browsed. */
   return (
     <div className="relative flex h-[var(--head-band)] shrink-0 items-center border-b border-line bg-surface">
-      {menu && (
-        <TabMenu
-          x={menu.x}
-          y={menu.y}
-          onClose={() => {
-            onClose(menu.id)
-            setMenu(null)
-          }}
-          onDelete={() => {
-            onDelete(menu.id)
-            setMenu(null)
-          }}
-          onDismiss={() => setMenu(null)}
-        />
-      )}
       {/* Absolute on the left, mirroring hand-off on the right, so the pills
           stay centred on the transcript's axis between them. Search is not a
           place you go, so it does not belong in the rail. */}
@@ -168,17 +150,6 @@ export function TabBar({
               role="tab"
               aria-selected={selected}
               onClick={() => onSelect(t.id)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                setMenu({ id: t.id, x: e.clientX, y: e.clientY })
-              }}
-              // Also on mousedown for button 2. `contextmenu` is the correct
-              // event and did not fire here, so this does not rely on it.
-              onMouseDown={(e) => {
-                if (e.button !== 2) return
-                e.preventDefault()
-                setMenu({ id: t.id, x: e.clientX, y: e.clientY })
-              }}
               className={`group flex shrink-0 items-center gap-[7px] rounded-[5px] border py-[5px] pl-[11px] pr-[7px] font-mono text-[11.5px] transition-colors ${
                 selected ? 'border-transparent' : 'border-transparent text-ink-faint hover:bg-elevated hover:text-ink-dim'
               }`}
@@ -223,7 +194,7 @@ export function TabBar({
                     e.stopPropagation()   // closing must not also select
                     onClose(t.id)
                   }}
-                  className="ml-[2px] rounded-[3px] px-[3px] text-[12px] leading-none text-ink-faint opacity-0 transition-opacity hover:text-ink group-hover:opacity-100"
+                  className="ml-[2px] rounded-[3px] px-[4px] py-[2px] text-[12px] leading-none text-ink-faint transition-colors hover:bg-line hover:text-ink"
                 >
                   ×
                 </span>
@@ -613,82 +584,5 @@ function CharacterStrip({ working = [] }: { working?: Mode[] }) {
         )
       })}
     </div>
-  )
-}
-
-
-/* Tab context menu.
- *
- * Close and Delete are different actions and are worth separating: closing
- * something you want back should not destroy it, and clearing out history
- * you never want again should not mean opening each one first. Delete is
- * marked destructive and sits apart from Close so the two are not adjacent
- * targets for a hurried click.
- */
-function TabMenu({
-  x,
-  y,
-  onClose,
-  onDelete,
-  onDismiss,
-}: {
-  x: number
-  y: number
-  onClose: () => void
-  onDelete: () => void
-  onDismiss: () => void
-}) {
-  useEffect(() => {
-    const dismiss = (e: Event) => {
-      if (e instanceof KeyboardEvent && e.key !== 'Escape') return
-      onDismiss()
-    }
-    // Attached on the next frame: the press that opened this menu is still
-    // propagating, and without the delay the menu dismisses itself.
-    const id = requestAnimationFrame(() => {
-      window.addEventListener('mousedown', dismiss, true)
-      window.addEventListener('keydown', dismiss, true)
-    })
-    return () => {
-      cancelAnimationFrame(id)
-      window.removeEventListener('mousedown', dismiss, true)
-      window.removeEventListener('keydown', dismiss, true)
-    }
-  }, [onDismiss])
-
-  /* Portalled to the body. `position: fixed` is relative to the viewport
-   * only while no ancestor establishes a containing block -- a transform, a
-   * filter, `will-change` anywhere above would place the menu somewhere
-   * other than under the pointer, and the tab strip is inside a scroll
-   * container besides. Out here it cannot be clipped or offset by anything.
-   */
-  return createPortal(
-    <div
-      role="menu"
-      className="fixed z-[70] min-w-[210px] overflow-hidden rounded-[5px] border border-line bg-surface py-[4px] shadow-[0_12px_34px_rgba(0,0,0,0.5)]"
-      style={{ left: x, top: y }}
-    >
-      <button
-        type="button"
-        role="menuitem"
-        onClick={onClose}
-        className="flex w-full items-center justify-between px-[12px] py-[6px] text-left text-[12.5px] text-ink-dim hover:bg-elevated hover:text-ink"
-      >
-        Close tab <Kbd>⌘W</Kbd>
-      </button>
-      <div className="my-[4px] border-t border-line" />
-      <button
-        type="button"
-        role="menuitem"
-        onClick={onDelete}
-        className="flex w-full flex-col items-start px-[12px] py-[6px] text-left hover:bg-elevated"
-      >
-        <span className="text-[12.5px] text-faber">Delete conversation</span>
-        {/* Said plainly, because it cannot be undone and the transcript is
-            the only copy outside anything promoted to the vault. */}
-        <span className="text-[11px] text-ink-faint">Removes its transcript and usage for good</span>
-      </button>
-    </div>,
-    document.body,
   )
 }

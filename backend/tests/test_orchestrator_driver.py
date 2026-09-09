@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from orchestrator.driver import (
-    MODE_MODELS, SessionSpec, build_command, build_env, claude_binary, launch,
+    MODE_MODELS, MODE_TOOLS, SessionSpec, build_command, build_env, claude_binary, launch,
     session_id_of,
 )
 from orchestrator.events import EngineError, SessionStart, TurnEnd
@@ -236,3 +236,41 @@ def test_resume_preserves_the_permission_mode():
         return m.resume_spec(handle, "more")
 
     assert asyncio.run(go()).permission_mode == "acceptEdits"
+
+
+# ------------------------------------------------- pre-allowed tools
+
+def test_read_and_web_tools_are_pre_allowed():
+    """With --print the CLI denies anything that would prompt, because there
+    is no interactive session to ask. WebSearch failed with 'you haven't
+    granted it yet' and no way to grant it, so the tools a mode should always
+    have are allowed at spawn."""
+    cmd = build_command(SessionSpec(mode="general", prompt="x"))
+    allowed = cmd[cmd.index("--allowedTools") + 1]
+    assert "WebSearch" in allowed and "Read" in allowed
+
+
+def test_mutating_tools_are_never_pre_allowed():
+    """Bash, Edit and Write stay governed by the permission mode. Listing
+    them here would silently pre-approve changes to the machine in order to
+    make the app feel like it works."""
+    for mode in MODE_MODELS:
+        allowed = MODE_TOOLS.get(mode, {}).get("allowed", "")
+        for tool in ("Bash", "Edit", "Write"):
+            assert tool not in allowed, f"{mode} pre-approves {tool}"
+
+
+def test_maintenance_gets_no_web_access():
+    """It audits the vault, and nothing vault-touching routes outward."""
+    allowed = MODE_TOOLS["maintenance"]["allowed"]
+    assert "WebSearch" not in allowed and "WebFetch" not in allowed
+
+
+def test_a_pre_allowed_tool_is_never_also_disallowed():
+    """The two lists must not contradict: a tool in both is a policy whose
+    outcome depends on which flag the CLI happens to weigh more."""
+    for mode in MODE_MODELS:
+        policy = MODE_TOOLS.get(mode, {})
+        allowed = set(policy.get("allowed", "").split())
+        disallowed = set(policy.get("disallowed", "").split())
+        assert not (allowed & disallowed), f"{mode}: {allowed & disallowed} in both lists"
