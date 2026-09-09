@@ -318,3 +318,72 @@ def test_the_inbox_readme_is_not_a_proposal(monkeypatch):
     monkeypatch.setattr(panels.vault_io, "read_frontmatter", lambda p: ({}, "body"))
 
     assert [p["id"] for p in panels._proposals()] == ["real-proposal"]
+
+
+# ----------------------------------------------------------------- history
+
+def _rows(msgs):
+    """Message rows shaped like sqlite3.Row for the block renderer."""
+    return [{"role": r, "content": c, "meta": m, "created_at": "2026-09-09T09:15:00+00:00"}
+            for r, c, m in msgs]
+
+
+def test_assistant_deltas_rejoin_into_one_block():
+    """Deltas are stored one row each; a restored reply must not arrive
+    shattered into a paragraph per fragment."""
+    from orchestrator.wire import blocks_from_messages
+    blocks = blocks_from_messages(_rows([
+        ("assistant", "Hel", None), ("assistant", "lo ", None), ("assistant", "there", None),
+    ]))
+    assert blocks == [{"kind": "text", "text": "Hello there"}]
+
+
+def test_a_user_turn_separates_two_replies():
+    """Without the user message between them, two turns' answers merge --
+    which is exactly what old rows did before the prompt was recorded."""
+    from orchestrator.wire import blocks_from_messages
+    blocks = blocks_from_messages(_rows([
+        ("user", "one?", None), ("assistant", "ONE", None),
+        ("user", "two?", None), ("assistant", "TWO", None),
+    ]))
+    assert [b["kind"] for b in blocks] == ["user", "text", "user", "text"]
+    assert blocks[3]["text"] == "TWO"
+
+
+def test_a_tool_result_pairs_with_its_call_by_id():
+    """Pairing on adjacency breaks under the interleaving the live reducer
+    already handles; the stored form must agree with it."""
+    from orchestrator.wire import blocks_from_messages
+    blocks = blocks_from_messages(_rows([
+        ("tool", "Read /a.py", '{"id": "a", "tool": "Read"}'),
+        ("tool", "Bash ls", '{"id": "b", "tool": "Bash"}'),
+        ("tool_result", "B OUT", '{"id": "b"}'),
+        ("tool_result", "A OUT", '{"id": "a"}'),
+    ]))
+    assert [(b["id"], b["body"]) for b in blocks] == [("a", "A OUT"), ("b", "B OUT")]
+
+
+def test_a_failed_tool_result_opens_itself():
+    from orchestrator.wire import blocks_from_messages
+    blocks = blocks_from_messages(_rows([
+        ("tool", "Bash boom", '{"id": "x", "tool": "Bash"}'),
+        ("tool_result", "nope", '{"id": "x", "is_error": true}'),
+    ]))
+    assert blocks[0]["meta"] == "error" and blocks[0]["open"] is True
+
+
+def test_history_marks_what_cannot_be_resumed(client):
+    """A conversation whose engine id was never learned is history you can
+    read but not continue; the two must not look alike."""
+    body = client.get("/v2/sessions/history", headers=AUTH).json()
+    for s in body["sessions"]:
+        if not s["engine_id"]:
+            assert s["resumable"] is False
+
+
+def test_transcript_404s_for_an_unknown_session(client):
+    assert client.get("/v2/sessions/history/999999", headers=AUTH).status_code == 404
+
+
+def test_history_requires_auth(client):
+    assert client.get("/v2/sessions/history").status_code == 401

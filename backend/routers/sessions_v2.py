@@ -24,7 +24,7 @@ from orchestrator.driver import MODE_MODELS, PERMISSION_CYCLE, SessionSpec
 from orchestrator.events import EngineError
 from orchestrator.manager import SessionManager
 from orchestrator.store import ConversationStore
-from orchestrator.wire import to_sse
+from orchestrator.wire import blocks_from_messages, to_sse
 
 router = APIRouter(prefix="/v2/sessions", tags=["sessions"])
 
@@ -105,6 +105,11 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
         _store.reopen(row_id)
     else:
         row_id = _store.open_session(req.mode, cwd=str(spec.cwd), title=req.prompt[:120])
+
+    # The prompt is recorded here because nothing else does: `record()` folds
+    # engine *events*, and the user's own message is not one of them. Without
+    # this every stored transcript is a column of answers with no questions.
+    _store.add_message(row_id, "user", req.prompt)
 
     async def stream():
         state = "done"
@@ -220,4 +225,55 @@ def stats() -> dict:
             {"day": r["day"], "sessions": r["sessions"]}
             for r in _store.daily_activity(days=365)
         ],
+    }
+
+
+@router.get("/history")
+def history(limit: int = 25) -> dict:
+    """Past conversations, newest first.
+
+    The shell reads this on launch, so closing the window stops losing work.
+    Sessions the engine can still resume are marked: a conversation whose
+    engine id we never learned (it died on spawn) is history you can read but
+    not continue, and the two must not look alike.
+    """
+    return {
+        "sessions": [
+            {
+                "id": r["id"],
+                "mode": r["mode"],
+                "title": r["title"] or "(untitled)",
+                "cwd": r["cwd"],
+                "state": r["state"],
+                "engine_id": r["engine_session_id"],
+                "resumable": bool(r["engine_session_id"]) and r["state"] != "failed",
+                "started_at": r["started_at"],
+                "ended_at": r["ended_at"],
+            }
+            for r in _store.recent_sessions(limit=limit)
+        ]
+    }
+
+
+@router.get("/history/{session_id}")
+def transcript(session_id: int) -> dict:
+    """One conversation, as the blocks the shell renders.
+
+    Rendered server-side into the same shapes the live stream produces, so a
+    restored transcript is indistinguishable from one just streamed -- the UI
+    has one way to draw a conversation, not two that can drift.
+    """
+    row = _store.db.execute(
+        "SELECT * FROM sessions WHERE id=?", (session_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No session {session_id}")
+    return {
+        "id": row["id"],
+        "mode": row["mode"],
+        "title": row["title"] or "(untitled)",
+        "cwd": row["cwd"],
+        "engine_id": row["engine_session_id"],
+        "resumable": bool(row["engine_session_id"]) and row["state"] != "failed",
+        "blocks": blocks_from_messages(_store.transcript(session_id)),
     }
