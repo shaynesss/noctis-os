@@ -86,24 +86,34 @@ def test_project_root_path_rejects_traversal(tmp_path, monkeypatch, vault):
         pass
 
 
-def test_makefile_and_desktop_app_exclude_runtime_from_reload():
-    """A regression guard, not a behavioral test: backend/runtime/ holds
-    the PostToolUse/Stop hooks' action-feed logs and busy markers, written
-    on every tool call of every live session -- and that directory sits
-    inside the cwd `uvicorn --reload` watches by default. Found
-    2026-07-27: with no --reload-exclude, ordinary hook activity from an
-    unrelated Custos session was restarting this backend mid-request,
-    dropping any in-flight accept/reject fetch (surfaced as "Load failed"
-    in the desktop app's WKWebView). Both launch paths (`make dev` and the
-    desktop app) need the exclude flag -- this asserts neither one silently
-    loses it in a future edit.
-    """
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    makefile = (repo_root / "Makefile").read_text(encoding="utf-8")
-    app_py = (repo_root / "desktop" / "app.py").read_text(encoding="utf-8")
+def test_every_runtime_written_dir_is_excluded_from_reload():
+    """uvicorn --reload watches the cwd, so anything the backend writes while
+    running restarts it and drops the in-flight request. In WKWebView that
+    surfaces as "Load failed", which looks like a network fault and is not.
 
-    assert "--reload-exclude" in makefile and "runtime/*" in makefile
-    assert "--reload-exclude" in app_py and "runtime/*" in app_py
+    Driven by paths.RUNTIME_WRITE_DIRS rather than a hardcoded string. The
+    previous version of this test asserted "runtime/*" literally, so when the
+    conversation store started writing data/ on every message it caught
+    nothing -- the same bug, a second time, past a test written for it.
+    """
+    from paths import RELOAD_EXCLUDES
+
+    repo = Path(__file__).resolve().parents[2]
+    makefile = (repo / "Makefile").read_text()
+    app_py = (repo / "desktop" / "app.py").read_text()
+
+    for pattern in RELOAD_EXCLUDES:
+        assert pattern in makefile, f"Makefile does not exclude {pattern} from --reload"
+        assert pattern in app_py, f"desktop/app.py does not exclude {pattern} from --reload"
+
+
+def test_the_store_writes_inside_a_declared_runtime_dir():
+    """The list only protects what it knows about, so the store's own data
+    directory has to be one of the names on it."""
+    from orchestrator.store import DATA_DIR
+    from paths import RUNTIME_WRITE_DIRS
+
+    assert DATA_DIR.name in RUNTIME_WRITE_DIRS
 
 
 def test_is_safe_slug():

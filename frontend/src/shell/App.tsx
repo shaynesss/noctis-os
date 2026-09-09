@@ -71,6 +71,8 @@ export default function App() {
   // The tab the composer is bound to, which is what Escape should stop --
   // the same rule the composer itself follows, kept in one place.
   const composerTabRef = useRef('t0')
+  const activeTabRef = useRef(activeTab)
+  const closeRef = useRef((_id: string) => {})
   tabsRef.current = tabs
   launcherRef.current = launcher
   paletteRef.current = palette
@@ -98,6 +100,7 @@ export default function App() {
   const composerTab = inChat ? activeTab : generalTab
 
   composerTabRef.current = composerTab
+  activeTabRef.current = activeTab
 
   const session = sessions[activeTab]
   const composerMode = sessions[composerTab].mode
@@ -184,6 +187,31 @@ export default function App() {
     }
   }
 
+  /* Close a tab.
+   *
+   * The running turn is aborted first: a closed tab has nowhere to render,
+   * and leaving the stream open would keep spending the 5h window on output
+   * nobody can see. Selection moves to the neighbour rather than to the
+   * start, which is where you were looking. */
+  const closeTab = (id: string) => {
+    // The pinned General tab is the one that must always exist -- it is
+    // where you land with the backend down or on a fresh install, so there
+    // is always somewhere to type. It has no close control either; this is
+    // the same rule enforced where the keyboard can also reach it.
+    const i = tabs.findIndex((t) => t.id === id)
+    if (i === -1 || tabs[i].pinned) return
+    aborts.current[id]?.abort()
+    const remaining = tabs.filter((t) => t.id !== id)
+    if (remaining.length === 0) return
+    setTabs(remaining)
+    setSessions((s) => {
+      const next = { ...s }
+      delete next[id]
+      return next
+    })
+    if (activeTab === id) setActiveTab(remaining[Math.max(0, i - 1)].id)
+  }
+
   /** Abort the active session's turn. The stream unwinds, the backend closes
    *  its row as cancelled, and the engine process is killed with it. */
   const stop = (tabId: string) => aborts.current[tabId]?.abort()
@@ -253,6 +281,7 @@ export default function App() {
   }
 
   handoffRef.current = openHandoff
+  closeRef.current = closeTab
 
   /* Open a conversation found by search, or focus it if already open.
    *
@@ -321,6 +350,14 @@ export default function App() {
         return
       }
       if (e.shiftKey) return
+
+      // Cmd+W closes the active tab, as every tabbed app on the machine
+      // does. Not bound to the pinned General tab, which closeTab refuses.
+      if (e.key.toLowerCase() === 'w') {
+        e.preventDefault()
+        closeRef.current(activeTabRef.current)
+        return
+      }
 
       // Cmd+K searches. Implemented at last: this shortcut was labelled in
       // the UI early on and then removed, because a shortcut shown and not
@@ -454,6 +491,7 @@ export default function App() {
             setActiveTab(id)
             setView('chat')
           }}
+          onClose={closeTab}
           onNew={() => setLauncher({})}
           onHandoff={openHandoff}
           onSearch={() => setPalette(true)}

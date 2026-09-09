@@ -103,6 +103,7 @@ export function TabBar({
   tabs,
   active,
   onSelect,
+  onClose,
   onNew,
   onHandoff,
   onSearch,
@@ -110,12 +111,13 @@ export function TabBar({
   tabs: Tab[]
   active: string
   onSelect: (id: string) => void
+  onClose: (id: string) => void
   onNew: () => void
   onHandoff: () => void
   onSearch: () => void
 }) {
   return (
-    <div className="relative flex h-[var(--head-band)] shrink-0 items-center justify-center border-b border-line bg-surface px-3">
+    <div className="relative flex h-[var(--head-band)] shrink-0 items-center border-b border-line bg-surface">
       {/* Absolute on the left, mirroring hand-off on the right, so the pills
           stay centred on the transcript's axis between them. Search is not a
           place you go, so it does not belong in the rail. */}
@@ -127,7 +129,13 @@ export function TabBar({
         <span aria-hidden className="text-[12px] leading-none">⌕</span> search
         <Kbd>⌘K</Kbd>
       </button>
-      <div role="tablist" className="flex items-center gap-[6px]">
+      {/* Reserved gutters for the two absolute controls, equal on both
+          sides so the pills still centre on the transcript's axis. Without
+          them a fifth tab ran straight under the search button -- the row
+          grew past the space it actually had. Scrolls rather than wraps: a
+          two-row tab bar changes the height of everything below it. */}
+      <div className="mx-[128px] flex min-w-0 flex-1 overflow-x-auto">
+        <div role="tablist" className="mx-auto flex items-center gap-[6px]">
         {tabs.map((t, i) => {
           const selected = t.id === active
           const accent = MODE_ACCENT[t.mode]
@@ -137,7 +145,7 @@ export function TabBar({
               role="tab"
               aria-selected={selected}
               onClick={() => onSelect(t.id)}
-              className={`flex items-center gap-[7px] rounded-[5px] border px-[11px] py-[5px] font-mono text-[11.5px] transition-colors ${
+              className={`group flex shrink-0 items-center gap-[7px] rounded-[5px] border py-[5px] pl-[11px] pr-[7px] font-mono text-[11.5px] transition-colors ${
                 selected ? 'border-transparent' : 'border-transparent text-ink-faint hover:bg-elevated hover:text-ink-dim'
               }`}
               style={
@@ -168,6 +176,23 @@ export function TabBar({
                   ⌘{i + 1}
                 </span>
               )}
+              {/* Closing is what keeps the bar usable: without it every
+                  session ever opened stays forever. The pinned General tab
+                  has no close -- it is the one that must always exist. */}
+              {!t.pinned && (
+                <span
+                  role="button"
+                  aria-label={`Close ${t.label}`}
+                  tabIndex={-1}
+                  onClick={(e) => {
+                    e.stopPropagation()   // closing must not also select
+                    onClose(t.id)
+                  }}
+                  className="ml-[2px] rounded-[3px] px-[3px] text-[12px] leading-none text-ink-faint opacity-0 transition-opacity hover:text-ink group-hover:opacity-100"
+                >
+                  ×
+                </span>
+              )}
             </button>
           )
         })}
@@ -184,6 +209,7 @@ export function TabBar({
         >
           +
         </button>
+        </div>
       </div>
 
       {/* Absolute, so the pills stay centred on the transcript's axis rather

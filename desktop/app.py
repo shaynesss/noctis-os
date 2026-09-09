@@ -185,8 +185,13 @@ def main() -> None:
             str(BACKEND_DIR / ".venv" / "bin" / "uvicorn"),
             "main:app",
             "--reload",
+            # Every directory the backend writes to at runtime; the list is
+            # backend/paths.py's RUNTIME_WRITE_DIRS, and a test checks this
+            # stays in step with it.
             "--reload-exclude",
             "runtime/*",
+            "--reload-exclude",
+            "data/*",
             "--port",
             "8000",
         ],
