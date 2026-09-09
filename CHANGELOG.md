@@ -1,5 +1,63 @@
 # Changelog
 
+## v2.0.0-dev — Stage 2 (in progress)
+
+**v2 replaces Claude Desktop as the entry point. The app drives Claude Code as
+a subprocess, so it runs on the existing subscription with no API billing.**
+
+Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-4
+are complete and verified live.
+
+### Session orchestrator
+- `orchestrator/` drives `claude -p --output-format stream-json --verbose` and
+  normalizes the CLI's events into a stable union the frontend renders. Two
+  concurrent sessions, queued rather than refused — the cap is a budget on the
+  5h window, not a resource limit.
+- Per-mode tool policy is enforced at spawn (`--disallowedTools`), not by
+  instruction: maintenance's propose-never-apply failed a plainly-worded
+  request in the regression suite, so it has a cage as well as a rule.
+- `bypassPermissions` is excluded from the permission cycle and rejected over
+  the wire — a guard that exists only in the client is not a guard.
+
+### Noctis MCP server
+- Dependency-free stdio server exposing `vault_search`, `history_search`,
+  `job_context`, `worklist`, `propose`, plus prompts and resources. The
+  portable half of the system: the body is Claude-Code-shaped, the brain is not.
+
+### Shell
+- Tauri v2 + React. Global Opt+Space summon, tray, launch-at-login,
+  close-hides-not-quits.
+- Chat with block-structured transcripts, mode entry (⌘T), handoff to another
+  mode (⌘⇧H), cross-mode search (⌘K), stop (esc).
+- Handoff opens a *new* session rather than switching a live one's mode: mode
+  is a config dir, a model and a tool policy, and a running `claude -p` can
+  change none of them mid-flight.
+- Conversations survive a restart. Stats, Brief, Inbox and Settings read real
+  data; where data does not exist yet the page says so and names the file it
+  is waiting for.
+
+### Bugs worth recording (all found by running it, not by tests)
+- **PATH.** launchd starts processes with `/usr/bin:/bin:/usr/sbin:/sbin` — no
+  Homebrew — so a scheduled backend would never have found `claude` while
+  working perfectly from a terminal. The engine is now resolved explicitly.
+- **Tauri origin.** The packaged app serves from `tauri://localhost`, not the
+  dev server's port, so the built app could not have reached its own backend.
+- **Model attribution.** `modelUsage` is keyed by model and its first key was
+  the CLI's *background* tier, while the token counts beside it came from the
+  primary — the name and the numbers described different models. Fixing it
+  exposed a larger bug underneath: the background tier's tokens were counted
+  nowhere at all. On a measured turn that was 899 of 901 input tokens.
+- **sqlite across threads.** FastAPI runs sync routes on a threadpool, so a
+  store opened at import was never on the thread that later read it. Every
+  stats request would have raised.
+- **A row per turn.** `engine_session_id` is UNIQUE, so the second turn of any
+  resumed session died on the constraint — and the same mistake scattered one
+  conversation's transcript across many rows. A row is the conversation now.
+- **No user messages.** `record()` folds engine *events*, and the person's own
+  prompt is not one, so every stored transcript was answers with no questions.
+
+258 backend tests, 19 frontend.
+
 ## v1.5.2 — 2026-07-28
 
 **Fix: frontend dev-server port collided with other projects on this machine; nightshift's distiller model was a hardcoded literal.**

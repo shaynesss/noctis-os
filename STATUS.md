@@ -1,10 +1,58 @@
 # STATUS.md
 
-Last updated: 2026-07-28
+Last updated: 2026-09-09
 
 ## Current state
 
-**v1 shipped, 2026-07-21; Design Lodge Overhaul shipped 2026-07-25; reload/apply-pipeline fix shipped 2026-07-27; port-pin + model-override fix shipped 2026-07-28.** Phase 1, 2, and 3 all complete. All build-order milestones done and smoke-tested live. Deploy decision unchanged from the locked EDD: stays local, single-user, single-machine — nothing to deploy. `desktop/NoctisOS.app` is the real way to run it now (double-click, real Dock icon), `make dev`/`make app` remain for from-source work.
+**v1.5.2 is shipped and still the working system. v2 is mid-build — Stage 1
+complete, Stage 2 items 1-4 complete and verified live, item 6 (brief,
+worklist, scheduler) is next and its design is still being settled.**
+
+v2's premise: the app drives Claude Code as a subprocess rather than calling
+the API, so it runs on the existing subscription at no marginal cost. The
+interface is the deliverable — v2 exists to stop Claude Desktop being the
+entry point.
+
+Spec: `second-brain/wiki/Noctis OS/noctis-v2-SPEC.md`.
+
+## What works, end to end
+
+Launching a session from the app streams a real reply into the transcript;
+follow-up turns resume the same engine session; closing the window and
+reopening it restores the conversations. Verified live, not only by tests.
+
+- **Orchestrator** — spawn, stream, resume, queue at 2 concurrent, per-mode
+  models and tool policy, stop mid-turn (no orphaned processes).
+- **MCP server** — 5 tools against the real vault, dependency-free stdio.
+- **Shell** — Tauri v2, Opt+Space summon, tray, launch-at-login. Chat, mode
+  entry (⌘T), handoff (⌘⇧H), search (⌘K), permission cycle (⇧⇥), stop (esc).
+- **History** — conversations and usage in SQLite/FTS5, restored on launch.
+- **Panels** — Stats on real usage; Brief, Inbox, Settings on real routes.
+
+## Not built yet
+
+- **Brief + worklist generator** (item 6) — design in progress. The worklist
+  is being changed from spec: hand-kept notes the client reads, not generated
+  from mode state. That amendment has not reached `noctis-v2-SPEC.md` yet.
+- **Scheduler** (launchd on wake) — blocked on the brief's shape.
+- **Settings** — prompt editor, regression runner and schedule controls are
+  stubs; the page says so and names where each lives.
+- **Vault documents have no reader** — search finds them and shows excerpts,
+  but there is nowhere to open one.
+- **Cascadia Code is not vendored** — the UI falls back to Menlo.
+- **Character sprites** are letter marks (F/N/V), not artwork.
+
+## Deploy
+
+Unchanged and deliberate: local, single-user, single-machine. Nothing to
+deploy. `VITE_API_TOKEN` is inlined into the bundle by Vite, which is
+acceptable only because the backend binds to localhost and anyone who can
+read the bundle can already read `.env` — that reasoning is recorded in
+`.env.example` so it is not copied somewhere it stops being true.
+
+---
+
+# v1 history
 
 ## Done this pass (port-pin + model-override fix — 2026-07-28)
 

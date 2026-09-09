@@ -138,9 +138,34 @@ noctis-os/
 
 ## Status
 
-**v1.5 shipped.** All five modes are wired to real vault reads/writes, session launching works end-to-end for both surfaces (VS Code and tinted Terminal windows), telemetry hooks stream live action logs into the interface, and Nightshift's propose-only inbox is functional. v1.5 adds **Design Lodge** — a vault-native, browsable/editable catalog of design assets (components, layouts, palettes, typography, icons, animation patterns), cross-project and seeded from what's already shipped, plus a more concrete version of Faber's own Overhaul mechanic (how Plan/Setup/Build/Ship each apply differently when resuming an already-shipped project vs. starting fresh). Multiple full review passes (correctness + security) have been run against the codebase. See [`STATUS.md`](STATUS.md) for the detailed, non-aspirational build log.
+**v1.5.2 is shipped and is the working system. v2 is mid-build.**
 
-**Deliberately out of scope for v1:** multi-user support or auth beyond a single bearer token, any hosted deployment, cross-vendor model routing (Claude-only for now), idle character animation/roaming, and a full expression-swap library beyond the current busy/idle pair per character.
+v1.5 wired all five modes to real vault reads/writes, launched sessions into
+VS Code and tinted Terminal windows, streamed live telemetry into the
+interface, and added **Design Lodge** — a vault-native catalog of design
+assets, cross-project and seeded from what has already shipped.
+
+**v2 replaces Claude Desktop as the entry point.** Rather than launching
+sessions into other applications and reading state back, the app hosts them:
+it drives Claude Code as a subprocess and streams its output into its own
+transcript. That is what makes live session monitoring, cross-mode search and
+durable conversation history possible at all — three things v1's
+fire-and-forget model could not do. It runs on the existing Claude
+subscription with no API billing, which is the constraint the whole
+architecture is shaped around.
+
+Working end to end today: the orchestrator (spawn, stream, resume, stop, two
+concurrent), the Noctis MCP server, and a Tauri shell with chat, mode entry,
+handoff, search and real usage stats. The morning brief, worklist and
+scheduler are next.
+
+See [`STATUS.md`](STATUS.md) for the detailed, non-aspirational build log and
+[`CHANGELOG.md`](CHANGELOG.md) for what changed when.
+
+**Deliberately out of scope:** multi-user support or auth beyond a single
+bearer token, any hosted deployment, cross-vendor model routing (Claude-only),
+idle character animation/roaming, and a full expression-swap library beyond
+the current busy/idle pair per character.
 
 ## License
 
