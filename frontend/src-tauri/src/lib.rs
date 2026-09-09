@@ -80,6 +80,11 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
+        // Read-image only, by the capability file. The shell checks whether
+        // an image is waiting so the composer can offer to paste it; it
+        // never reads clipboard text, which is where passwords and tokens
+        // pass through.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,

@@ -100,6 +100,8 @@ export interface SessionState {
   startedAt?: number | null
   /** One-line reminder of where a restored conversation left off. */
   recap?: string | null
+  /** Per-session model override; the mode's default when absent. */
+  model?: string
 }
 
 /* The seed is now only what an empty install starts with: one General tab

@@ -241,6 +241,10 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   onSend: () => void
   /** Images pasted into this draft, in the order they were pasted. */
   attachments: Attachment[]
+  /** An image is waiting in the clipboard. */
+  clipboardHasImage?: boolean
+  /** Rendered above the input while a slash command is being typed. */
+  commandMenu?: React.ReactNode
   onAttach: (blob: Blob) => void
   onRemoveAttachment: (n: number) => void
   /** A turn is in flight. Sending again would race it, not queue behind it. */
@@ -248,7 +252,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   onStop: () => void
   permission: Permission
   onCyclePermission: () => void
-}>(function Composer({ mode, value, onChange, onSend, busy, onStop, attachments, onAttach, onRemoveAttachment, permission, onCyclePermission }, forwarded) {
+}>(function Composer({ mode, value, onChange, onSend, busy, onStop, attachments, onAttach, onRemoveAttachment, clipboardHasImage, commandMenu, permission, onCyclePermission }, forwarded) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useImperativeHandle(forwarded, () => ref.current as HTMLTextAreaElement)
 
@@ -270,6 +274,14 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
           authoritative thing -- it is what the model is told to open -- and
           these lines only say which file each one is, the way the CLI shows
           a pasted image. */}
+      {commandMenu}
+      {/* Offered, never taken. The shell knows an image is there; pasting
+          it is still your keystroke. */}
+      {clipboardHasImage && attachments.length === 0 && (
+        <div className="mb-[6px] pl-[10px] font-mono text-[11px] text-ink-faint">
+          Image in clipboard · <Kbd>⌘V</Kbd> to paste
+        </div>
+      )}
       {attachments.length > 0 && (
         <div className="mb-[6px] flex flex-col gap-[2px] pl-[10px]">
           {attachments.map((a) => (

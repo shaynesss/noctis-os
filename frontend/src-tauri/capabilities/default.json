@@ -1,8 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Only what the shell actually uses. Tauri v2 denies by default, and leaving it that way is the point -- a permission granted 'just in case' is indistinguishable from one that is needed.",
-  "windows": ["main"],
+  "description": "Only what the shell actually uses. Tauri v2 denies by default, and leaving it that way is the point -- a permission granted 'just in case' is indistinguishable from one that is needed. clipboard-manager is read-image only: the shell checks whether an image is waiting so it can say so, and never reads clipboard text, which is where passwords and tokens live.",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-show",
@@ -10,6 +12,7 @@
     "core:window:allow-set-focus",
     "global-shortcut:default",
     "autostart:default",
-    "notification:default"
+    "notification:default",
+    "clipboard-manager:allow-read-image"
   ]
 }

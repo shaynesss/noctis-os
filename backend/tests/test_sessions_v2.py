@@ -578,3 +578,16 @@ def test_too_many_images_are_refused(client):
         "images": [{"media_type": "image/png", "data": PNG_B64}] * 9,
     })
     assert r.status_code == 422
+
+
+def test_config_lists_the_models_a_session_can_switch_to(client):
+    from orchestrator.driver import MODEL_CATALOG
+    body = client.get("/v2/config", headers=AUTH).json()
+    assert [m["id"] for m in body["models"]] == [m["id"] for m in MODEL_CATALOG]
+
+
+def test_an_unknown_model_is_refused_by_the_route(client):
+    r = client.post("/v2/sessions", headers=AUTH, json={
+        "mode": "general", "prompt": "x", "cwd": str(Path.home()), "model": "gpt-9",
+    })
+    assert r.status_code == 400

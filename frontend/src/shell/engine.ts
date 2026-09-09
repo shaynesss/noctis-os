@@ -44,6 +44,8 @@ export interface LaunchRequest {
   permission_mode: string
   resume_id?: string
   images?: { media_type: string; data: string }[]
+  /** Per-session model override; the mode's default when absent. */
+  model?: string
 }
 
 /* ------------------------------------------------------------------ SSE */

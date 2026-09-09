@@ -56,6 +56,19 @@ MODE_MODELS = {
 _READ_TOOLS = "Read Grep Glob"
 _WEB_TOOLS = "WebSearch WebFetch"
 
+# What a session can be switched to, and what each is for. The mode's own
+# entry in MODE_MODELS is the default; this is the menu when you want
+# something else for one session -- dev.md's "effort routing expressed as
+# model routing", made reachable rather than a launcher-only override.
+MODEL_CATALOG: list[dict[str, str]] = [
+    {"id": "claude-opus-5", "name": "Opus 5",
+     "blurb": "Best for everyday, complex tasks"},
+    {"id": "claude-sonnet-5", "name": "Sonnet 5",
+     "blurb": "Efficient for routine tasks"},
+    {"id": "claude-haiku-4-5", "name": "Haiku 4.5",
+     "blurb": "Fastest for quick answers"},
+]
+
 MODE_TOOLS: dict[str, dict[str, str]] = {
     "general": {"disallowed": "Edit Write",
                 "allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
@@ -138,10 +151,22 @@ class SessionSpec:
     vault_path: Path | None = None
     extra_args: Sequence[str] = field(default_factory=tuple)
     images: Sequence[Image] = field(default_factory=tuple)
+    # Overrides the mode's default for this session only. None means the
+    # mode decides, which is what almost every session wants.
+    model: str | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in MODE_MODELS:
             raise ValueError(f"unknown mode: {self.mode}")
+        known = {m["id"] for m in MODEL_CATALOG}
+        if self.model is not None and self.model not in known:
+            # Rejected here rather than passed through: an unknown model is a
+            # spawn that fails seconds later with a less obvious message.
+            raise ValueError(f"unknown model: {self.model}")
+
+    @property
+    def resolved_model(self) -> str:
+        return self.model or MODE_MODELS[self.mode]
 
 
 def build_command(spec: SessionSpec) -> list[str]:
@@ -158,7 +183,7 @@ def build_command(spec: SessionSpec) -> list[str]:
     else:
         cmd.append(spec.prompt)
     cmd += [
-        "--model", MODE_MODELS[spec.mode],
+        "--model", spec.resolved_model,
         "--output-format", "stream-json",
         "--verbose",                 # required for stream-json to emit events
     ]

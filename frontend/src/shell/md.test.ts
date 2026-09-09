@@ -119,3 +119,24 @@ describe('activity grid', () => {
     expect(weeks.flat().some((c) => c.future)).toBe(true)
   })
 })
+
+/* A guard for a mistake I made three times in one session: a lowercase
+ * module beside a same-named component file. On a case-insensitive
+ * filesystem the wrong one wins the import, and the failure is a build error
+ * or — worse — a dev server serving the stale module and a blank window. */
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
+
+describe('module names', () => {
+  it('has no two files whose names differ only by case', () => {
+    const dir = join(process.cwd(), 'src', 'shell')
+    const seen = new Map<string, string>()
+    for (const file of readdirSync(dir)) {
+      const stem = file.replace(/\.(tsx?|css)$/, '').toLowerCase()
+      const previous = seen.get(stem)
+      expect(previous, `${previous} and ${file} collide on a case-insensitive filesystem`)
+        .toBeUndefined()
+      seen.set(stem, file)
+    }
+  })
+})

@@ -16,6 +16,9 @@ import {
   type Attachment, type HistorySession, type HistoryTranscript,
   type Stats as StatsPayload, type Window,
 } from './engine'
+import { hasImage } from './clipboard'
+import { CommandMenu, ModelPicker, PermissionPicker, type ModelOption } from './Commands'
+import { matching } from './slash'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { turnFinished } from './notify'
 import { Palette } from './Palette'
@@ -86,6 +89,7 @@ export default function App() {
   const launcherRef = useRef(launcher)
   const paletteRef = useRef(palette)
   const docRef = useRef(doc)
+  const commandRef = useRef<string | null>(null)
   const handoffRef = useRef(() => {})
   const sessionsRef = useRef(sessions)
   const permissionRef = useRef(permission)
@@ -120,8 +124,15 @@ export default function App() {
   const inChat = view === 'chat'
   const composerTab = inChat ? activeTab : generalTab
 
+  /* The menu shows only while the whole draft is a command being typed --
+   * not on any "/", because paths are typed constantly here and a menu
+   * appearing every time you write `src/shell` would be worse than none. */
+  const draft = drafts[composerTab] ?? ''
+  const commandTyped = /^\/[a-z]*$/i.test(draft) ? draft : null
+
   composerTabRef.current = composerTab
   activeTabRef.current = activeTab
+  commandRef.current = commandTyped
 
   const session = sessions[activeTab]
   const composerMode = sessions[composerTab].mode
@@ -166,6 +177,7 @@ export default function App() {
           permission_mode: permissionRef.current,
           // Bytes, not a path: the picture is part of what was said.
           images: images.map(({ media_type, data }) => ({ media_type, data })),
+          model: current.model ?? undefined,
           // Absent on the first turn, so the engine starts a session; present
           // afterwards, so the rest continue it instead of forgetting.
           resume_id: current.engineId,
@@ -290,9 +302,45 @@ export default function App() {
   // Sending from a panel takes you to the conversation it went to. Leaving
   // you on Settings while a reply arrives somewhere unseen would be worse
   // than the extra navigation.
+  /** Run a command, or return false if the draft is not one. */
+  const runCommand = (name: string): boolean => {
+    setDrafts((d) => ({ ...d, [composerTab]: '' }))
+    setCmdCursor(0)
+    switch (name) {
+      case 'model':
+      case 'permissions':
+        setPicker(name)
+        return true
+      case 'handoff':
+        openHandoff()
+        return true
+      case 'search':
+        setPalette(true)
+        return true
+      case 'clear':
+        /* A fresh conversation in the same tab: the transcript and the
+         * engine id both go, or the next turn would resume the conversation
+         * you just asked to leave. What was said is still in history. */
+        setSessions((prev) => ({
+          ...prev,
+          [composerTab]: { ...prev[composerTab], blocks: [], engineId: undefined, recap: null },
+        }))
+        return true
+      default:
+        return false
+    }
+  }
+
   const send = () => {
     const typed = (drafts[composerTab] ?? '').trim()
     if (!typed) return
+
+    // A command runs instead of being sent as a message.
+    if (commandTyped) {
+      const items = matching(commandTyped)
+      const chosen = items[cmdCursor % Math.max(1, items.length)]
+      if (chosen && runCommand(chosen.name)) return
+    }
     const files = attachments[composerTab] ?? []
     const prompt = typed
     setDrafts({ ...drafts, [composerTab]: '' })
@@ -396,7 +444,7 @@ export default function App() {
       // While the launcher is open it owns the keyboard: its own Cmd+1-5
       // picks a mode, and cycling permission for a session you are not
       // looking at would change something you cannot see.
-      if (launcherRef.current || paletteRef.current || docRef.current) return
+      if (launcherRef.current || paletteRef.current || docRef.current || pickerRef.current) return
 
       // Shift+Tab cycles permission, the affordance carried over from the
       // CLI's TUI. Wrapping past the end returns to `plan`, so the cycle
@@ -407,6 +455,17 @@ export default function App() {
         setPermission((p) => PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(p) + 1) % PERMISSION_CYCLE.length])
         return
       }
+      /* Arrows move the command menu's selection. Handled here rather than
+       * in the composer's own keydown so the textarea's caret does not also
+       * move, which would leave the visible selection and the caret
+       * disagreeing about what Enter will do. */
+      if (commandRef.current && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault()
+        const n = matching(commandRef.current).length
+        if (n > 0) setCmdCursor((c) => (c + (e.key === 'ArrowDown' ? 1 : n - 1)) % n)
+        return
+      }
+
       // Escape stops the running turn. Checked before the Cmd guard below
       // because it carries no modifier, and placed after the launcher/palette
       // check above so Escape still closes those first.
@@ -548,6 +607,50 @@ export default function App() {
     }
   }, [activeCwd])
 
+  /* Whether the clipboard holds an image, checked when the window becomes
+   * active rather than on a timer. Copying happens in another app, so
+   * returning here is exactly when the answer can have changed — and a poll
+   * would be reading your clipboard on a schedule, for a hint. */
+  const [clipboardImage, setClipboardImage] = useState(false)
+
+  /* Slash commands.
+   *
+   * `picker` is whichever overlay a command opened. `model` is the session's
+   * override, kept per tab because it is a property of this conversation and
+   * not of the app. */
+  const [picker, setPicker] = useState<null | 'model' | 'permissions'>(null)
+  const [models, setModels] = useState<ModelOption[]>([])
+  const [modeDefaults, setModeDefaults] = useState<Record<string, string>>({})
+  const [promptsAnswerable, setPromptsAnswerable] = useState(false)
+  const [cmdCursor, setCmdCursor] = useState(0)
+  // Declared after the state it tracks: a ref initialised from a `useState`
+  // above it reads the variable before assignment.
+  const pickerRef = useRef(picker)
+  pickerRef.current = picker
+
+  useEffect(() => {
+    void get<{
+      models: ModelOption[]
+      modes: { mode: string; model: string }[]
+      prompts_answerable: boolean
+    }>('/v2/config').then((c) => {
+      if (!c) return
+      setModels(c.models ?? [])
+      setModeDefaults(Object.fromEntries(c.modes.map((m) => [m.mode, m.model])))
+      setPromptsAnswerable(Boolean(c.prompts_answerable))
+    })
+  }, [])
+  useEffect(() => {
+    let live = true
+    const check = () => void hasImage().then((v) => live && setClipboardImage(v))
+    check()
+    window.addEventListener('focus', check)
+    return () => {
+      live = false
+      window.removeEventListener('focus', check)
+    }
+  }, [])
+
   // Focus the composer on mount. Without it the document has no keyboard
   // focus until something is clicked, so window-level shortcuts appear
   // broken until you happen to click -- which reads as the shortcut being
@@ -631,6 +734,16 @@ export default function App() {
             attachments={attachments[composerTab] ?? []}
             onAttach={(blob) => void attach(composerTab, blob)}
             onRemoveAttachment={(n) => removeAttachment(composerTab, n)}
+            clipboardHasImage={clipboardImage}
+            commandMenu={
+              commandTyped && (
+                <CommandMenu
+                  typed={commandTyped}
+                  cursor={cmdCursor}
+                  onPick={(n: string) => runCommand(n)}
+                />
+              )
+            }
             busy={sessions[composerTab].busy}
             onStop={() => stop(composerTab)}
             permission={permission}
@@ -639,6 +752,43 @@ export default function App() {
             }
         />
       </BottomBar>
+
+      {picker === 'model' && (
+        <ModelPicker
+          models={models}
+          current={sessions[composerTab].model ?? null}
+          modeDefault={modeDefaults[sessions[composerTab].mode] ?? ''}
+          mode={sessions[composerTab].mode}
+          onPick={(id: string | null) => {
+            setSessions((prev) => ({
+              ...prev,
+              [composerTab]: { ...prev[composerTab], model: id ?? undefined },
+            }))
+            setPicker(null)
+            composerRef.current?.focus()
+          }}
+          onClose={() => {
+            setPicker(null)
+            composerRef.current?.focus()
+          }}
+        />
+      )}
+
+      {picker === 'permissions' && (
+        <PermissionPicker
+          current={permission}
+          promptsAnswerable={promptsAnswerable}
+          onPick={(p: Permission) => {
+            setPermission(p)
+            setPicker(null)
+            composerRef.current?.focus()
+          }}
+          onClose={() => {
+            setPicker(null)
+            composerRef.current?.focus()
+          }}
+        />
+      )}
 
       {palette && (
         <Palette

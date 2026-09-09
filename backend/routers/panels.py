@@ -17,7 +17,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 
 import vault_io
-from orchestrator.driver import MODE_MODELS, MODE_TOOLS, PERMISSION_CYCLE
+from orchestrator.driver import MODEL_CATALOG, MODE_MODELS, MODE_TOOLS, PERMISSION_CYCLE
 
 router = APIRouter(prefix="/v2", tags=["panels"])
 
@@ -178,6 +178,9 @@ def config() -> dict:
             }
             for mode, model in MODE_MODELS.items()
         ],
+        # What a session can be switched to, so the picker and Settings
+        # both read the same list the orchestrator validates against.
+        "models": MODEL_CATALOG,
         "permission_cycle": list(PERMISSION_CYCLE),
         # The CLI denies anything that would prompt when run with --print,
         # because there is no interactive session to answer. Reported so the

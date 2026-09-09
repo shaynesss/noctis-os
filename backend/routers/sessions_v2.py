@@ -86,6 +86,8 @@ class LaunchRequest(BaseModel):
     # the transcript, and no Read call standing between the picture and the
     # answer.
     images: list[InlineImage] = Field(default_factory=list, max_length=8)
+    # Overrides the mode's default model for this session only.
+    model: str | None = None
 
 
 @router.post("")
@@ -99,14 +101,19 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
         # that exists only in the client is not a guard.
         raise HTTPException(status_code=400, detail=f"Invalid permission mode: {req.permission_mode}")
 
-    spec = SessionSpec(
-        mode=req.mode,
-        prompt=req.prompt,
-        permission_mode=req.permission_mode,
-        resume_id=req.resume_id,
-        cwd=_safe_cwd(req.cwd),
-        images=[Image(media_type=i.media_type, data=i.data) for i in req.images],
-    )
+    try:
+        spec = SessionSpec(
+            mode=req.mode,
+            prompt=req.prompt,
+            permission_mode=req.permission_mode,
+            resume_id=req.resume_id,
+            cwd=_safe_cwd(req.cwd),
+            images=[Image(media_type=i.media_type, data=i.data) for i in req.images],
+            model=req.model,
+        )
+    except ValueError as exc:
+        # An unknown model, refused where it is named rather than at spawn.
+        raise HTTPException(status_code=400, detail=str(exc))
 
     # A `sessions` row is the *conversation*, not the turn.
     #

@@ -332,3 +332,24 @@ def test_stdin_carries_the_text_and_every_image():
 def test_a_text_turn_writes_nothing_to_the_process():
     """No images means the ordinary path, with nothing written at all."""
     assert build_stdin(SessionSpec(mode="general", prompt="hello")) is None
+
+
+# --------------------------------------------------- per-session model
+
+def test_a_session_can_override_its_mode_model():
+    """dev.md's effort routing expressed as model routing, made reachable
+    rather than a launcher-only override."""
+    cmd = build_command(SessionSpec(mode="faber", prompt="x", model="claude-haiku-4-5"))
+    assert cmd[cmd.index("--model") + 1] == "claude-haiku-4-5"
+
+
+def test_without_an_override_the_mode_decides():
+    spec = SessionSpec(mode="faber", prompt="x")
+    assert spec.resolved_model == MODE_MODELS["faber"]
+
+
+def test_an_unknown_model_is_refused_at_construction():
+    """Passing it through means a spawn that fails seconds later with a much
+    less obvious message."""
+    with pytest.raises(ValueError):
+        SessionSpec(mode="faber", prompt="x", model="gpt-9")
