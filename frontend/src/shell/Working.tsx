@@ -50,6 +50,49 @@ function elapsed(ms: number): string {
   return `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
+/* The line left behind when a turn finishes.
+ *
+ * A transcript that just stops gives no sense of what the turn cost, and
+ * scrolling back through a day of them there is nothing marking where one
+ * ended and the next began. This is that mark: how long it took, and when it
+ * landed.
+ */
+export function Finished({
+  mode,
+  seconds,
+  at,
+  accent,
+}: {
+  mode: Mode
+  seconds: number
+  /** Epoch ms the turn ended. */
+  at: number
+  accent: string
+}) {
+  const clock = new Date(at).toLocaleTimeString([], {
+    hour: 'numeric', minute: '2-digit',
+  })
+  return (
+    <div className="mb-[18px] flex items-center gap-[9px] font-mono text-[11.5px] text-ink-faint">
+      <span aria-hidden style={{ color: accent }}>✳</span>
+      <span>
+        {DONE_WORD[mode]} for {elapsed(seconds * 1000)} · done {clock}
+      </span>
+    </div>
+  )
+}
+
+/* One word per mode, past tense, for the line a finished turn leaves. Each
+ * matches what that mode was doing, so the end of a turn reads as the end of
+ * that kind of work rather than a generic completion. */
+const DONE_WORD: Record<Mode, string> = {
+  general: 'Cogitated',
+  faber: 'Built',
+  noctua: 'Read',
+  vesper: 'Dug',
+  maintenance: 'Audited',
+}
+
 export function Working({
   mode,
   startedAt,

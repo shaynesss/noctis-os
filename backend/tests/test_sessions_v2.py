@@ -591,3 +591,110 @@ def test_an_unknown_model_is_refused_by_the_route(client):
         "mode": "general", "prompt": "x", "cwd": str(Path.home()), "model": "gpt-9",
     })
     assert r.status_code == 400
+
+
+# ------------------------------------------------------------- recap
+
+def test_no_route_is_defined_twice():
+    """The recap route was defined twice, an exact copy body for body.
+    FastAPI serves the first, so it was dead code rather than a break -- and
+    dead code that would have rotted out of sync with the live one. Found by
+    a session reading this repo, not by a test, which is why this exists.
+
+    Checked against the source rather than the app: a duplicate decorator is
+    the actual defect, and the router objects hide it behind wrappers.
+    """
+    import re
+
+    routers = Path(__file__).resolve().parents[1] / "routers"
+    for file in routers.glob("*.py"):
+        decorators = re.findall(r'@router\.(get|post|patch|delete)\("([^"]*)"', file.read_text())
+        seen: set[tuple[str, str]] = set()
+        for method, path in decorators:
+            assert (method, path) not in seen, f"{file.name} defines {method.upper()} {path!r} twice"
+            seen.add((method, path))
+
+
+def test_a_short_conversation_gets_no_recap(client, tmp_path, monkeypatch):
+    """Nothing has happened worth summarising, and a recap of one message is
+    noise wearing the shape of a summary."""
+    from orchestrator.store import ConversationStore
+    from routers import sessions_v2
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("general", cwd="/tmp")
+    store.add_message(sid, "user", "hello")
+    monkeypatch.setattr(sessions_v2, "_store", store)
+
+    assert client.get(f"/v2/sessions/history/{sid}/recap", headers=AUTH).json()["recap"] is None
+    store.close()
+
+
+def test_a_cached_recap_is_reused_without_calling_the_engine(client, tmp_path, monkeypatch):
+    """Generating costs an engine call, so reopening the same conversation
+    must not pay for it again."""
+    from orchestrator.store import ConversationStore
+    from routers import sessions_v2
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("general", cwd="/tmp")
+    for i in range(4):
+        store.add_message(sid, "user", f"m{i}")
+    store.save_recap(sid, "an earlier summary", 4)
+    monkeypatch.setattr(sessions_v2, "_store", store)
+
+    async def explode(*a, **k):
+        raise AssertionError("the engine must not be called for a fresh cached recap")
+
+    monkeypatch.setattr(sessions_v2, "one_shot", explode)
+    body = client.get(f"/v2/sessions/history/{sid}/recap", headers=AUTH).json()
+    assert body == {"recap": "an earlier summary", "cached": True}
+    store.close()
+
+
+def test_a_stale_recap_is_regenerated(client, tmp_path, monkeypatch):
+    """A line describing the first third of a long conversation is worse than
+    none, because it reads as current."""
+    from orchestrator.store import ConversationStore
+    from routers import sessions_v2
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("general", cwd="/tmp")
+    for i in range(20):
+        store.add_message(sid, "user", f"message {i}")
+    store.save_recap(sid, "stale", 2)          # far behind the message count
+    monkeypatch.setattr(sessions_v2, "_store", store)
+
+    async def fresh(prompt, **k):
+        return "a newer summary"
+
+    monkeypatch.setattr(sessions_v2, "one_shot", fresh)
+    body = client.get(f"/v2/sessions/history/{sid}/recap", headers=AUTH).json()
+    assert body == {"recap": "a newer summary", "cached": False}
+    assert store.db.execute("SELECT recap_at FROM sessions WHERE id=?", (sid,)).fetchone()[0] == 20
+    store.close()
+
+
+def test_an_engine_failure_returns_null_rather_than_erroring(client, tmp_path, monkeypatch):
+    """A missing recap should quietly not appear, never break the transcript
+    it sits above."""
+    from orchestrator.store import ConversationStore
+    from routers import sessions_v2
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("general", cwd="/tmp")
+    for i in range(4):
+        store.add_message(sid, "user", f"m{i}")
+    monkeypatch.setattr(sessions_v2, "_store", store)
+
+    async def broken(prompt, **k):
+        raise RuntimeError("engine away")
+
+    monkeypatch.setattr(sessions_v2, "one_shot", broken)
+    r = client.get(f"/v2/sessions/history/{sid}/recap", headers=AUTH)
+    assert r.status_code == 200 and r.json()["recap"] is None
+    store.close()
+
+
+def test_recap_404s_for_an_unknown_conversation(client):
+    assert client.get("/v2/sessions/history/999999/recap", headers=AUTH).status_code == 404

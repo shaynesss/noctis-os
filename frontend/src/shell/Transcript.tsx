@@ -6,7 +6,8 @@
  * stream model: a terminal-shaped transcript would fight the data. */
 import { useState } from 'react'
 import { Markdown } from './Markdown'
-import { Working } from './Working'
+import { failures, groupTools, summarise, type ToolBlock } from './tools'
+import { Finished, Working } from './Working'
 import { MODE_ACCENT, MODE_LABEL, type Block, type Mode } from './mock'
 
 function Caret({ open }: { open: boolean }) {
@@ -71,6 +72,7 @@ export function Transcript({
   mode,
   startedAt,
   recap,
+  lastTurn,
 }: {
   blocks: Block[]
   accent: string
@@ -81,6 +83,8 @@ export function Transcript({
   startedAt?: number | null
   /** One-line reminder of where a restored conversation left off. */
   recap?: string | null
+  /** The last turn's duration and end time. */
+  lastTurn?: { seconds: number; at: number } | null
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -97,7 +101,75 @@ export function Transcript({
             </span>
           </div>
         )}
-        {blocks.map((b, i) => {
+        {groupTools(blocks).map((group, gi) => {
+          if (group.kind === 'tools') return <ToolRun key={`g${gi}`} tools={group.tools} />
+          const b = group.block
+          const i = gi
+          return renderBlock(b, i)
+        })}
+
+        {startedAt != null ? (
+          <Working key={startedAt} mode={mode} startedAt={startedAt} thinking={thinking} accent={accent} />
+        ) : (
+          lastTurn && (
+            <Finished mode={mode} seconds={lastTurn.seconds} at={lastTurn.at} accent={accent} />
+          )
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+/* One collapsed row for a run of tool calls.
+ *
+ * Closed by default: eleven bordered boxes with their own error text pushed
+ * the reply that mattered off the screen, and the calls are how the answer
+ * was reached rather than the answer. Failures are counted on the row even
+ * while it is shut, because a collapsed line that hides them is how you miss
+ * that nothing actually ran.
+ */
+function ToolRun({ tools }: { tools: ToolBlock[] }) {
+  const failed = failures(tools)
+  const [open, setOpen] = useState(failed > 0 && tools.length <= 2)
+
+  return (
+    <div className="mb-[10px]">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-[8px] rounded-[3px] px-[2px] py-[3px] text-left font-mono text-[12px] text-ink-faint hover:text-ink-dim"
+      >
+        <Caret open={open} />
+        <span>{summarise(tools)}</span>
+        {failed > 0 && (
+          <span className="text-faber">
+            · {failed} failed
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="mt-[5px] pl-[17px]">
+          {tools.map((t, i) => (
+            <Disclosure
+              key={t.id ?? i}
+              label={t.name}
+              target={t.target}
+              meta={t.meta}
+              body={t.body}
+              defaultOpen={t.open}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One transcript block. */
+function renderBlock(b: Block, i: number) {
           if (b.kind === 'user') {
             /* A prompt glyph and dimmer ink instead of a YOU label: it is
              * already obvious which turn is yours, and a caption on every
@@ -193,12 +265,4 @@ export function Transcript({
            * turn is the kind of thing that reads as helpful once and as
            * clutter for the rest of the session. */
           return <Markdown key={i} src={b.text} className="mb-[18px]" />
-        })}
-
-        {startedAt != null && (
-          <Working key={startedAt} mode={mode} startedAt={startedAt} thinking={thinking} accent={accent} />
-        )}
-      </div>
-    </div>
-  )
 }

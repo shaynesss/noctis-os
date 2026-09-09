@@ -225,6 +225,11 @@ export default function App() {
           busy: false,
           thinking: null,
           startedAt: null,
+          // Only for a turn that ran to completion: a stopped one already
+          // says "Stopped." and does not need a duration beside it.
+          lastTurn: stopped
+            ? s[tabId].lastTurn
+            : { seconds: (Date.now() - (withUser.startedAt ?? Date.now())) / 1000, at: Date.now() },
           // Recorded in the transcript rather than left silent. A reply that
           // simply stops mid-sentence is indistinguishable from one that
           // finished badly, and you would not know whether to retry.
@@ -707,6 +712,7 @@ export default function App() {
             mode={session.mode}
             startedAt={session.startedAt}
             recap={session.recap}
+            lastTurn={session.lastTurn}
           />
         ) : (
           <Pane view={view} limits={limits} />
@@ -720,7 +726,12 @@ export default function App() {
         working={tabs.filter((t) => sessions[t.id]?.busy).map((t) => sessions[t.id].mode)}
         state={{
           cwd: shortenHome(activeCwd),
-          model: MODE_INFO[session.mode].model,
+          /* The session's override if it has one, else the mode's default
+             as the backend reports it. This read MODE_INFO, a frontend
+             constant, so switching model with /model changed what the engine
+             ran and not what the bar said -- the bar claimed opus while the
+             session answered on sonnet. */
+          model: session.model ?? modeDefaults[session.mode] ?? MODE_INFO[session.mode].model,
           branch,
           context: session.context ?? null,
         }}

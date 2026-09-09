@@ -102,6 +102,8 @@ export interface SessionState {
   recap?: string | null
   /** Per-session model override; the mode's default when absent. */
   model?: string
+  /** The last turn's duration and end time, for the line it leaves behind. */
+  lastTurn?: { seconds: number; at: number } | null
 }
 
 /* The seed is now only what an empty install starts with: one General tab
