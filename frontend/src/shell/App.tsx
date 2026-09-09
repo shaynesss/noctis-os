@@ -630,6 +630,29 @@ export default function App() {
    * would be reading your clipboard on a schedule, for a hint. */
   const [clipboardImage, setClipboardImage] = useState(false)
 
+  /* What the orchestrator is running right now.
+   *
+   * Polled rather than streamed: it changes only when a turn starts or ends,
+   * both of which this shell already knows about locally — the poll is for
+   * sessions started elsewhere, and a few seconds of staleness on that
+   * costs nothing. A socket for two integers would be the expensive way to
+   * be no more correct.
+   */
+  const [live, setLive] = useState<{ running: number; max: number } | null>(null)
+  useEffect(() => {
+    let alive = true
+    const read = () =>
+      void get<{ running: number; max_concurrent: number }>('/v2/sessions').then((d) => {
+        if (alive && d) setLive({ running: d.running, max: d.max_concurrent })
+      })
+    read()
+    const id = setInterval(read, 4000)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [])
+
   /* Slash commands.
    *
    * `picker` is whichever overlay a command opened. `model` is the session's
@@ -728,6 +751,8 @@ export default function App() {
             startedAt={session.startedAt}
             recap={session.recap}
             lastTurn={session.lastTurn}
+            historyId={activeTab.startsWith('h') ? Number(activeTab.slice(1)) : null}
+            onOpenDoc={setDoc}
           />
         ) : (
           <Pane view={view} limits={limits} />
@@ -740,6 +765,7 @@ export default function App() {
         limits={limits}
         working={tabs.filter((t) => sessions[t.id]?.busy).map((t) => sessions[t.id].mode)}
         state={{
+          live: live ?? undefined,
           cwd: shortenHome(activeCwd),
           /* The session's override if it has one, else the mode's default
              as the backend reports it. This read MODE_INFO, a frontend

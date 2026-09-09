@@ -14,6 +14,8 @@ header, and the frontend reads it with fetch + a ReadableStream.
 from __future__ import annotations
 
 import asyncio
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -179,6 +181,29 @@ def list_sessions() -> dict:
     """Live and finished sessions. The shell reads this on start so tabs
     survive a window reload -- the process outlives the web view."""
     return {
+        # Live counts first: this is what the status bar reads, and the spec
+        # puts live/max sessions on the same row as the limit windows because
+        # they answer one question together -- whether there is room to start
+        # something now.
+        "running": len(_manager.running),
+        "queued": len(_manager.queued),
+        "max_concurrent": _manager.max_concurrent,
+        "live": [
+            {
+                "local_id": h.local_id,
+                "mode": h.mode,
+                "cwd": str(h.spec.cwd) if h.spec.cwd else None,
+                "model": h.spec.resolved_model,
+                "state": h.state,
+                # Seconds the turn has been running, so the UI shows a
+                # duration without needing a clock the backend does not have.
+                "elapsed": (
+                    (datetime.now(timezone.utc) - h.started_at).total_seconds()
+                    if h.started_at else 0.0
+                ),
+            }
+            for h in [*_manager.running, *_manager.queued]
+        ],
         "sessions": [
             {
                 "local_id": h.local_id,
@@ -192,9 +217,6 @@ def list_sessions() -> dict:
             }
             for h in _manager.sessions.values()
         ],
-        "running": len(_manager.running),
-        "queued": len(_manager.queued),
-        "max_concurrent": _manager.max_concurrent,
     }
 
 
@@ -395,3 +417,57 @@ async def recap(session_id: int) -> dict:
     _store.save_recap(session_id, line, count)
     return {"recap": line, "cached": False}
 
+
+
+# Tools that produce a file, and the argument naming it. Derived from what a
+# session actually did rather than declared anywhere: a turn that writes a
+# file has already told us so in its tool call, and asking the model to
+# additionally announce its outputs would be a second source that can
+# disagree with the first.
+_ARTIFACT_TOOLS = {
+    "Write": "file_path",
+    "Edit": "file_path",
+    "NotebookEdit": "notebook_path",
+}
+
+
+@router.get("/history/{session_id}/artifacts")
+def artifacts(session_id: int) -> dict:
+    """Files this conversation created or changed.
+
+    One entry per path, not per call: editing the same file eleven times is
+    one artifact you might want to look at, and eleven rows of the same name
+    is the tool log again under a different heading.
+    """
+    row = _store.db.execute("SELECT id FROM sessions WHERE id=?", (session_id,)).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No session {session_id}")
+
+    seen: dict[str, dict] = {}
+    for message in _store.transcript(session_id):
+        if message["role"] != "tool" or not message["meta"]:
+            continue
+        try:
+            meta = json.loads(message["meta"])
+        except ValueError:
+            continue
+        arg = _ARTIFACT_TOOLS.get(meta.get("tool", ""))
+        if not arg:
+            continue
+        path = (meta.get("args") or {}).get(arg)
+        if not path:
+            continue
+
+        entry = seen.setdefault(str(path), {
+            "path": str(path),
+            "name": Path(str(path)).name,
+            "tools": [],
+            "writes": 0,
+            "at": message["created_at"],
+        })
+        entry["writes"] += 1
+        entry["at"] = message["created_at"]          # most recent touch
+        if meta["tool"] not in entry["tools"]:
+            entry["tools"].append(meta["tool"])
+
+    return {"artifacts": list(seen.values())}

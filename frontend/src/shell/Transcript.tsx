@@ -6,6 +6,7 @@
  * stream model: a terminal-shaped transcript would fight the data. */
 import { useState } from 'react'
 import { Markdown } from './Markdown'
+import { Artifacts } from './Artifacts'
 import { failures, groupTools, summarise, type ToolBlock } from './tools'
 import { Finished, Working } from './Working'
 import { MODE_ACCENT, MODE_LABEL, type Block, type Mode } from './domain'
@@ -73,6 +74,8 @@ export function Transcript({
   startedAt,
   recap,
   lastTurn,
+  historyId,
+  onOpenDoc,
 }: {
   blocks: Block[]
   accent: string
@@ -85,6 +88,9 @@ export function Transcript({
   recap?: string | null
   /** The last turn's duration and end time. */
   lastTurn?: { seconds: number; at: number } | null
+  /** Backend row id, for the files this conversation touched. */
+  historyId?: number | null
+  onOpenDoc?: (vaultPath: string) => void
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -107,6 +113,13 @@ export function Transcript({
           const i = gi
           return renderBlock(b, i)
         })}
+
+        {/* Below the conversation, above the turn's closing line: it is a
+            summary of what the session did, so it belongs where you land
+            when you finish reading rather than at the top. */}
+        {historyId != null && onOpenDoc && (
+          <Artifacts sessionId={historyId} onOpen={onOpenDoc} />
+        )}
 
         {startedAt != null ? (
           <Working key={startedAt} mode={mode} startedAt={startedAt} thinking={thinking} accent={accent} />

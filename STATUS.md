@@ -32,7 +32,12 @@ Verified live, not only by tests.
 - **Panels** — Stats on real usage (reconciled against list price), Brief,
   Inbox and Settings on real routes. A vault reader opens documents found by
   search.
-- **Typography** — Cascadia Code vendored and loading.
+- **Typography** — Cascadia Code vendored and loading; real character
+  sprites, with expression variants carrying idle/working state.
+- **Artifacts** — files a conversation created or changed, derived from its
+  own tool calls, shown as chips under the transcript.
+- **Live monitoring** — running/max sessions in the status bar beside the
+  limit windows, amber at the cap.
 
 ## Next
 
@@ -51,15 +56,12 @@ than generated from mode state, and has still not reached
 `noctis-v2-SPEC.md`, which by this project's own rule means it does not
 count yet.
 
-**4. Stage 2 leftovers** — artifacts (item 5) and live session monitoring
-beyond what the transcript already shows (item 7).
-
-**5. Item 8, "tiered loading policy", is undefined.** It appears in the
+**4. Item 8, "tiered loading policy", is undefined.** It appears in the
 build-order table and nowhere else in the spec — no description, no
 reasoning, no acceptance condition. It cannot be built from what is written,
 so it needs either a definition or removal.
 
-**6. Running the regression suite from Settings.** The cases are listed with
+**5. Running the regression suite from Settings.** The cases are listed with
 what running them would cost; firing them needs the orchestrator to host
 thirteen sessions and report back, which is real work rather than a button.
 

@@ -493,6 +493,8 @@ export function OverageBanner({ onDismiss }: { onDismiss: () => void }) {
 }
 
 export interface BarState {
+  /** Sessions running right now, and the concurrency budget. */
+  live?: { running: number; max: number }
   cwd: string
   model: string
   /** Null while unknown, or when the directory is not a repository. */
@@ -570,8 +572,18 @@ export function StatusBar({ limits, state }: { limits?: LiveLimits | null; state
             </>
           )}
         </Seg>
-        <Seg last>
+        <Seg>
           7d {sevenDay === null ? '—' : <><Meter pct={sevenDay} /> {sevenDay}%</>}
+        </Seg>
+        {/* Beside the windows, not elsewhere: together they answer one
+            question — whether there is room to start something now. Amber at
+            the cap, because that is when the next launch queues rather than
+            runs, which is a thing to know before pressing enter. */}
+        <Seg last>
+          <span style={state.live && state.live.running >= state.live.max
+            ? { color: 'var(--color-noctua)' } : undefined}>
+            {state.live ? `${state.live.running}/${state.live.max}` : '—/2'} live
+          </span>
         </Seg>
       </div>
     </div>

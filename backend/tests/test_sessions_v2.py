@@ -862,3 +862,75 @@ def test_reading_the_regression_suite_runs_nothing(client):
 def test_prompt_routes_require_auth(client):
     assert client.get("/v2/prompts").status_code == 401
     assert client.get("/v2/regression").status_code == 401
+
+
+# ----------------------------------------------------------- artifacts
+
+def test_artifacts_are_derived_from_what_the_session_did(tmp_path, monkeypatch, client):
+    """Not from anything the model announces: a turn that writes a file has
+    already said so in its tool call, and asking it to also declare outputs
+    would be a second source that can disagree with the first."""
+    from orchestrator.events import ToolCall
+    from orchestrator.store import ConversationStore
+    from routers import sessions_v2
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("faber", cwd="/tmp")
+    store.record(sid, "faber", ToolCall(id="1", name="Write", args={"file_path": "/tmp/a.py"}))
+    store.record(sid, "faber", ToolCall(id="2", name="Edit", args={"file_path": "/tmp/a.py"}))
+    store.record(sid, "faber", ToolCall(id="3", name="Read", args={"file_path": "/tmp/b.py"}))
+    monkeypatch.setattr(sessions_v2, "_store", store)
+
+    found = client.get(f"/v2/sessions/history/{sid}/artifacts", headers=AUTH).json()["artifacts"]
+    assert [a["path"] for a in found] == ["/tmp/a.py"]      # Read produces nothing
+    assert found[0]["writes"] == 2                          # one entry, not two
+    assert sorted(found[0]["tools"]) == ["Edit", "Write"]
+    store.close()
+
+
+def test_a_conversation_that_changed_nothing_has_no_artifacts(tmp_path, monkeypatch, client):
+    from orchestrator.store import ConversationStore
+    from routers import sessions_v2
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("general", cwd="/tmp")
+    store.add_message(sid, "user", "just talking")
+    monkeypatch.setattr(sessions_v2, "_store", store)
+    assert client.get(f"/v2/sessions/history/{sid}/artifacts", headers=AUTH).json()["artifacts"] == []
+    store.close()
+
+
+def test_artifacts_404_for_an_unknown_conversation(client):
+    assert client.get("/v2/sessions/history/999999/artifacts", headers=AUTH).status_code == 404
+
+
+# ---------------------------------------------------- live monitoring
+
+def test_the_session_list_reports_what_is_live_right_now(client):
+    """The spec puts live/max sessions on the same status row as the limit
+    windows, because together they answer one question: whether there is room
+    to start something now."""
+    body = client.get("/v2/sessions", headers=AUTH).json()
+    assert body["max_concurrent"] == 2
+    assert isinstance(body["live"], list)
+    assert body["running"] == len([s for s in body["live"] if s["state"] == "running"])
+
+
+def test_a_live_session_reports_its_mode_model_and_elapsed(monkeypatch, client):
+    """A count alone says something is running; it does not say what, and
+    'what is it doing' is the question you open this to answer."""
+    from datetime import datetime, timedelta, timezone
+    from orchestrator.driver import SessionSpec
+    from orchestrator.manager import SessionHandle
+    from routers import sessions_v2
+
+    spec = SessionSpec(mode="faber", prompt="x", model="claude-haiku-4-5")
+    handle = SessionHandle(local_id=1, mode="faber", spec=spec, state="running",
+                           started_at=datetime.now(timezone.utc) - timedelta(seconds=42))
+    monkeypatch.setattr(type(sessions_v2._manager), "running",
+                        property(lambda self: [handle]))
+
+    live = client.get("/v2/sessions", headers=AUTH).json()["live"][0]
+    assert live["mode"] == "faber"
+    assert live["model"] == "claude-haiku-4-5"      # the override, not the mode default
+    assert 40 <= live["elapsed"] <= 60
