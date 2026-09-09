@@ -221,3 +221,54 @@ def test_cache_writes_are_counted():
     (end,) = [e for e in parse_line(_multi_model_result()) if isinstance(e, TurnEnd)]
     assert end.usage.cache_write_tokens == 19143
     assert end.usage.cached_tokens == 7444          # read, not write
+
+
+def test_no_token_field_the_engine_reports_is_ignored():
+    """The guard for the bug that produced this test.
+
+    `cache_creation_input_tokens` existed in every payload and was captured
+    nowhere — routinely the largest of the four counts and the dominant cost
+    driver — so the totals on Stats could not be reconciled against the list
+    price printed beside them, and were wrong by about 20x.
+
+    Rather than assert the four names we happen to know, this walks whatever
+    token fields the payload actually contains. If the engine adds a fifth,
+    this fails, which is the only way that discovery does not depend on
+    someone noticing a number looking odd.
+    """
+    payload = json.loads(_multi_model_result())
+    reported = {
+        k: v for k, v in payload["usage"].items()
+        if isinstance(v, int) and k.endswith("_tokens")
+    }
+
+    (end,) = [e for e in parse_line(_multi_model_result()) if isinstance(e, TurnEnd)]
+    captured = {
+        "input_tokens": end.usage.input_tokens,
+        "output_tokens": end.usage.output_tokens,
+        "cache_read_input_tokens": end.usage.cached_tokens,
+        "cache_creation_input_tokens": end.usage.cache_write_tokens,
+    }
+
+    missing = set(reported) - set(captured)
+    assert not missing, (
+        f"the engine reports token fields nothing captures: {sorted(missing)} — "
+        "totals shown to the user will not reconcile against cost"
+    )
+    for field, value in reported.items():
+        assert captured[field] == value, f"{field}: stored {captured[field]}, engine said {value}"
+
+
+def test_the_captured_totals_account_for_the_whole_turn():
+    """Every token the turn was billed for appears in exactly one category,
+    so the four rows on Stats sum to the turn rather than to a subset."""
+    payload = json.loads(_multi_model_result())
+    engine_total = sum(
+        v for k, v in payload["usage"].items()
+        if isinstance(v, int) and k.endswith("_tokens")
+    )
+
+    (end,) = [e for e in parse_line(_multi_model_result()) if isinstance(e, TurnEnd)]
+    shown = (end.usage.input_tokens + end.usage.output_tokens
+             + end.usage.cached_tokens + end.usage.cache_write_tokens)
+    assert shown == engine_total
