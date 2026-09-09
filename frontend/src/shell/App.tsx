@@ -65,6 +65,9 @@ export default function App() {
   const handoffRef = useRef(() => {})
   const sessionsRef = useRef(sessions)
   const permissionRef = useRef(permission)
+  // The tab the composer is bound to, which is what Escape should stop --
+  // the same rule the composer itself follows, kept in one place.
+  const composerTabRef = useRef('t0')
   tabsRef.current = tabs
   launcherRef.current = launcher
   paletteRef.current = palette
@@ -89,6 +92,8 @@ export default function App() {
   const generalTab = tabs.find((t) => t.mode === 'general')!.id
   const inChat = view === 'chat'
   const composerTab = inChat ? activeTab : generalTab
+
+  composerTabRef.current = composerTab
 
   const session = sessions[activeTab]
   const composerMode = sessions[composerTab].mode
@@ -151,10 +156,28 @@ export default function App() {
     } finally {
       // In `finally` so an abort or a throw cannot strand a session as
       // permanently busy, which would lock its composer with no way back.
+      const stopped = ctrl.signal.aborted
       delete aborts.current[tabId]
-      setSessions((s) => ({ ...s, [tabId]: { ...s[tabId], busy: false, thinking: null } }))
+      setSessions((s) => ({
+        ...s,
+        [tabId]: {
+          ...s[tabId],
+          busy: false,
+          thinking: null,
+          // Recorded in the transcript rather than left silent. A reply that
+          // simply stops mid-sentence is indistinguishable from one that
+          // finished badly, and you would not know whether to retry.
+          blocks: stopped
+            ? [...s[tabId].blocks, { kind: 'error', message: 'Stopped.', fatal: false }]
+            : s[tabId].blocks,
+        },
+      }))
     }
   }
+
+  /** Abort the active session's turn. The stream unwinds, the backend closes
+   *  its row as cancelled, and the engine process is killed with it. */
+  const stop = (tabId: string) => aborts.current[tabId]?.abort()
 
   // Sending from a panel takes you to the conversation it went to. Leaving
   // you on Settings while a reply arrives somewhere unseen would be worse
@@ -268,6 +291,18 @@ export default function App() {
         setPermission((p) => PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(p) + 1) % PERMISSION_CYCLE.length])
         return
       }
+      // Escape stops the running turn. Checked before the Cmd guard below
+      // because it carries no modifier, and placed after the launcher/palette
+      // check above so Escape still closes those first.
+      if (e.key === 'Escape') {
+        const tab = composerTabRef.current
+        if (aborts.current[tab]) {
+          e.preventDefault()
+          stop(tab)
+        }
+        return
+      }
+
       if (!e.metaKey || e.altKey) return
 
       // Cmd+Shift+H hands the active session off to another mode.
@@ -408,6 +443,7 @@ export default function App() {
             onChange={(v) => setDrafts({ ...drafts, [composerTab]: v })}
             onSend={send}
             busy={sessions[composerTab].busy}
+            onStop={() => stop(composerTab)}
             permission={permission}
             onCyclePermission={() =>
               setPermission(PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length])

@@ -208,9 +208,10 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   onSend: () => void
   /** A turn is in flight. Sending again would race it, not queue behind it. */
   busy?: boolean
+  onStop: () => void
   permission: Permission
   onCyclePermission: () => void
-}>(function Composer({ mode, value, onChange, onSend, busy, permission, onCyclePermission }, forwarded) {
+}>(function Composer({ mode, value, onChange, onSend, busy, onStop, permission, onCyclePermission }, forwarded) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useImperativeHandle(forwarded, () => ref.current as HTMLTextAreaElement)
 
@@ -298,15 +299,28 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
         <span className="flex shrink-0 items-center gap-[6px] self-end">
           <IconButton title="Attach" d="M21 11l-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8" />
           {busy ? (
-            /* The prompt glyph would keep inviting input while the engine is
-               mid-turn. A spinner in its place says the session is working
-               without adding a control that does nothing. */
-            <span
-              aria-label="Working"
-              role="status"
-              className="mr-[3px] h-[13px] w-[13px] animate-spin rounded-full border border-line motion-reduce:animate-none"
-              style={{ borderTopColor: accent }}
-            />
+            /* The spinner is also the stop control. A turn you cannot
+               interrupt spends the 5h window whether or not you still want
+               the answer, and a separate button would sit dead for every
+               moment the session is idle. */
+            <button
+              type="button"
+              onClick={onStop}
+              title="Stop  esc"
+              aria-label="Stop"
+              className="group mr-[3px] flex h-[15px] w-[15px] items-center justify-center rounded-full"
+            >
+              <span
+                aria-hidden
+                className="h-[13px] w-[13px] animate-spin rounded-full border border-line group-hover:hidden motion-reduce:animate-none"
+                style={{ borderTopColor: accent }}
+              />
+              <span
+                aria-hidden
+                className="hidden h-[9px] w-[9px] rounded-[1px] group-hover:block"
+                style={{ background: accent }}
+              />
+            </button>
           ) : (
             <IconButton title="Send" d="M4 12h15M13 6l6 6-6 6" onClick={() => value.trim() && onSend()} />
           )}
