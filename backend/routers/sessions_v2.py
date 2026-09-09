@@ -393,3 +393,23 @@ async def recap(session_id: int) -> dict:
         return {"recap": None}
     _store.save_recap(session_id, line, count)
     return {"recap": line, "cached": False}
+
+
+@router.delete("/stats")
+def reset_stats() -> dict:
+    """Clear recorded usage and start counting from now.
+
+    Usage rows only. Conversations, transcripts and the search index are
+    untouched: "the numbers are wrong, start again" is not the same request
+    as "forget what was said", and conflating them would destroy the more
+    valuable half to fix the less valuable one.
+
+    The early rows genuinely under-report — turns recorded before the
+    list-price column existed carry a zero — so a total spanning them is
+    wrong in a way no amount of arithmetic fixes. Starting clean is the
+    honest repair.
+    """
+    before = _store.lifetime_tokens()["turns"]
+    _store.db.execute("DELETE FROM usage")
+    _store.db.commit()
+    return {"cleared_turns": before}
