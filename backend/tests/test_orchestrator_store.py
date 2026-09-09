@@ -73,11 +73,21 @@ def test_search_survives_punctuation_and_short_words(store):
     assert store.search("a of to") == []      # nothing meaningful to match
 
 
-def test_usage_has_no_cost_column(store):
-    """A notional dollar figure that is never charged invites a UI that
-    presents quota as spend."""
+def test_the_only_cost_column_is_named_as_list_price(store):
+    """The original rule was no cost column at all, because a notional dollar
+    figure invites a UI that presents quota as spend. The rule is now
+    narrower rather than gone: a list-price column is allowed, because "what
+    would this have cost on the API" is a real question, but it must say so
+    in its own name so no caller can mistake it for a charge.
+
+    So a column called `cost_usd` or `spend` fails here on purpose.
+    """
     cols = {r[1] for r in store.db.execute("PRAGMA table_info(usage)")}
-    assert not any("cost" in c for c in cols)
+    cost_columns = {c for c in cols if "cost" in c or "spend" in c or "price" in c}
+    assert cost_columns == {"list_cost_usd"}, (
+        f"unexpected cost column(s): {cost_columns - {'list_cost_usd'}} — "
+        "a cost column must name itself list price"
+    )
 
 
 def test_daily_activity_feeds_the_contribution_grid(store):

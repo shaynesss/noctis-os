@@ -698,3 +698,37 @@ def test_an_engine_failure_returns_null_rather_than_erroring(client, tmp_path, m
 
 def test_recap_404s_for_an_unknown_conversation(client):
     assert client.get("/v2/sessions/history/999999/recap", headers=AUTH).status_code == 404
+
+
+# ------------------------------------------------------------- billing
+
+def test_billing_says_plainly_that_nothing_is_charged(client):
+    """The figure is API list price. Under a subscription the marginal cost
+    of a turn is zero, and a UI that renders it as a bill would be lying with
+    a real number."""
+    body = client.get("/v2/billing", headers=AUTH).json()
+    assert body["charged"] is False
+    assert body["basis"] == "api-list-price"
+
+
+def test_list_cost_sums_every_model_a_turn_billed(tmp_path):
+    """The background tier costs list price too, so summing only the primary
+    would under-report for the same reason the token counts once did."""
+    from orchestrator.parser import parse_line
+    from orchestrator.events import TurnEnd
+
+    fixture = (Path(__file__).parent / "fixtures" / "result_multi_model.json").read_text()
+    (end,) = [e for e in parse_line(fixture) if isinstance(e, TurnEnd)]
+    # 0.196462 (opus) + 0.000963 (haiku)
+    assert round(end.usage.list_cost_usd, 6) == round(0.196462 + 0.000963, 6)
+
+
+def test_limits_report_overage_even_before_anything_is_known(client):
+    """Overage is the one signal here that can mean money, so its absence
+    must be explicit rather than a missing key the UI reads as undefined."""
+    body = client.get("/v2/sessions/limits", headers=AUTH).json()
+    assert body["using_overage"] is False
+
+
+def test_billing_requires_auth(client):
+    assert client.get("/v2/billing").status_code == 401

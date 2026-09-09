@@ -157,6 +157,12 @@ def parse_line(line: str) -> list[Event]:
                 context_window=int(
                     (d.get("modelUsage") or {}).get(primary, {}).get("contextWindow", 0)
                 ),
+                # Every model the turn billed, not just the primary -- the
+                # background tier costs list price too.
+                list_cost_usd=sum(
+                    float(m.get("costUSD") or 0.0)
+                    for m in (d.get("modelUsage") or {}).values()
+                ),
             ),
             duration_ms=int(d.get("duration_ms", 0)),
             stop_reason=d.get("stop_reason"),

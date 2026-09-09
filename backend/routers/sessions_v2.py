@@ -208,7 +208,8 @@ def limits() -> dict:
     """
     lim = _manager.limits
     if lim is None:
-        return {"known": False, "five_hour": None, "seven_day": None}
+        return {"known": False, "five_hour": None, "seven_day": None,
+                "using_overage": False}
     return {
         "known": True,
         "five_hour": {"used": lim.five_hour_used, "resets_at": lim.five_hour_resets_at},
@@ -240,6 +241,11 @@ def stats() -> dict:
             # cost rather than burying it inside a larger number.
             "aux_input": life["input"] - life["primary_input"],
             "aux_output": life["output"] - life["primary_output"],
+            # API list price for everything run so far. Named list_cost, not
+            # cost or spend, because it is what these turns WOULD have cost
+            # on the API and not what anything charged — the subscription's
+            # marginal cost per turn is zero. See events.Usage.
+            "list_cost": round(life["list_cost"], 2),
         },
         "by_mode": [
             {"mode": r["mode"], "input": r["input"], "output": r["output"], "turns": r["turns"]}

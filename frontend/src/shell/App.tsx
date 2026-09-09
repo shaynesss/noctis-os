@@ -10,12 +10,14 @@
  * mode merge used. */
 import { useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
-import { BottomBar, Composer, Rail, TabBar, TitleStrip } from './Chrome'
+import { BottomBar, Composer, OverageBanner, Rail, TabBar, TitleStrip } from './Chrome'
 import {
   del, emptyFold, fold, get, readImage, runSession,
   type Attachment, type HistorySession, type HistoryTranscript,
   type Stats as StatsPayload, type Window,
 } from './engine'
+import { Unreachable } from './Async'
+import { useFetched } from './useFetched'
 import { hasImage } from './clipboard'
 import { CommandMenu, ModelPicker, PermissionPicker, type ModelOption } from './Commands'
 import { matching } from './slash'
@@ -24,8 +26,8 @@ import { turnFinished } from './notify'
 import { Palette } from './Palette'
 import { Reader } from './Reader'
 import {
-  Brief, Inbox, Settings,
-  type BriefPayload, type ConfigPayload, type InboxPayload,
+  Brief, Inbox, ListPriceFact, Settings,
+  type BillingPayload, type BriefPayload, type ConfigPayload, type InboxPayload,
 } from './Panels'
 import { Transcript } from './Transcript'
 import {
@@ -113,7 +115,17 @@ export default function App() {
   // Newest rolling-window report, for the status bar. Null until a session
   // has reported one -- see the backend's known:false for why that is not
   // the same as zero.
-  const [limits, setLimits] = useState<{ five_hour: Window; seven_day: Window } | null>(null)
+  const [limits, setLimits] = useState<
+    { five_hour: Window; seven_day: Window; using_overage?: boolean } | null
+  >(null)
+
+  /* Dismissed for this window only, and re-armed if overage clears and
+   * returns. Persisting the dismissal would mean a later, real overage
+   * arriving silently because of a click made days ago. */
+  const [overageDismissed, setOverageDismissed] = useState(false)
+  useEffect(() => {
+    if (!limits?.using_overage) setOverageDismissed(false)
+  }, [limits?.using_overage])
 
   // The panels are not conversations. While one is open the composer binds
   // to General rather than to whichever tab you happened to leave behind --
@@ -686,6 +698,9 @@ export default function App() {
   return (
     <div className="relative flex h-full flex-col" style={{ ['--accent' as string]: accent }}>
       <TitleStrip />
+      {limits?.using_overage && !overageDismissed && (
+        <OverageBanner onDismiss={() => setOverageDismissed(true)} />
+      )}
 
       <div className="flex min-h-0 flex-1">
         <Rail view={view} onView={setView} />
@@ -870,33 +885,6 @@ function Fetched<T>({
   return <>{render(data)}</>
 }
 
-/** Fetch a route once on mount. `null` while loading, `false` when the
- *  request failed -- three states, because "loading" and "the backend is
- *  down" must not render the same way. */
-function useFetched<T>(path: string): T | null | false {
-  const [data, setData] = useState<T | null | false>(null)
-  useEffect(() => {
-    let live = true
-    void get<T>(path).then((d) => live && setData(d ?? false))
-    return () => {
-      live = false
-    }
-  }, [path])
-  return data
-}
-
-/** Shown wherever a panel's data could not be loaded. Says what failed and
- *  what to do about it, rather than rendering an empty state that looks like
- *  "you have no data" when it means "nothing was asked". */
-function Unreachable({ what }: { what: string }) {
-  return (
-    <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-dim">
-      Could not load {what}. The backend is not responding on{' '}
-      <code className="font-mono text-[11.5px] text-ink-faint">localhost:8000</code>.
-    </div>
-  )
-}
-
 const fmt = (n: number) => n.toLocaleString()
 
 function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } | null }) {
@@ -988,6 +976,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
                   turn that was 899 of 901 input tokens -- so a page that
                   reported only the model you chose would be wrong by two
                   orders of magnitude while looking perfectly reasonable. */}
+              <ListPrice />
               {stats.lifetime.aux_input > 0 && (
                 <div className="mt-[13px] flex items-baseline gap-2 border-t border-line pt-[11px] font-mono text-[11.5px]">
                   <span className="text-ink-dim">of which background tier</span>
@@ -1099,4 +1088,11 @@ function loadDrafts(): Record<string, string> {
   } catch {
     return { t0: '' }
   }
+}
+
+/** The list-price line under Stats' lifetime tokens. Its own fetch, so a
+ *  slow or absent billing route cannot hold up the counts above it. */
+function ListPrice() {
+  const data = useFetched<BillingPayload>('/v2/billing')
+  return data ? <ListPriceFact data={data} /> : null
 }

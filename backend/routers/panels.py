@@ -154,6 +154,39 @@ def inbox() -> dict:
             "counts": {"proposals": len(proposals), "flagged": len(flagged)}}
 
 
+@router.get("/billing")
+def billing() -> dict:
+    """What the plan is doing, in the only terms that are true.
+
+    Two different things, deliberately kept apart:
+
+    `list_cost` is what every turn so far would have cost at API list price.
+    It is not a charge and never was — the engine reports costBasis "list",
+    and a subscription's marginal cost per turn is zero. It answers "what is
+    this subscription worth", which is a real question.
+
+    `using_overage` is the one that can mean money. It comes from the
+    engine's own rate-limit reporting, and it is the only signal here that
+    should ever raise an alarm.
+    """
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore()
+    try:
+        life = store.lifetime_tokens()
+        return {
+            "list_cost": round(life["list_cost"], 2),
+            "turns": life["turns"],
+            "since": life["since"],
+            # Stated rather than implied, so the UI has no excuse to render
+            # the figure above as a bill.
+            "charged": False,
+            "basis": "api-list-price",
+        }
+    finally:
+        store.close()
+
+
 @router.get("/config")
 def config() -> dict:
     """What each mode actually runs — read from the driver, not restated.

@@ -453,6 +453,43 @@ function Meter({ pct, tone = 'var(--color-good)' }: { pct: number; tone?: string
 export interface LiveLimits {
   five_hour: { used: number; resets_at: number }
   seven_day: { used: number; resets_at: number }
+  using_overage?: boolean
+}
+
+/* Shown only past the plan's limits.
+ *
+ * This is the one number in the app that can mean money. Everything else --
+ * tokens, list price, window percentages -- is either free or notional, and
+ * an alert about any of those would train you to dismiss this one.
+ *
+ * A band rather than a modal: it must be impossible to miss and equally
+ * impossible for it to stop you working, since you may well have decided the
+ * overage is worth it.
+ */
+export function OverageBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div
+      role="status"
+      className="flex shrink-0 items-center gap-[10px] border-b px-[14px] py-[7px] font-mono text-[11.5px]"
+      style={{
+        borderColor: 'color-mix(in srgb, var(--color-faber) 40%, var(--color-surface))',
+        background: 'color-mix(in srgb, var(--color-faber) 12%, var(--color-surface))',
+        color: 'var(--color-faber)',
+      }}
+    >
+      <span aria-hidden>▲</span>
+      <span>
+        Past your plan's included usage — sessions from here may be billed as overage.
+      </span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="ml-auto rounded-[3px] px-[6px] py-px text-ink-faint transition-colors hover:bg-line hover:text-ink"
+      >
+        dismiss
+      </button>
+    </div>
+  )
 }
 
 export interface BarState {

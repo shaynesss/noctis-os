@@ -133,6 +133,13 @@ class Usage:
     # report a window, which the UI must show as unknown rather than as 0%.
     context_tokens: int = 0
     context_window: int = 0
+    # What this turn would have cost at API list price, summed across every
+    # model it billed. Explicitly NOT what you were charged: the engine
+    # reports costBasis "list", and under a subscription the marginal cost of
+    # a turn is zero. Kept because "what would this have cost me on the API"
+    # is a real question with a real answer — it is what the subscription is
+    # worth — and refused as a spend figure, which it is not.
+    list_cost_usd: float = 0.0
 
     @property
     def context_pct(self) -> float:

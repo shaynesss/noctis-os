@@ -32,6 +32,14 @@ export interface InboxPayload {
   counts: { proposals: number; flagged: number }
 }
 
+export interface BillingPayload {
+  list_cost: number
+  turns: number
+  since: string | null
+  charged: boolean
+  basis: string
+}
+
 export interface ConfigPayload {
   modes: { mode: string; model: string; disallowed: string[]; allowed: string[] }[]
   permission_cycle: string[]
@@ -242,5 +250,27 @@ export function Settings({ data }: { data: ConfigPayload }) {
         </div>
       </Card>
     </>
+  )
+}
+
+
+/* A curiosity, not a setting — which is why it lives on Stats.
+ *
+ * The engine reports a per-turn figure at API list price. Under a
+ * subscription that is not a charge, so it has no business in a settings
+ * page where numbers look like things you owe. As a line under the token
+ * counts it reads as what it is: what all this would have cost the other
+ * way.
+ */
+export function ListPriceFact({ data }: { data: BillingPayload }) {
+  if (data.list_cost <= 0) return null
+  return (
+    <div className="mt-[13px] flex flex-wrap items-baseline gap-x-[7px] gap-y-[3px] border-t border-line pt-[11px] font-mono text-[11.5px]">
+      <span className="text-ink-faint">on the API this would have been</span>
+      <span className="tabular-nums text-ink">${data.list_cost.toFixed(2)}</span>
+      {/* The clause that stops it reading as a bill. Short, because a long
+          disclaimer under a number makes the number look disputed. */}
+      <span className="text-ink-faint">· the subscription covered it</span>
+    </div>
   )
 }

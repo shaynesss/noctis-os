@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS usage (
     aux_input_tokens  INTEGER NOT NULL DEFAULT 0,
     aux_output_tokens INTEGER NOT NULL DEFAULT 0,
     duration_ms   INTEGER NOT NULL DEFAULT 0,
+    -- API list price for this turn. Never a charge; see events.Usage.
+    list_cost_usd REAL NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_usage_created ON usage(created_at);
@@ -133,6 +135,8 @@ class ConversationStore:
                 self.db.execute(
                     f"ALTER TABLE usage ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
                 )
+        if "list_cost_usd" not in usage_cols:
+            self.db.execute("ALTER TABLE usage ADD COLUMN list_cost_usd REAL NOT NULL DEFAULT 0")
 
         session_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(sessions)")}
         if "recap" not in session_cols:
@@ -238,10 +242,10 @@ class ConversationStore:
             self.db.execute(
                 "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
                 " cached_tokens, aux_input_tokens, aux_output_tokens, duration_ms,"
-                " created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                " list_cost_usd, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (session_id, mode, u.model, u.input_tokens, u.output_tokens,
                  u.cached_tokens, u.aux_input_tokens, u.aux_output_tokens,
-                 event.duration_ms, _now()),
+                 event.duration_ms, u.list_cost_usd, _now()),
             )
             self.db.commit()
 
@@ -310,6 +314,7 @@ class ConversationStore:
             "       COALESCE(SUM(input_tokens),0) AS primary_input,"
             "       COALESCE(SUM(output_tokens),0) AS primary_output,"
             "       COALESCE(SUM(cached_tokens),0) AS cached,"
+            "       COALESCE(SUM(list_cost_usd),0) AS list_cost,"
             "       COUNT(*) AS turns,"
             "       MIN(created_at) AS since FROM usage").fetchone()
 
