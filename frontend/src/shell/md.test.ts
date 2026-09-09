@@ -82,3 +82,40 @@ describe('parseInline', () => {
     expect(parseInline('nothing special')).toEqual([{ type: 'text', text: 'nothing special' }])
   })
 })
+
+/* The activity grid's date handling, which produced "0 sessions in the last
+ * year" while the backend was returning rows for today. */
+import { buildGrid } from './grid'
+
+describe('activity grid', () => {
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+  it("counts sessions recorded today", () => {
+    // The grid used a hardcoded date, so anything after it was treated as
+    // future and forced to zero -- which is every real session.
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const weeks = buildGrid(today, new Map([[iso(today), 10]]))
+    expect(weeks.flat().reduce((n, c) => n + c.count, 0)).toBe(10)
+  })
+
+  it('counts yesterday too', () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const y = new Date(today)
+    y.setDate(y.getDate() - 1)
+    const weeks = buildGrid(today, new Map([[iso(y), 3]]))
+    expect(weeks.flat().reduce((n, c) => n + c.count, 0)).toBe(3)
+  })
+
+  it('leaves future days empty and marked', () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const weeks = buildGrid(today, new Map([[iso(tomorrow), 99]]))
+    expect(weeks.flat().reduce((n, c) => n + c.count, 0)).toBe(0)
+    expect(weeks.flat().some((c) => c.future)).toBe(true)
+  })
+})

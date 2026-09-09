@@ -70,6 +70,7 @@ export function Transcript({
   thinking,
   mode,
   startedAt,
+  recap,
 }: {
   blocks: Block[]
   accent: string
@@ -78,10 +79,24 @@ export function Transcript({
   mode: Mode
   /** When the running turn began, or null when nothing is running. */
   startedAt?: number | null
+  /** One-line reminder of where a restored conversation left off. */
+  recap?: string | null
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
+        {/* Above the transcript, not inside it: this is not something anyone
+            said. It is a reminder of where a resumed conversation got to,
+            which is the one thing you need before reading a wall of text you
+            wrote days ago. */}
+        {recap && (
+          <div className="mb-[20px] flex gap-[9px] text-[12.5px] italic leading-[1.6] text-ink-faint">
+            <span aria-hidden className="not-italic" style={{ color: accent }}>✳</span>
+            <span>
+              <span className="font-semibold not-italic">recap:</span> {recap}
+            </span>
+          </div>
+        )}
         {blocks.map((b, i) => {
           if (b.kind === 'user') {
             /* A prompt glyph and dimmer ink instead of a YOU label: it is

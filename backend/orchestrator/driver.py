@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import AsyncIterator, Sequence
 
-from .events import EngineError, Event, SessionStart
+from .events import EngineError, Event, SessionStart, TextDelta
 from .parser import parse_line
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -240,3 +240,37 @@ def session_id_of(events: Sequence[Event]) -> str | None:
         if isinstance(e, SessionStart) and e.session_id:
             return e.session_id
     return None
+
+
+# A one-shot for short mechanical text, not a session.
+#
+# Deliberately outside the SessionManager: it does not belong in the
+# concurrency budget (it is not work you are waiting on), it must not appear
+# in history as a conversation, and queueing it behind two real sessions
+# would make a recap arrive long after the transcript it describes.
+RECAP_MODEL = os.environ.get("NOCTIS_RECAP_MODEL", "claude-haiku-4-5")
+
+
+async def one_shot(prompt: str, timeout: float = 60) -> str:
+    """Run a single prompt on the cheap tier and return its text.
+
+    Tools are refused outright rather than left to the permission mode: this
+    summarises text that is handed to it, and a summariser that can read the
+    filesystem is a larger thing than the job needs.
+    """
+    command = [
+        claude_binary(), "-p", prompt,
+        "--model", RECAP_MODEL,
+        "--output-format", "stream-json",
+        "--verbose",
+        "--permission-mode", "plan",
+        "--disallowedTools", "Bash Edit Write Read Grep Glob WebSearch WebFetch Task",
+    ]
+    env = dict(os.environ)
+    env["CLAUDE_CONFIG_DIR"] = str(CONFIG_ROOT / "general")
+
+    parts: list[str] = []
+    async for event in launch(command, env=env, timeout=timeout):
+        if isinstance(event, TextDelta):
+            parts.append(event.text)
+    return "".join(parts).strip()

@@ -450,6 +450,15 @@ export default function App() {
           engineId: latest.engine_id ?? undefined,
         },
       }))
+
+      /* Fetched after the transcript, not with it. Generating a recap costs
+       * an engine call and takes seconds; blocking the restored conversation
+       * on it would trade the thing you came back for against the sentence
+       * describing it. */
+      const r = await get<{ recap: string | null }>(`/v2/sessions/history/${latest.id}/recap`)
+      if (live && r?.recap) {
+        setSessions((prev) => ({ ...prev, t0: { ...prev.t0, recap: r.recap } }))
+      }
     })()
     return () => {
       live = false
@@ -524,6 +533,7 @@ export default function App() {
             thinking={session.thinking}
             mode={session.mode}
             startedAt={session.startedAt}
+            recap={session.recap}
           />
         ) : (
           <Pane view={view} limits={limits} />

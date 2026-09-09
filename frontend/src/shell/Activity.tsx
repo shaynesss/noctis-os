@@ -13,43 +13,9 @@
  * Data will come from `store.daily_activity()` (sessions per day). Mocked
  * here per dev.md §3.0 — screens before wiring. */
 
+import { buildGrid } from './grid'
+
 const LEVELS = ['#171717', '#4a1710', '#8a2410', '#c22d11', '#e53311']
-const WEEKS = 53
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
-interface Cell {
-  date: Date
-  count: number
-  future: boolean
-}
-
-/** Deterministic sample data — a fixed seed so the grid does not reshuffle on
- *  every render, which would make a layout problem look like a data problem. */
-/** The 53-week grid, filled from real per-day session counts.
- *
- * Only days with activity come from the backend, so the grid supplies the
- * gaps rather than the payload carrying 365 mostly-zero rows. Dates are
- * matched on local YYYY-MM-DD, which is what SQLite's date() produces and
- * what the person looking at the grid means by "that day".
- */
-function buildGrid(today: Date, counts: Map<string, number>): Cell[][] {
-  const start = new Date(today)
-  start.setDate(start.getDate() - 364 - today.getDay())
-
-  const weeks: Cell[][] = []
-  for (let w = 0; w < WEEKS; w++) {
-    const col: Cell[] = []
-    for (let d = 0; d < 7; d++) {
-      const date = new Date(start)
-      date.setDate(date.getDate() + w * 7 + d)
-      const future = date > today
-      col.push({ date, future, count: future ? 0 : (counts.get(iso(date)) ?? 0) })
-    }
-    weeks.push(col)
-  }
-  return weeks
-}
-
 /** Count to swatch. The ramp is Faber red because the grid measures work,
  *  and work is what Faber is; the empty cell is the page's own surface so
  *  quiet days recede rather than reading as a value. */
@@ -58,14 +24,22 @@ function level(count: number): string {
   return LEVELS[Math.min(LEVELS.length - 1, count)]
 }
 
-/** Local YYYY-MM-DD. `toISOString` would shift the date across a timezone
- *  boundary and put a late-evening session on the following day. */
-function iso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
+
+
+/** Deterministic sample data — a fixed seed so the grid does not reshuffle on
+ *  every render, which would make a layout problem look like a data problem. */
 export function Activity({ days = [] }: { days?: { day: string; sessions: number }[] }) {
-  const today = new Date(2026, 8, 7)
+  /* Real today, at local midnight.
+   *
+   * This was hardcoded to a fixed date from the mock era, and once the grid
+   * took real data every session landed on a day the grid believed was in
+   * the future -- where counts are forced to zero. The result was "0
+   * sessions in the last year" sitting directly above the rows that proved
+   * otherwise. Midnight, so a cell is a day rather than a moment. */
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
   const weeks = buildGrid(today, new Map(days.map((d) => [d.day, d.sessions])))
   const total = weeks.flat().reduce((n, c) => n + c.count, 0)
 

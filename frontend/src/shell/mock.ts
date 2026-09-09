@@ -98,6 +98,8 @@ export interface SessionState {
   context?: number | null
   /** Epoch ms when the running turn began, null when nothing is running. */
   startedAt?: number | null
+  /** One-line reminder of where a restored conversation left off. */
+  recap?: string | null
 }
 
 /* The seed is now only what an empty install starts with: one General tab

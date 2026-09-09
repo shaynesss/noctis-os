@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from orchestrator.driver import MODE_MODELS, PERMISSION_CYCLE, SessionSpec
+from orchestrator.driver import MODE_MODELS, PERMISSION_CYCLE, SessionSpec, one_shot
 from orchestrator.events import EngineError
 from orchestrator.manager import SessionManager
 from orchestrator.store import ConversationStore
@@ -303,3 +303,60 @@ def delete_conversation(session_id: int) -> dict:
     _store.db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
     _store.db.commit()
     return {"deleted": session_id}
+
+
+# Regenerate once the conversation has moved this far past the recap it has.
+# A recap describing the first third of a long session is worse than none,
+# because it reads as current.
+RECAP_STALE_AFTER = 6
+
+RECAP_PROMPT = """Summarise this conversation in ONE sentence, for the person who was in it,
+as a reminder of where they left off. Present tense. Name what is being worked on and what
+came last. No preamble, no quotes, no markdown — output only the sentence.
+
+CONVERSATION:
+"""
+
+
+@router.get("/history/{session_id}/recap")
+async def recap(session_id: int) -> dict:
+    """A one-line reminder of what a conversation is about.
+
+    Generated on the cheap tier and cached on the row, so reopening the same
+    conversation does not pay for it again. Regenerated only once the
+    conversation has moved on enough that the stored line would mislead.
+
+    Returns recap: null rather than erroring when there is nothing to
+    summarise or the engine is unavailable — a missing recap should quietly
+    not appear, never break the transcript it sits above.
+    """
+    row = _store.db.execute(
+        "SELECT id, recap, recap_at FROM sessions WHERE id=?", (session_id,)
+    ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"No session {session_id}")
+
+    count = _store.message_count(session_id)
+    if count < 2:
+        return {"recap": None}          # nothing has happened worth recapping
+    if row["recap"] and count - row["recap_at"] < RECAP_STALE_AFTER:
+        return {"recap": row["recap"], "cached": True}
+
+    # Newest messages, not oldest: the reminder you want is where the
+    # conversation got to, and the tail is also what a long transcript would
+    # otherwise lose to truncation.
+    rows = _store.transcript(session_id)[-40:]
+    body = "\n".join(f"{r['role']}: {(r['content'] or '')[:600]}" for r in rows)
+    if not body.strip():
+        return {"recap": None}
+
+    try:
+        text = await one_shot(RECAP_PROMPT + body[-8000:])
+    except Exception:  # noqa: BLE001 - a recap must never break the transcript
+        return {"recap": None}
+
+    line = " ".join(text.split())
+    if not line:
+        return {"recap": None}
+    _store.save_recap(session_id, line, count)
+    return {"recap": line, "cached": False}

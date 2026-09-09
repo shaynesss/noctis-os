@@ -40,7 +40,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     title             TEXT,
     cwd               TEXT,
     started_at        TEXT NOT NULL,
-    ended_at          TEXT
+    ended_at          TEXT,
+    -- One-line reminder of what this conversation is about, and the message
+    -- count it was written from. Cached because generating it costs an
+    -- engine call, and regenerated only once the conversation has moved on
+    -- enough for the old one to be misleading.
+    recap             TEXT,
+    recap_at          INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -121,12 +127,18 @@ class ConversationStore:
         idempotent add-column pass: safe to run on every open, and doing
         nothing when the columns are already there.
         """
-        have = {r["name"] for r in self.db.execute("PRAGMA table_info(usage)")}
+        usage_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(usage)")}
         for column in ("aux_input_tokens", "aux_output_tokens"):
-            if column not in have:
+            if column not in usage_cols:
                 self.db.execute(
                     f"ALTER TABLE usage ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
                 )
+
+        session_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(sessions)")}
+        if "recap" not in session_cols:
+            self.db.execute("ALTER TABLE sessions ADD COLUMN recap TEXT")
+        if "recap_at" not in session_cols:
+            self.db.execute("ALTER TABLE sessions ADD COLUMN recap_at INTEGER NOT NULL DEFAULT 0")
 
     @property
     def db(self) -> sqlite3.Connection:
@@ -166,6 +178,18 @@ class ConversationStore:
         )
         self.db.commit()
         return int(cur.lastrowid)
+
+    def message_count(self, session_id: int) -> int:
+        return int(self.db.execute(
+            "SELECT COUNT(*) c FROM messages WHERE session_id=?", (session_id,)
+        ).fetchone()["c"])
+
+    def save_recap(self, session_id: int, recap: str, at_messages: int) -> None:
+        self.db.execute(
+            "UPDATE sessions SET recap=?, recap_at=? WHERE id=?",
+            (recap, at_messages, session_id),
+        )
+        self.db.commit()
 
     def find_by_engine_id(self, engine_session_id: str) -> int | None:
         """The row for an existing engine session, if we have one."""
