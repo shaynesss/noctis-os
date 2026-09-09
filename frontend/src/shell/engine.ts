@@ -27,7 +27,9 @@ export type WireEvent =
   | { t: 'tool_result'; id: string; content: string; truncated: boolean; is_error: boolean }
   | { t: 'limits'; five_hour: Window; seven_day: Window; using_overage: boolean }
   | { t: 'turn_end'; session_id: string; duration_ms: number; stop_reason: string | null
-      usage: { input: number; output: number; cached: number; model: string } }
+      usage: { input: number; output: number; cached: number; model: string
+               aux_input: number; aux_output: number
+               context_tokens: number; context_window: number } }
   | { t: 'error'; message: string; fatal: boolean }
 
 export interface Window {
@@ -126,6 +128,8 @@ export async function* runSession(
 export interface Fold {
   blocks: Block[]
   sessionId: string | null
+  /** 0-1 of the context window, null until a turn has reported one. */
+  context: number | null
   /** Live thinking-token estimate; null when not currently reasoning. */
   thinking: number | null
   done: boolean
@@ -134,6 +138,7 @@ export interface Fold {
 export const emptyFold = (blocks: Block[] = []): Fold => ({
   blocks,
   sessionId: null,
+  context: null,
   thinking: null,
   done: false,
 })
@@ -201,7 +206,17 @@ export function fold(state: Fold, e: WireEvent): Fold {
     }
 
     case 'turn_end':
-      return { ...state, sessionId: e.session_id, thinking: null, done: true }
+      return {
+        ...state,
+        sessionId: e.session_id,
+        thinking: null,
+        done: true,
+        // Null when the engine reported no window: unknown must not render
+        // as 0%, which reads as a conversation with room to spare.
+        context: e.usage.context_window
+          ? e.usage.context_tokens / e.usage.context_window
+          : state.context,
+      }
 
     case 'error':
       return {

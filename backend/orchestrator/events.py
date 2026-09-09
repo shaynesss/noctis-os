@@ -126,6 +126,18 @@ class Usage:
     model: str
     aux_input_tokens: int = 0
     aux_output_tokens: int = 0
+    # What the turn actually sent: fresh input plus everything read from or
+    # written to the cache. Against `context_window` this is how full the
+    # window is -- the one number in the status bar that says whether a long
+    # conversation is approaching its limit. Zero when the engine did not
+    # report a window, which the UI must show as unknown rather than as 0%.
+    context_tokens: int = 0
+    context_window: int = 0
+
+    @property
+    def context_pct(self) -> float:
+        """0.0-1.0, or 0.0 when the window is unknown."""
+        return self.context_tokens / self.context_window if self.context_window else 0.0
 
     @property
     def total_input(self) -> int:

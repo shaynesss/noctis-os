@@ -192,3 +192,23 @@ def test_missing_model_usage_does_not_crash():
                        "usage": {"input_tokens": 1, "output_tokens": 1}})
     (end,) = [e for e in parse_line(line) if isinstance(e, TurnEnd)]
     assert end.usage.model == ""
+
+
+def test_context_usage_comes_from_the_whole_prompt():
+    """Window occupancy is fresh input plus everything read from or written
+    to the cache -- input_tokens alone was 2 on a turn that actually sent
+    26,589, so it would have reported a full conversation as empty."""
+    (end,) = [e for e in parse_line(_multi_model_result()) if isinstance(e, TurnEnd)]
+    assert end.usage.context_tokens == 2 + 7444 + 19143
+    assert end.usage.context_window == 1_000_000
+    assert round(end.usage.context_pct * 100, 1) == 2.7
+
+
+def test_unknown_context_window_is_not_reported_as_empty():
+    """No window means unknown, and the UI must show it as unknown rather
+    than as 0% -- which would read as a conversation with room to spare."""
+    line = json.dumps({"type": "result", "session_id": "s", "duration_ms": 1,
+                       "usage": {"input_tokens": 5, "output_tokens": 1}})
+    (end,) = [e for e in parse_line(line) if isinstance(e, TurnEnd)]
+    assert end.usage.context_window == 0
+    assert end.usage.context_pct == 0.0

@@ -11,6 +11,9 @@ says the generator has not run, because the invented one gets believed.
 """
 from __future__ import annotations
 
+import subprocess
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Query
 
 import vault_io
@@ -204,3 +207,45 @@ def vault_doc(path: str = Query(min_length=1)) -> dict:
     if not resolved.is_file():
         raise HTTPException(status_code=404, detail=f"No such document: {path}")
     return {"path": path, "markdown": resolved.read_text(encoding="utf-8")}
+
+
+@router.get("/git")
+def git_branch(cwd: str = Query(min_length=1)) -> dict:
+    """The current branch for a working directory.
+
+    Its own route rather than a field on something else: it changes when you
+    switch branches in a terminal, not when a session does anything, so it
+    cannot ride along on session state without going stale.
+
+    Returns branch: null rather than erroring when the directory is not a
+    repository — plenty of useful working directories are not, and the status
+    bar should simply omit the segment instead of showing a failure.
+    """
+    try:
+        resolved = _safe_home_dir(cwd)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(resolved), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {"branch": None}
+    branch = out.stdout.strip()
+    return {"branch": branch if out.returncode == 0 and branch else None}
+
+
+def _safe_home_dir(raw: str) -> Path:
+    """A client-supplied directory, confined to home.
+
+    Same rule as the session launcher's `_safe_cwd`, for the same reason:
+    this path reaches a subprocess. Resolved before the containment check so
+    a symlink cannot smuggle one past it.
+    """
+    resolved = Path(raw).expanduser().resolve()
+    home = Path.home().resolve()
+    if resolved != home and home not in resolved.parents:
+        raise ValueError("Directory must be inside the home directory")
+    return resolved

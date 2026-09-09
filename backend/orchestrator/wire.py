@@ -78,7 +78,9 @@ def to_dict(e: Event) -> dict[str, Any]:
                           "cached": e.usage.cached_tokens,
                           "model": e.usage.model,
                           "aux_input": e.usage.aux_input_tokens,
-                          "aux_output": e.usage.aux_output_tokens}}
+                          "aux_output": e.usage.aux_output_tokens,
+                          "context_tokens": e.usage.context_tokens,
+                          "context_window": e.usage.context_window}}
 
     if isinstance(e, EngineError):
         return {"t": "error", "message": e.message, "fatal": e.fatal}

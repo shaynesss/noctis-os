@@ -24,7 +24,7 @@ import {
 } from './Panels'
 import { Transcript } from './Transcript'
 import {
-  EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_LABEL, PERMISSION_CYCLE,
+  EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL, PERMISSION_CYCLE,
   type Mode, type Permission, type SessionState, type Tab,
 } from './mock'
 import './tokens.css'
@@ -153,6 +153,7 @@ export default function App() {
             ...s[tabId],
             blocks: state.blocks,
             thinking: state.thinking,
+            context: state.context,
             engineId: state.sessionId ?? s[tabId].engineId,
           },
         }))
@@ -394,6 +395,30 @@ export default function App() {
     }
   }, [])
 
+  /* The branch for the active session's directory.
+   *
+   * Its own fetch rather than a field on session state: it changes when you
+   * switch branches in a terminal, not when a session does anything, so
+   * carrying it on session state would show a branch you left. Re-read when
+   * the directory changes, and on window focus, which is when returning from
+   * that terminal actually happens.
+   */
+  const [branch, setBranch] = useState<string | null>(null)
+  const activeCwd = sessions[activeTab]?.cwd ?? ''
+  useEffect(() => {
+    if (!activeCwd) return
+    let live = true
+    const read = () =>
+      void get<{ branch: string | null }>(`/v2/git?cwd=${encodeURIComponent(activeCwd)}`)
+        .then((d) => live && setBranch(d?.branch ?? null))
+    read()
+    window.addEventListener('focus', read)
+    return () => {
+      live = false
+      window.removeEventListener('focus', read)
+    }
+  }, [activeCwd])
+
   // Focus the composer on mount. Without it the document has no keyboard
   // focus until something is clicked, so window-level shortcuts appear
   // broken until you happen to click -- which reads as the shortcut being
@@ -439,7 +464,15 @@ export default function App() {
         </div>
       </div>
 
-      <BottomBar limits={limits}>
+      <BottomBar
+        limits={limits}
+        state={{
+          cwd: shortenHome(activeCwd),
+          model: MODE_INFO[session.mode].model,
+          branch,
+          context: session.context ?? null,
+        }}
+      >
         <Composer
             ref={composerRef}
             mode={composerMode}
@@ -745,3 +778,10 @@ function labelFor(sessions: { mode: Mode; cwd: string | null; title: string }[])
 }
 
 const truncate = (s: string) => (s.length > 22 ? `${s.slice(0, 22)}…` : s)
+
+/** `/Users/me/Developer/x` → `~/Developer/x`. The home prefix is the least
+ *  informative part of a path and the bar has one line for it. */
+function shortenHome(path: string): string {
+  const m = path.match(/^\/Users\/[^/]+(\/.*)?$/)
+  return m ? `~${m[1] ?? ''}` : path
+}

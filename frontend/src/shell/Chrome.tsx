@@ -1,8 +1,8 @@
 /* Rail, tabs, composer, status, characters — the shell around the transcript. */
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Logo } from './Logo'
 import {
-  CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE, STATUS,
+  CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE,
   type Mode, type Permission, type Tab,
 } from './mock'
 
@@ -372,15 +372,52 @@ export interface LiveLimits {
   seven_day: { used: number; resets_at: number }
 }
 
-export function StatusBar({ limits }: { limits?: LiveLimits | null }) {
-  const s = STATUS
-  /* Real windows once a session has reported them, mock until then. The
-   * engine only sends `rate_limit_event` during a run, so before the first
-   * one there is genuinely nothing to show -- and these are the only numbers
-   * here that govern a decision (whether there is room to start another
-   * session), so they must never be invented. */
-  const fiveHour = limits ? Math.round(limits.five_hour.used * 100) : s.fiveHourPct
-  const sevenDay = limits ? Math.round(limits.seven_day.used * 100) : s.sevenDayPct
+export interface BarState {
+  cwd: string
+  model: string
+  /** Null while unknown, or when the directory is not a repository. */
+  branch: string | null
+  /** 0-1 of the context window, or null when the engine has not said. */
+  context: number | null
+}
+
+/** A value that re-renders every second.
+ *
+ * The clock and the reset countdown both need it, and both were previously
+ * frozen strings -- the bar showed 12:23 whatever the time was. One timer
+ * for both, rather than two drifting a fraction of a second apart.
+ */
+function useTick(): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  return now
+}
+
+/** "3h44m" / "12m" / "now". Compact because it sits in a one-line bar.
+ *
+ * Relative rather than a clock time: the question it answers is how long
+ * until you can work again, and a second absolute time next to the clock
+ * would invite reading one as the other.
+ */
+function until(epochSeconds: number, now: number): string {
+  const mins = Math.round((epochSeconds * 1000 - now) / 60000)
+  if (mins <= 0) return 'now'
+  if (mins < 60) return `${mins}m`
+  return `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}m`
+}
+
+export function StatusBar({ limits, state }: { limits?: LiveLimits | null; state: BarState }) {
+  const now = useTick()
+  const clock = new Date(now).toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+  const fiveHour = limits ? Math.round(limits.five_hour.used * 100) : null
+  const sevenDay = limits ? Math.round(limits.seven_day.used * 100) : null
+  const ctx = state.context === null ? null : Math.round(state.context * 100)
+
   return (
     <div className="flex min-w-0 flex-col gap-[2px] font-mono text-[10.5px] text-ink-faint">
       {/* Each row stays on one line. The cwd is the only variable-length
@@ -388,37 +425,48 @@ export function StatusBar({ limits }: { limits?: LiveLimits | null }) {
           short and fixed, and wrapping a status bar makes it read as
           content rather than furniture. */}
       <div className="flex min-w-0 items-center whitespace-nowrap">
-        <Seg className="min-w-0 truncate text-ink-dim">{s.cwd}</Seg>
-        <Seg className="text-ink-dim">⎇ {s.branch}</Seg>
-        <Seg>{s.model}</Seg>
-        <Seg last>{s.clock}</Seg>
+        <Seg className="min-w-0 truncate text-ink-dim">{state.cwd}</Seg>
+        {/* Omitted rather than shown empty when the directory is not a
+            repository, which plenty of useful directories are not. */}
+        {state.branch && <Seg className="text-ink-dim">⎇ {state.branch}</Seg>}
+        <Seg>{state.model}</Seg>
+        <Seg last>{clock}</Seg>
       </div>
       <div className="flex items-center whitespace-nowrap">
-        <Seg className="text-noctua">
-          ctx <Meter pct={s.contextPct} tone="var(--color-noctua)" /> {s.contextPct}%
+        {/* A dash, not 0%: unknown and empty are different, and an invented
+            0% reads as a conversation with room to spare. */}
+        <Seg className={ctx === null ? '' : 'text-noctua'}>
+          ctx {ctx === null ? '—' : <><Meter pct={ctx} tone="var(--color-noctua)" /> {ctx}%</>}
         </Seg>
         <Seg>
-          5h <Meter pct={fiveHour} /> {fiveHour}%
+          5h{' '}
+          {fiveHour === null ? '—' : (
+            <>
+              <Meter pct={fiveHour} /> {fiveHour}%
+              {/* The reset is on the 5h window only. It is the one that
+                  actually blocks you inside a working day; the 7d window
+                  resets on a horizon no decision turns on. */}
+              <span className="ml-[5px] text-ink-faint">↻ {until(limits!.five_hour.resets_at, now)}</span>
+            </>
+          )}
         </Seg>
         <Seg last>
-          7d <Meter pct={sevenDay} /> {sevenDay}%
+          7d {sevenDay === null ? '—' : <><Meter pct={sevenDay} /> {sevenDay}%</>}
         </Seg>
       </div>
     </div>
   )
 }
 
-/* The bottom bar adapts rather than hides.
- *
- * Wide enough (past 1620px: 160 rail + 776 composer leaves ~340 a side) and
- * the status and characters sit either side of the input, costing one band.
- * Narrower, they drop to their own row beneath it, costing two.
- *
- * The earlier version simply hid them below the breakpoint, which traded an
- * overlap for an absence -- worse, because the quota numbers are the ones
- * that govern whether to start another session. Information that matters at
- * every width should move when it does not fit, not vanish. */
-export function BottomBar({ children, limits }: { children: React.ReactNode; limits?: LiveLimits | null }) {
+export function BottomBar({
+  children,
+  limits,
+  state,
+}: {
+  children: React.ReactNode
+  limits?: LiveLimits | null
+  state: BarState
+}) {
   return (
     <div className="flex shrink-0 border-t border-line bg-surface">
       {/* Rail-width cell, always present. It was previously only rendered in
@@ -434,7 +482,7 @@ export function BottomBar({ children, limits }: { children: React.ReactNode; lim
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-[14px] py-[10px]">
           <div className="hidden min-w-0 justify-self-start overflow-hidden min-[1620px]:flex">
-            <StatusBar limits={limits} />
+            <StatusBar limits={limits} state={state} />
           </div>
           {children}
           <div className="hidden justify-self-end min-[1620px]:flex">
@@ -445,7 +493,7 @@ export function BottomBar({ children, limits }: { children: React.ReactNode; lim
         {/* Same components, second position -- rendered twice rather than
             moved with JS, since only one is ever displayed. */}
         <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
-          <StatusBar limits={limits} />
+          <StatusBar limits={limits} state={state} />
           <div className="ml-auto">
             <CharacterStrip />
           </div>
@@ -454,6 +502,7 @@ export function BottomBar({ children, limits }: { children: React.ReactNode; lim
     </div>
   )
 }
+
 
 function Seg({ children, last, className = '' }: { children: React.ReactNode; last?: boolean; className?: string }) {
   return (

@@ -150,6 +150,13 @@ def parse_line(line: str) -> list[Event]:
                 model=primary,
                 aux_input_tokens=aux_in,
                 aux_output_tokens=aux_out,
+                context_tokens=(int(u.get("input_tokens", 0))
+                                + int(u.get("cache_read_input_tokens", 0))
+                                + int(u.get("cache_creation_input_tokens", 0))),
+                # Reported per model; the primary's is the session's.
+                context_window=int(
+                    (d.get("modelUsage") or {}).get(primary, {}).get("contextWindow", 0)
+                ),
             ),
             duration_ms=int(d.get("duration_ms", 0)),
             stop_reason=d.get("stop_reason"),

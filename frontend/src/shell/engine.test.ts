@@ -98,10 +98,27 @@ describe('fold', () => {
     const s = run([
       { t: 'start', session_id: 'abc', model: 'opus-5', cwd: '/x', tools: [] },
       { t: 'turn_end', session_id: 'abc', duration_ms: 5, stop_reason: null,
-        usage: { input: 1, output: 2, cached: 0, model: 'opus-5' } },
+        usage: { input: 1, output: 2, cached: 0, model: 'opus-5', aux_input: 0,
+                 aux_output: 0, context_tokens: 26589, context_window: 1000000 } },
     ])
     expect(s.sessionId).toBe('abc')
     expect(s.done).toBe(true)
+  })
+
+  it('records context occupancy from a turn that reports a window', () => {
+    const s = run([{ t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+      usage: { input: 2, output: 5, cached: 0, model: 'm', aux_input: 0, aux_output: 0,
+               context_tokens: 26589, context_window: 1000000 } }])
+    expect(s.context).toBeCloseTo(0.0265, 3)
+  })
+
+  it('leaves context unknown when no window is reported', () => {
+    // Unknown must not become 0%, which reads as a conversation with room to
+    // spare rather than one we know nothing about.
+    const s = run([{ t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+      usage: { input: 2, output: 5, cached: 0, model: 'm', aux_input: 0, aux_output: 0,
+               context_tokens: 500, context_window: 0 } }])
+    expect(s.context).toBeNull()
   })
 
   it('never mutates the state it was given', () => {
