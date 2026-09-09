@@ -1,5 +1,6 @@
 /* Rail, tabs, composer, status, characters — the shell around the transcript. */
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Logo } from './Logo'
 import {
   CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE,
@@ -168,6 +169,13 @@ export function TabBar({
               aria-selected={selected}
               onClick={() => onSelect(t.id)}
               onContextMenu={(e) => {
+                e.preventDefault()
+                setMenu({ id: t.id, x: e.clientX, y: e.clientY })
+              }}
+              // Also on mousedown for button 2. `contextmenu` is the correct
+              // event and did not fire here, so this does not rely on it.
+              onMouseDown={(e) => {
+                if (e.button !== 2) return
                 e.preventDefault()
                 setMenu({ id: t.id, x: e.clientX, y: e.clientY })
               }}
@@ -515,10 +523,13 @@ export function BottomBar({
   children,
   limits,
   state,
+  working,
 }: {
   children: React.ReactNode
   limits?: LiveLimits | null
   state: BarState
+  /** Modes with a turn in flight right now. */
+  working?: Mode[]
 }) {
   return (
     <div className="flex shrink-0 border-t border-line bg-surface">
@@ -539,7 +550,7 @@ export function BottomBar({
           </div>
           {children}
           <div className="hidden justify-self-end min-[1620px]:flex">
-            <CharacterStrip />
+            <CharacterStrip working={working} />
           </div>
         </div>
 
@@ -548,7 +559,7 @@ export function BottomBar({
         <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
           <StatusBar limits={limits} state={state} />
           <div className="ml-auto">
-            <CharacterStrip />
+            <CharacterStrip working={working} />
           </div>
         </div>
       </div>
@@ -568,17 +579,24 @@ function Seg({ children, last, className = '' }: { children: React.ReactNode; la
 /* The characters sit here rather than in a bar of their own: with the pixel
  * world retired they are status indicators, and a full-width strip cost
  * ~54px of permanent vertical space to say what a dot can. */
-function CharacterStrip() {
+/* The three mode characters, lit when that mode has a turn in flight.
+ *
+ * Was hardcoded, and so Faber sat lit with no Faber session anywhere -- the
+ * one thing this strip exists to tell you, reported wrongly. It now reads
+ * the live sessions, which is the only thing that makes an indicator worth
+ * having.
+ */
+function CharacterStrip({ working = [] }: { working?: Mode[] }) {
   return (
     <div className="flex shrink-0 items-center gap-[10px]">
       {CHARACTERS.map((c) => {
         const accent = MODE_ACCENT[c.mode]
-        const live = c.state === 'working'
+        const live = working.includes(c.mode)
         return (
           <button
             key={c.mode}
             type="button"
-            title={`${MODE_LABEL[c.mode]} · ${c.state}`}
+            title={`${MODE_LABEL[c.mode]} · ${live ? 'working' : 'idle'}`}
             className="group relative grid h-6 w-6 place-items-center rounded-[3px] hover:bg-elevated"
           >
             <span
@@ -625,8 +643,8 @@ function TabMenu({
       if (e instanceof KeyboardEvent && e.key !== 'Escape') return
       onDismiss()
     }
-    // Capture, and on the next frame: the click that opened this menu is
-    // still propagating, and without the delay it dismisses itself.
+    // Attached on the next frame: the press that opened this menu is still
+    // propagating, and without the delay the menu dismisses itself.
     const id = requestAnimationFrame(() => {
       window.addEventListener('mousedown', dismiss, true)
       window.addEventListener('keydown', dismiss, true)
@@ -638,7 +656,13 @@ function TabMenu({
     }
   }, [onDismiss])
 
-  return (
+  /* Portalled to the body. `position: fixed` is relative to the viewport
+   * only while no ancestor establishes a containing block -- a transform, a
+   * filter, `will-change` anywhere above would place the menu somewhere
+   * other than under the pointer, and the tab strip is inside a scroll
+   * container besides. Out here it cannot be clipped or offset by anything.
+   */
+  return createPortal(
     <div
       role="menu"
       className="fixed z-[70] min-w-[210px] overflow-hidden rounded-[5px] border border-line bg-surface py-[4px] shadow-[0_12px_34px_rgba(0,0,0,0.5)]"
@@ -664,6 +688,7 @@ function TabMenu({
             the only copy outside anything promoted to the vault. */}
         <span className="text-[11px] text-ink-faint">Removes its transcript and usage for good</span>
       </button>
-    </div>
+    </div>,
+    document.body,
   )
 }

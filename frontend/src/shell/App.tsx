@@ -261,7 +261,11 @@ export default function App() {
     }
     blocks.push({ kind: 'user', text: req.prompt, at: now() })
 
-    setTabs([...tabs, { id, mode: req.mode, label }])
+    // At most one session beside General. The engine's own cap is two
+    // concurrent, so a third tab could not run anyway -- and the point of
+    // the second is overflow, for when one task is too much to hold in the
+    // main thread of work, not a filing system.
+    setTabs((ts) => [ts[0], { id, mode: req.mode, label }])
     // The provenance block only; the opening prompt is appended by `turn`,
     // so a launched session and a typed one build their transcript the same
     // way rather than through two paths that can drift.
@@ -310,7 +314,7 @@ export default function App() {
     }
     const full = await get<HistoryTranscript>(`/v2/sessions/history/${id}`)
     if (!full) return
-    setTabs((ts) => [...ts, {
+    setTabs((ts) => [ts[0], {
       id: tabId, mode: full.mode,
       label: `${MODE_LABEL[full.mode]} · ${truncate(full.title)}`,
     }])
@@ -415,46 +419,35 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
-  /* Reopen the last few conversations on launch.
+  /* Resume the General session on launch.
    *
-   * The engine's process outlives the web view, and the store outlives both,
-   * so a closed window should not lose work. Only resumable conversations
-   * become tabs -- one that died on spawn is readable history, not somewhere
-   * you can type, and a tab you cannot continue is a trap.
+   * One long-running General session that carries many tasks, not a tab per
+   * conversation. Restoring four made the strip a graveyard of every prompt
+   * ever typed, and none of them were the one you meant to continue.
    *
-   * The empty General tab stays first regardless, so there is always
-   * somewhere to start even on a fresh install or with the backend down. */
+   * So General is continuous: it reopens the most recent General
+   * conversation and keeps going, which is what makes it the front door
+   * rather than a scratch pad that resets. Everything else stays in history,
+   * reachable by search.
+   */
   useEffect(() => {
     let live = true
     void (async () => {
-      const listed = await get<{ sessions: HistorySession[] }>('/v2/sessions/history?limit=6')
+      const listed = await get<{ sessions: HistorySession[] }>('/v2/sessions/history?limit=20')
       if (!live || !listed) return
-      const open = listed.sessions.filter((s) => s.resumable).slice(0, 4)
-      const loaded = await Promise.all(
-        open.map((s) => get<HistoryTranscript>(`/v2/sessions/history/${s.id}`)),
-      )
-      if (!live) return
-
-      const nextTabs: Tab[] = []
-      const nextSessions: Record<string, SessionState> = {}
-      const labels = labelFor(open)
-      loaded.forEach((full, i) => {
-        if (!full || full.blocks.length === 0) return
-        const meta = open[i]
-        const id = `h${meta.id}`
-        nextTabs.push({ id, mode: meta.mode, label: labels[i] })
-        nextSessions[id] = {
-          mode: meta.mode,
+      const latest = listed.sessions.find((s) => s.mode === 'general' && s.resumable)
+      if (!latest) return
+      const full = await get<HistoryTranscript>(`/v2/sessions/history/${latest.id}`)
+      if (!live || !full || full.blocks.length === 0) return
+      setSessions((prev) => ({
+        ...prev,
+        t0: {
+          ...prev.t0,
           blocks: full.blocks,
-          draft: '',
-          cwd: meta.cwd ?? '~',
-          engineId: meta.engine_id ?? undefined,
-        }
-      })
-      if (nextTabs.length === 0) return
-      setTabs([EMPTY_TAB, ...nextTabs])
-      setSessions((s) => ({ ...s, ...nextSessions }))
-      setDrafts((d) => ({ ...d, ...Object.fromEntries(nextTabs.map((t) => [t.id, ''])) }))
+          cwd: latest.cwd ?? prev.t0.cwd,
+          engineId: latest.engine_id ?? undefined,
+        },
+      }))
     })()
     return () => {
       live = false
@@ -540,6 +533,7 @@ export default function App() {
 
       <BottomBar
         limits={limits}
+        working={tabs.filter((t) => sessions[t.id]?.busy).map((t) => sessions[t.id].mode)}
         state={{
           cwd: shortenHome(activeCwd),
           model: MODE_INFO[session.mode].model,
@@ -826,29 +820,6 @@ function Row({ label, value, tone }: { label: string; value: number; tone: strin
       <span className="text-right tabular-nums text-ink">{value}M</span>
     </>
   )
-}
-
-/** Tab labels for a set of restored conversations.
- *
- * Directory name first, because that is how you actually think about a
- * session ("the noctis-os one"). But several sessions in one project share a
- * directory, and four tabs reading "General · noctis-os" name nothing at
- * all -- so a label is only kept when it is unique, and repeats fall back to
- * the opening prompt, which is what actually tells them apart.
- *
- * Computed over the whole set rather than per session, since uniqueness is
- * not a property any one of them has on its own.
- */
-function labelFor(sessions: { mode: Mode; cwd: string | null; title: string }[]): string[] {
-  const dirs = sessions.map((s) => s.cwd?.split('/').filter(Boolean).pop() ?? '')
-  const seen = new Map<string, number>()
-  dirs.forEach((d, i) => seen.set(`${sessions[i].mode}/${d}`, (seen.get(`${sessions[i].mode}/${d}`) ?? 0) + 1))
-
-  return sessions.map((s, i) => {
-    const unique = (seen.get(`${s.mode}/${dirs[i]}`) ?? 0) === 1
-    const tail = unique && dirs[i] ? dirs[i] : truncate(s.title)
-    return `${MODE_LABEL[s.mode]} · ${tail}`
-  })
 }
 
 const truncate = (s: string) => (s.length > 22 ? `${s.slice(0, 22)}…` : s)

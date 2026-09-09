@@ -217,10 +217,13 @@ export const PERMISSION_TONE: Record<Permission, string> = {
   auto: 'var(--color-faber)',
 }
 
-export const CHARACTERS: { mode: Mode; state: 'working' | 'idle' }[] = [
-  { mode: 'faber', state: 'working' },
-  { mode: 'noctua', state: 'idle' },
-  { mode: 'vesper', state: 'idle' },
+/* Which characters the strip shows, in order. Their *state* is not here:
+ * it comes from the live sessions, because a hardcoded 'working' had Faber
+ * lit with no Faber session running. */
+export const CHARACTERS: { mode: Mode }[] = [
+  { mode: 'faber' },
+  { mode: 'noctua' },
+  { mode: 'vesper' },
 ]
 
 export const STATUS = {
