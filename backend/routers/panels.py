@@ -177,6 +177,13 @@ def billing() -> dict:
         return {
             "list_cost": round(life["list_cost"], 2),
             "turns": life["turns"],
+            # How many of those turns the figure actually covers. Turns
+            # recorded before the column existed carry a zero, so a cost
+            # summed over them and token counts summed over all of them are
+            # measurements of different populations -- and printing the two
+            # side by side made the cost read ~20x low against its own
+            # tokens. The UI needs this to say what it is quoting.
+            "priced_turns": life["priced_turns"] or 0,
             "since": life["since"],
             # Stated rather than implied, so the UI has no excuse to render
             # the figure above as a bill.

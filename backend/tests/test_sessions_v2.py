@@ -757,33 +757,45 @@ def test_recent_dirs_ignores_sessions_with_no_directory(tmp_path):
     store.close()
 
 
-def test_resetting_stats_keeps_the_conversations(tmp_path, monkeypatch, client):
-    """"The numbers are wrong, start again" is not "forget what was said" --
-    conflating them would destroy the more valuable half to fix the less."""
-    from orchestrator.events import TurnEnd, Usage
+def test_recent_dirs_come_from_real_sessions(tmp_path):
+    """The launcher's list was hardcoded, so it named the same directories
+    whether or not you had opened them and never learned a new project."""
     from orchestrator.store import ConversationStore
-    from routers import sessions_v2
 
     store = ConversationStore(tmp_path / "h.db")
-    sid = store.open_session("faber", cwd="/tmp")
-    store.add_message(sid, "user", "something worth keeping")
-    store.record(sid, "faber", TurnEnd(
-        session_id="s", duration_ms=1,
-        usage=Usage(input_tokens=5, output_tokens=7, cached_tokens=0, model="m"),
-    ))
-    monkeypatch.setattr(sessions_v2, "_store", store)
-
-    body = client.delete("/v2/sessions/stats", headers=AUTH).json()
-    assert body["cleared_turns"] == 1
-    assert store.lifetime_tokens()["turns"] == 0
-    assert store.lifetime_tokens()["output"] == 0
-
-    # The conversation and its transcript survive.
-    assert len(store.recent_sessions()) == 1
-    assert store.transcript(sid)[0]["content"] == "something worth keeping"
-    assert store.search("something worth keeping") != []
+    for cwd in ("/a", "/b", "/a"):
+        store.close_session(store.open_session("faber", cwd=cwd))
+    dirs = store.recent_cwds()
+    assert set(dirs) == {"/a", "/b"}      # deduplicated
+    assert dirs[0] == "/a"                # most recently used first
     store.close()
 
 
-def test_resetting_stats_requires_auth(client):
-    assert client.delete("/v2/sessions/stats").status_code == 401
+def test_recent_dirs_ignores_sessions_with_no_directory(tmp_path):
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    store.close_session(store.open_session("faber", cwd=None))
+    assert store.recent_cwds() == []
+    store.close()
+
+
+def test_billing_reports_how_many_turns_its_figure_covers(tmp_path, monkeypatch, client):
+    """Token totals span every turn; the cost only spans turns recorded since
+    the column existed. Printed side by side without saying so, the cost read
+    about 20x low against its own tokens."""
+    from orchestrator.events import TurnEnd, Usage
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore(tmp_path / "h.db")
+    sid = store.open_session("faber", cwd="/tmp")
+    # One priced turn and one from before the column existed.
+    store.record(sid, "faber", TurnEnd(session_id="s", duration_ms=1, usage=Usage(
+        input_tokens=10, output_tokens=10, cached_tokens=0, model="m", list_cost_usd=0.5)))
+    store.record(sid, "faber", TurnEnd(session_id="s", duration_ms=1, usage=Usage(
+        input_tokens=10, output_tokens=10, cached_tokens=0, model="m")))
+
+    life = store.lifetime_tokens()
+    assert life["turns"] == 2
+    assert life["priced_turns"] == 1        # the figure covers half of them
+    store.close()

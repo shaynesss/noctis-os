@@ -35,6 +35,8 @@ export interface InboxPayload {
 export interface BillingPayload {
   list_cost: number
   turns: number
+  /** How many of those turns the figure actually covers. */
+  priced_turns: number
   since: string | null
   charged: boolean
   basis: string
@@ -262,14 +264,34 @@ export function Settings({ data }: { data: ConfigPayload }) {
  * counts it reads as what it is: what all this would have cost the other
  * way.
  */
-export function ListPriceFact({ data }: { data: BillingPayload }) {
-  if (data.list_cost <= 0) return null
+export function ListPriceFact({
+  data,
+  totalTurns,
+}: {
+  data: BillingPayload
+  /** Every turn the token counts above cover. */
+  totalTurns: number
+}) {
+  if (data.list_cost <= 0 || data.priced_turns === 0) return null
+
+  /* The figure only covers turns recorded since the engine's per-turn cost
+   * was stored; earlier ones carry a zero. Sitting under token counts that
+   * span every turn, it read about 20x low against its own tokens — two
+   * measurements of different populations printed as one fact. So when the
+   * coverage is partial it says so, rather than quietly implying it is the
+   * total. */
+  const partial = data.priced_turns < totalTurns
+
   return (
     <div className="mt-[13px] flex flex-wrap items-baseline gap-x-[7px] gap-y-[3px] border-t border-line pt-[11px] font-mono text-[11.5px]">
-      <span className="text-ink-faint">on the API this would have been</span>
+      <span className="text-ink-faint">
+        on the API,{' '}
+        {partial ? `the last ${data.priced_turns.toLocaleString()} of ${totalTurns.toLocaleString()} turns` : 'this'}{' '}
+        would have been
+      </span>
       <span className="tabular-nums text-ink">${data.list_cost.toFixed(2)}</span>
-      {/* The clause that stops it reading as a bill. Short, because a long
-          disclaimer under a number makes the number look disputed. */}
+      {/* Short, because a long disclaimer under a number makes the number
+          itself look disputed. */}
       <span className="text-ink-faint">· the subscription covered it</span>
     </div>
   )

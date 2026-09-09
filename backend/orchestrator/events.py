@@ -122,8 +122,13 @@ class Usage:
     """
     input_tokens: int
     output_tokens: int
-    cached_tokens: int
+    cached_tokens: int          # read back from the cache
     model: str
+    # Written *into* the cache. Routinely the largest of the four counts and
+    # the dominant cost driver, and it was reported nowhere -- so the token
+    # totals could not be reconciled against the list-price figure beside
+    # them, which is exactly how the two came to look unrelated.
+    cache_write_tokens: int = 0
     aux_input_tokens: int = 0
     aux_output_tokens: int = 0
     # What the turn actually sent: fresh input plus everything read from or

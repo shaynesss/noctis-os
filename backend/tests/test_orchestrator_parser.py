@@ -212,3 +212,12 @@ def test_unknown_context_window_is_not_reported_as_empty():
     (end,) = [e for e in parse_line(line) if isinstance(e, TurnEnd)]
     assert end.usage.context_window == 0
     assert end.usage.context_pct == 0.0
+
+
+def test_cache_writes_are_counted():
+    """Routinely the largest of the four token counts and the dominant cost
+    driver, and it was reported nowhere -- so the totals on Stats could not
+    be reconciled against the list-price figure printed beside them."""
+    (end,) = [e for e in parse_line(_multi_model_result()) if isinstance(e, TurnEnd)]
+    assert end.usage.cache_write_tokens == 19143
+    assert end.usage.cached_tokens == 7444          # read, not write

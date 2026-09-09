@@ -147,6 +147,7 @@ def parse_line(line: str) -> list[Event]:
                 input_tokens=int(u.get("input_tokens", 0)),
                 output_tokens=int(u.get("output_tokens", 0)),
                 cached_tokens=int(u.get("cache_read_input_tokens", 0)),
+                cache_write_tokens=int(u.get("cache_creation_input_tokens", 0)),
                 model=primary,
                 aux_input_tokens=aux_in,
                 aux_output_tokens=aux_out,

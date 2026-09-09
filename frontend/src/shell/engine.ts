@@ -239,7 +239,7 @@ export function fold(state: Fold, e: WireEvent): Fold {
 
 export interface Stats {
   lifetime: {
-    input: number; output: number; cached: number; turns: number
+    input: number; output: number; cached: number; cache_write: number; turns: number
     since: string | null; aux_input: number; aux_output: number
   }
   by_mode: { mode: string; input: number; output: number; turns: number }[]

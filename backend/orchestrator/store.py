@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS usage (
     input_tokens  INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cached_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
     -- What the turn also spent on the CLI's background tier. Stored because
     -- omitting it is how the parser lost ~900 input tokens per turn until
     -- 2026-09-08; a lifetime total that reads only the primary columns
@@ -135,6 +136,10 @@ class ConversationStore:
                 self.db.execute(
                     f"ALTER TABLE usage ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
                 )
+        if "cache_write_tokens" not in usage_cols:
+            self.db.execute(
+                "ALTER TABLE usage ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0"
+            )
         if "list_cost_usd" not in usage_cols:
             self.db.execute("ALTER TABLE usage ADD COLUMN list_cost_usd REAL NOT NULL DEFAULT 0")
 
@@ -241,11 +246,12 @@ class ConversationStore:
             u = event.usage
             self.db.execute(
                 "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
-                " cached_tokens, aux_input_tokens, aux_output_tokens, duration_ms,"
-                " list_cost_usd, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " cached_tokens, cache_write_tokens, aux_input_tokens, aux_output_tokens,"
+                " duration_ms, list_cost_usd, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (session_id, mode, u.model, u.input_tokens, u.output_tokens,
-                 u.cached_tokens, u.aux_input_tokens, u.aux_output_tokens,
-                 event.duration_ms, u.list_cost_usd, _now()),
+                 u.cached_tokens, u.cache_write_tokens, u.aux_input_tokens,
+                 u.aux_output_tokens, event.duration_ms, u.list_cost_usd, _now()),
             )
             self.db.commit()
 
@@ -314,7 +320,9 @@ class ConversationStore:
             "       COALESCE(SUM(input_tokens),0) AS primary_input,"
             "       COALESCE(SUM(output_tokens),0) AS primary_output,"
             "       COALESCE(SUM(cached_tokens),0) AS cached,"
+            "       COALESCE(SUM(cache_write_tokens),0) AS cache_write,"
             "       COALESCE(SUM(list_cost_usd),0) AS list_cost,"
+            "       SUM(CASE WHEN list_cost_usd > 0 THEN 1 ELSE 0 END) AS priced_turns,"
             "       COUNT(*) AS turns,"
             "       MIN(created_at) AS since FROM usage").fetchone()
 

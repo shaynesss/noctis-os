@@ -889,9 +889,7 @@ function Fetched<T>({
 const fmt = (n: number) => n.toLocaleString()
 
 function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } | null }) {
-  const [reloadKey, setReloadKey] = useState(0)
-  const [confirmReset, setConfirmReset] = useState(false)
-  const stats = useFetched<StatsPayload>(`/v2/sessions/stats?v=${reloadKey}`)
+  const stats = useFetched<StatsPayload>('/v2/sessions/stats')
   const bar = (pct: number) => (pct < 60 ? 'var(--color-good)' : pct < 85 ? 'var(--color-noctua)' : 'var(--color-faber)')
 
   /* The rolling windows are the only numbers here that govern a decision --
@@ -911,17 +909,6 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
-        {confirmReset && (
-          <ConfirmReset
-            onCancel={() => setConfirmReset(false)}
-            onConfirm={async () => {
-              await del('/v2/sessions/stats')
-              setConfirmReset(false)
-              setReloadKey((k) => k + 1)
-            }}
-          />
-        )}
-
         <h2 className="m-0 mb-[14px] font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           Usage
         </h2>
@@ -956,22 +943,9 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
 
         <Activity days={stats ? stats.activity : []} />
 
-        <div className="mb-[14px] mt-7 flex items-baseline gap-[10px]">
-          <h2 className="m-0 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
-            Lifetime tokens
-          </h2>
-          {/* Counting can start again. The earliest rows genuinely
-              under-report — turns recorded before the list-price column
-              existed carry a zero — so a total spanning them is wrong in a
-              way arithmetic cannot fix. */}
-          <button
-            type="button"
-            onClick={() => setConfirmReset(true)}
-            className="font-mono text-[10.5px] text-ink-faint underline decoration-line underline-offset-2 transition-colors hover:text-ink-dim"
-          >
-            reset
-          </button>
-        </div>
+        <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+          Lifetime tokens
+        </h2>
 
         {stats === false ? (
           <Unreachable what="usage history" />
@@ -984,7 +958,10 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
             <div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
               <div className="mb-4 flex items-baseline gap-[9px]">
                 <b className="font-mono text-[29px] font-bold tabular-nums tracking-[-0.02em] text-ink">
-                  {fmt(stats.lifetime.input + stats.lifetime.output)}
+                  {fmt(
+                    stats.lifetime.input + stats.lifetime.output +
+                    stats.lifetime.cached + stats.lifetime.cache_write,
+                  )}
                 </b>
                 <span className="font-mono text-[11px] text-ink-faint">
                   total{stats.lifetime.since ? ` · since ${stats.lifetime.since.slice(0, 10)}` : ''}
@@ -997,13 +974,18 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
                   // The three bars compare with each other, so they share
                   // one scale rather than each inventing its own.
                   const max = Math.max(
-                    stats.lifetime.input, stats.lifetime.output, stats.lifetime.cached,
+                    stats.lifetime.input, stats.lifetime.output,
+                    stats.lifetime.cached, stats.lifetime.cache_write,
                   )
                   return (
                     <>
                       <Row label="input" value={stats.lifetime.input} max={max} tone="var(--color-ink-dim)" />
                       <Row label="output" value={stats.lifetime.output} max={max} tone="var(--color-faber)" />
                       <Row label="cache read" value={stats.lifetime.cached} max={max} tone="var(--color-good)" />
+                      {/* Was missing entirely, and is routinely the largest
+                          of the four — leaving it out is why the totals could
+                          not be reconciled against the cost beside them. */}
+                      <Row label="cache write" value={stats.lifetime.cache_write} max={max} tone="var(--color-noctua)" />
                     </>
                   )
                 })()}
@@ -1014,7 +996,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
                   turn that was 899 of 901 input tokens -- so a page that
                   reported only the model you chose would be wrong by two
                   orders of magnitude while looking perfectly reasonable. */}
-              <ListPrice />
+              <ListPrice turns={stats.lifetime.turns} />
               {stats.lifetime.aux_input > 0 && (
                 <div className="mt-[13px] flex items-baseline gap-2 border-t border-line pt-[11px] font-mono text-[11.5px]">
                   <span className="text-ink-dim">of which background tier</span>
@@ -1162,57 +1144,8 @@ function loadDrafts(): Record<string, string> {
 
 /** The list-price line under Stats' lifetime tokens. Its own fetch, so a
  *  slow or absent billing route cannot hold up the counts above it. */
-function ListPrice() {
+function ListPrice({ turns }: { turns: number }) {
   const data = useFetched<BillingPayload>('/v2/billing')
-  return data ? <ListPriceFact data={data} /> : null
+  return data ? <ListPriceFact data={data} totalTurns={turns} /> : null
 }
 
-/* Confirming a reset.
- *
- * Asked because it cannot be undone, and worded to say exactly what goes and
- * what stays — the fear with a button like this is that it takes the
- * conversations too, and only naming them settles it.
- */
-function ConfirmReset({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
-  return (
-    <div
-      className="absolute inset-0 z-[65] flex items-start justify-center bg-black/55 pt-[16vh]"
-      onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
-      role="presentation"
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Reset usage"
-        className="w-[460px] max-w-[calc(100%-32px)] rounded-[6px] border border-line bg-surface p-[16px] shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
-      >
-        <div className="mb-[10px] font-mono text-[11px] font-bold uppercase tracking-[0.13em] text-ink-faint">
-          Reset usage
-        </div>
-        <p className="m-0 mb-[6px] text-[13px] leading-[1.6] text-ink-dim">
-          Token counts, the per-mode breakdown and the list-price figure start again from zero.
-        </p>
-        <p className="m-0 mb-[16px] text-[12.5px] leading-[1.6] text-ink-faint">
-          Your conversations, transcripts and search history are untouched.
-        </p>
-        <div className="flex justify-end gap-[8px]">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-[4px] px-[11px] py-[5px] font-mono text-[11.5px] text-ink-dim hover:bg-elevated"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="rounded-[4px] px-[11px] py-[5px] font-mono text-[11.5px] text-ground"
-            style={{ background: 'var(--color-faber)' }}
-          >
-            Reset
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
