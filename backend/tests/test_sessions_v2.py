@@ -387,3 +387,50 @@ def test_transcript_404s_for_an_unknown_session(client):
 
 def test_history_requires_auth(client):
     assert client.get("/v2/sessions/history").status_code == 401
+
+
+# ------------------------------------------------------------------ search
+
+def test_search_returns_one_hit_per_conversation(monkeypatch, client):
+    """Several matching messages in one session are one result to a person
+    looking for that conversation -- and a long session would otherwise
+    flood the list and bury everything else."""
+    from routers import search as search_router
+
+    rows = [
+        {"session_id": 1, "mode": "faber", "role": "user", "content": "alpha one",
+         "created_at": "2026-09-09"},
+        {"session_id": 1, "mode": "faber", "role": "assistant", "content": "alpha two",
+         "created_at": "2026-09-09"},
+        {"session_id": 2, "mode": "vesper", "role": "user", "content": "alpha three",
+         "created_at": "2026-09-09"},
+    ]
+    monkeypatch.setattr(search_router._store, "search", lambda q, limit: rows)
+    monkeypatch.setattr(search_router, "_vault_index", lambda: type("I", (), {"search": lambda *a, **k: []})())
+
+    body = client.get("/v2/search?q=alpha", headers=AUTH).json()
+    assert [c["session_id"] for c in body["conversations"]] == [1, 2]
+
+
+def test_excerpt_centres_on_the_match_not_the_opening():
+    """A prefix of a long message is very often the least useful part of it;
+    the match is why the row is there."""
+    from routers.search import _excerpt
+
+    text = "x" * 400 + " needle " + "y" * 400
+    out = _excerpt(text, "needle")
+    assert "needle" in out
+    assert out.startswith("…")
+
+
+def test_excerpt_falls_back_when_no_term_matches():
+    from routers.search import _excerpt
+    assert _excerpt("some content here", "zz").startswith("some content")
+
+
+def test_search_requires_a_real_query(client):
+    assert client.get("/v2/search?q=a", headers=AUTH).status_code == 422
+
+
+def test_search_requires_auth(client):
+    assert client.get("/v2/search?q=alpha").status_code == 401

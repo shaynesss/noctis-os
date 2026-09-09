@@ -105,15 +105,28 @@ export function TabBar({
   onSelect,
   onNew,
   onHandoff,
+  onSearch,
 }: {
   tabs: Tab[]
   active: string
   onSelect: (id: string) => void
   onNew: () => void
   onHandoff: () => void
+  onSearch: () => void
 }) {
   return (
     <div className="relative flex h-[var(--head-band)] shrink-0 items-center justify-center border-b border-line bg-surface px-3">
+      {/* Absolute on the left, mirroring hand-off on the right, so the pills
+          stay centred on the transcript's axis between them. Search is not a
+          place you go, so it does not belong in the rail. */}
+      <button
+        type="button"
+        onClick={onSearch}
+        className="absolute left-3 flex items-center gap-[7px] rounded-[5px] px-[9px] py-[5px] font-mono text-[11px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink-dim"
+      >
+        <span aria-hidden className="text-[12px] leading-none">⌕</span> search
+        <Kbd>⌘K</Kbd>
+      </button>
       <div role="tablist" className="flex items-center gap-[6px]">
         {tabs.map((t, i) => {
           const selected = t.id === active

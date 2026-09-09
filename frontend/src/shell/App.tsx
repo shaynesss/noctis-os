@@ -16,6 +16,7 @@ import {
   type HistorySession, type HistoryTranscript, type Stats as StatsPayload, type Window,
 } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
+import { Palette } from './Palette'
 import {
   Brief, Inbox, Settings,
   type BriefPayload, type ConfigPayload, type InboxPayload,
@@ -51,6 +52,7 @@ export default function App() {
 
   // `null` closed; otherwise a launch, carrying its handoff source if any.
   const [launcher, setLauncher] = useState<null | { handoff?: HandoffSource }>(null)
+  const [palette, setPalette] = useState(false)
 
   /* The key listener is registered once, so its closure would otherwise hold
    * the first render's tabs forever -- Cmd+3 would keep selecting the third
@@ -59,11 +61,13 @@ export default function App() {
    * change, which would drop keystrokes during the swap. */
   const tabsRef = useRef(tabs)
   const launcherRef = useRef(launcher)
+  const paletteRef = useRef(palette)
   const handoffRef = useRef(() => {})
   const sessionsRef = useRef(sessions)
   const permissionRef = useRef(permission)
   tabsRef.current = tabs
   launcherRef.current = launcher
+  paletteRef.current = palette
   sessionsRef.current = sessions
   permissionRef.current = permission
 
@@ -218,6 +222,33 @@ export default function App() {
 
   handoffRef.current = openHandoff
 
+  /* Open a conversation found by search, or focus it if already open.
+   *
+   * Reusing the tab matters: opening a second copy of a live conversation
+   * would give two tabs the same engine id, and a turn sent from either
+   * would append to a transcript the other is also showing. */
+  const openSession = async (id: number) => {
+    const tabId = `h${id}`
+    if (sessionsRef.current[tabId]) {
+      setActiveTab(tabId)
+      setView('chat')
+      return
+    }
+    const full = await get<HistoryTranscript>(`/v2/sessions/history/${id}`)
+    if (!full) return
+    setTabs((ts) => [...ts, {
+      id: tabId, mode: full.mode,
+      label: `${MODE_LABEL[full.mode]} · ${truncate(full.title)}`,
+    }])
+    setSessions((s) => ({ ...s, [tabId]: {
+      mode: full.mode, blocks: full.blocks, draft: '',
+      cwd: full.cwd ?? '~', engineId: full.engine_id ?? undefined,
+    } }))
+    setDrafts((d) => ({ ...d, [tabId]: '' }))
+    setActiveTab(tabId)
+    setView('chat')
+  }
+
   // Cmd+1/2/3 switches tab. Implemented rather than merely labelled: a
   // shortcut shown in the UI that does nothing is a worse lie than the
   // explanatory text it sits next to.
@@ -226,7 +257,7 @@ export default function App() {
       // While the launcher is open it owns the keyboard: its own Cmd+1-5
       // picks a mode, and cycling permission for a session you are not
       // looking at would change something you cannot see.
-      if (launcherRef.current) return
+      if (launcherRef.current || paletteRef.current) return
 
       // Shift+Tab cycles permission, the affordance carried over from the
       // CLI's TUI. Wrapping past the end returns to `plan`, so the cycle
@@ -246,6 +277,15 @@ export default function App() {
         return
       }
       if (e.shiftKey) return
+
+      // Cmd+K searches. Implemented at last: this shortcut was labelled in
+      // the UI early on and then removed, because a shortcut shown and not
+      // wired is worse than one that is simply absent.
+      if (e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPalette(true)
+        return
+      }
 
       // Cmd+T starts a session, matching every tabbed app on the machine.
       if (e.key.toLowerCase() === 't') {
@@ -348,6 +388,7 @@ export default function App() {
           }}
           onNew={() => setLauncher({})}
           onHandoff={openHandoff}
+          onSearch={() => setPalette(true)}
         />
 
         {view === 'chat' ? (
@@ -373,6 +414,10 @@ export default function App() {
             }
         />
       </BottomBar>
+
+      {palette && (
+        <Palette onOpenSession={(id) => void openSession(id)} onClose={() => setPalette(false)} />
+      )}
 
       {launcher && (
         <Launcher
