@@ -554,7 +554,12 @@ export function StatusBar({ limits, state }: { limits?: LiveLimits | null; state
         <Seg>{state.model}</Seg>
         <Seg last>{clock}</Seg>
       </div>
-      <div className="flex items-center whitespace-nowrap">
+      {/* min-w-0 so the row may shrink, and the segments hold their own
+          width — without it the row overflowed its cell and the last item
+          was cut mid-word ("0/2 l"). The cwd on the row above is the only
+          thing allowed to truncate; a number cut in half is not a smaller
+          number, it is a wrong one. */}
+      <div className="flex min-w-0 items-center whitespace-nowrap">
         {/* A dash, not 0%: unknown and empty are different, and an invented
             0% reads as a conversation with room to spare. */}
         <Seg className={ctx === null ? '' : 'text-noctua'}>
@@ -572,18 +577,8 @@ export function StatusBar({ limits, state }: { limits?: LiveLimits | null; state
             </>
           )}
         </Seg>
-        <Seg>
-          7d {sevenDay === null ? '—' : <><Meter pct={sevenDay} /> {sevenDay}%</>}
-        </Seg>
-        {/* Beside the windows, not elsewhere: together they answer one
-            question — whether there is room to start something now. Amber at
-            the cap, because that is when the next launch queues rather than
-            runs, which is a thing to know before pressing enter. */}
         <Seg last>
-          <span style={state.live && state.live.running >= state.live.max
-            ? { color: 'var(--color-noctua)' } : undefined}>
-            {state.live ? `${state.live.running}/${state.live.max}` : '—/2'} live
-          </span>
+          7d {sevenDay === null ? '—' : <><Meter pct={sevenDay} /> {sevenDay}%</>}
         </Seg>
       </div>
     </div>
@@ -621,7 +616,7 @@ export function BottomBar({
           </div>
           {children}
           <div className="hidden justify-self-end min-[1620px]:flex">
-            <CharacterStrip working={working} />
+            <CharacterStrip working={working} live={state.live} />
           </div>
         </div>
 
@@ -630,7 +625,7 @@ export function BottomBar({
         <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
           <StatusBar limits={limits} state={state} />
           <div className="ml-auto">
-            <CharacterStrip working={working} />
+            <CharacterStrip working={working} live={state.live} />
           </div>
         </div>
       </div>
@@ -639,9 +634,13 @@ export function BottomBar({
 }
 
 
+/* One status segment. `shrink-0` by default: these are short, fixed strings
+ * and a truncated one reads as a different value rather than a shorter one.
+ * The cwd passes `min-w-0 truncate` to opt out, because it is the only item
+ * here whose length is unbounded. */
 function Seg({ children, last, className = '' }: { children: React.ReactNode; last?: boolean; className?: string }) {
   return (
-    <span className={`${last ? '' : 'mr-[9px] shrink-0 border-r border-line pr-[9px]'} ${className}`}>
+    <span className={`shrink-0 ${last ? '' : 'mr-[9px] border-r border-line pr-[9px]'} ${className}`}>
       {children}
     </span>
   )
@@ -674,9 +673,32 @@ const SPRITE: Record<Mode, { idle: string; working: string } | null> = {
   maintenance: null,      // its character was retired with the persona
 }
 
-function CharacterStrip({ working = [] }: { working?: Mode[] }) {
+function CharacterStrip({
+  working = [],
+  live,
+}: {
+  working?: Mode[]
+  /** Sessions running now, and the budget. */
+  live?: { running: number; max: number }
+}) {
   return (
     <div className="flex shrink-0 items-center gap-[10px]">
+      {/* Here rather than in the status bar, which had no room for it and
+          clipped it to "0/2 l". It belongs beside the characters anyway:
+          they say *which* modes are working, this says how many of the
+          budget are gone. Amber at the cap, when the next launch queues
+          instead of running. */}
+      {live && (
+        <span
+          className="font-mono text-[10.5px] tabular-nums"
+          style={{
+            color: live.running >= live.max ? 'var(--color-noctua)' : 'var(--color-ink-faint)',
+          }}
+          title={`${live.running} of ${live.max} concurrent sessions running`}
+        >
+          {live.running}/{live.max}
+        </span>
+      )}
       {CHARACTERS.map((c) => {
         const accent = MODE_ACCENT[c.mode]
         const live = working.includes(c.mode)
