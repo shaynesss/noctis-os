@@ -29,7 +29,7 @@ import { Palette } from './Palette'
 import { Reader } from './Reader'
 import {
   Brief, Inbox, ListPriceFact, Settings,
-  type BillingPayload, type BriefPayload, type ConfigPayload, type InboxPayload,
+  type BillingPayload, type BriefPayload, type InboxPayload,
 } from './Panels'
 import { Transcript } from './Transcript'
 import {
@@ -968,7 +968,7 @@ function Pane({ view, limits }: { view: string; limits?: { five_hour: Window; se
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
         {view === 'brief' && <Fetched<BriefPayload> path="/v2/brief" what="the brief" render={(d) => <Brief data={d} />} />}
         {view === 'inbox' && <Fetched<InboxPayload> path="/v2/inbox" what="the inbox" render={(d) => <Inbox data={d} />} />}
-        {view === 'settings' && <Fetched<ConfigPayload> path="/v2/config" what="settings" render={(d) => <Settings data={d} />} />}
+        {view === 'settings' && <Settings />}
       </div>
     </div>
   )

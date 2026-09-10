@@ -1038,3 +1038,56 @@ def test_faber_starts_in_a_repo_rather_than_the_vault(client, monkeypatch):
 
 def test_mode_dirs_requires_auth(client):
     assert client.get("/v2/mode-dirs").status_code == 401
+
+
+# --------------------------------------------------------- inbox actions
+
+def test_a_proposal_summary_is_its_rationale_not_its_heading():
+    """The inbox read the body's first line, which is "## Rationale" — so
+    every item displayed the header while the sentence explaining it sat
+    unread on the line below. Three items all reading "## Rationale" is why
+    the panel made no sense."""
+    from routers.panels import _section
+
+    body = "## Rationale\nThe actual reason.\n\n## Diff\n(none)\n"
+    assert _section(body, "Rationale") == "The actual reason."
+    assert _section(body, "Diff") == "(none)"
+    assert _section(body, "Missing") == ""
+
+
+def test_a_multi_line_section_is_joined(): 
+    from routers.panels import _section
+    body = "## Rationale\nfirst line\nsecond line\n\n## Diff\nx"
+    assert _section(body, "Rationale") == "first line second line"
+
+
+def test_deciding_archives_rather_than_applies(monkeypatch, client):
+    """Maintenance proposes and never edits, enforced at spawn. A route that
+    applied a diff would be the same power arriving through another door."""
+    from routers import panels
+
+    moved = {}
+    monkeypatch.setattr(panels.vault_io, "file_exists",
+                        lambda p: "inbox" in p)
+    monkeypatch.setattr(panels.vault_io, "move_file",
+                        lambda src, dst: moved.update({"src": src, "dst": dst}))
+
+    body = client.post("/v2/inbox/some-proposal/accept", headers=AUTH).json()
+    assert moved["src"].endswith("inbox/some-proposal.md")
+    assert moved["dst"].endswith("archive/some-proposal.md")
+    assert body["decision"] == "accept"
+
+
+def test_an_unsafe_item_id_is_refused(client):
+    """It is joined into a vault path, so it is the same class of input as
+    the job_slug traversal caught in the 2026-07-21 review."""
+    r = client.post("/v2/inbox/..%2F..%2Fetc%2Fpasswd/accept", headers=AUTH)
+    assert r.status_code in (400, 404)
+
+
+def test_only_accept_or_reject_are_decisions(client):
+    assert client.post("/v2/inbox/x/maybe", headers=AUTH).status_code == 400
+
+
+def test_deciding_requires_auth(client):
+    assert client.post("/v2/inbox/x/accept").status_code == 401

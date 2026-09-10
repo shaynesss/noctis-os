@@ -108,6 +108,27 @@ def _flagged_jobs() -> list[dict]:
     return out
 
 
+def _section(body: str, heading: str) -> str:
+    """The text under a `## Heading`, not the heading itself.
+
+    The inbox read `body.split()[0]` and so displayed "## Rationale" as every
+    proposal's summary — the header, while the sentence explaining the
+    proposal sat on the line below, unread. Three items all reading
+    "## Rationale" is why the panel made no sense.
+    """
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower() != f"## {heading}".lower():
+            continue
+        out = []
+        for rest in lines[i + 1:]:
+            if rest.startswith("## "):
+                break
+            out.append(rest)
+        return " ".join(" ".join(out).split())
+    return ""
+
+
 def _proposals() -> list[dict]:
     """Maintenance proposals staged for review.
 
@@ -131,12 +152,18 @@ def _proposals() -> list[dict]:
             _, body = vault_io.read_frontmatter(f"{staged}/{slug}.md")
         except Exception:  # noqa: BLE001 - covered by _safe_frontmatter above
             pass
+        rationale = meta.get("rationale") or _section(body, "Rationale")
+        diff = _section(body, "Diff")
         items.append({
             "id": slug,
             "kind": "proposal",
             "mode": "maintenance",
             "title": meta.get("description") or slug.replace("-", " "),
-            "detail": meta.get("rationale") or body.strip().split("\n")[0][:160],
+            "detail": rationale[:300],
+            # Whether accepting it would change a file, which is the first
+            # thing you need to know before deciding. Several proposals are
+            # status surfacing and change nothing at all.
+            "changes_files": bool(diff) and "none" not in diff.lower()[:20],
             "at": str(meta.get("staged_at") or ""),
             "confidence": meta.get("confidence"),
         })
@@ -439,3 +466,33 @@ def mode_dirs() -> dict:
             "maintenance": vault,
         }
     }
+
+
+@router.post("/inbox/{item_id}/{decision}")
+def decide(item_id: str, decision: str) -> dict:
+    """Accept or reject a staged proposal.
+
+    An inbox you cannot dispatch is a report. This one showed three items
+    and offered nothing to do about them, so the only way to clear it was to
+    go and move files by hand — which is why it stopped being read.
+
+    Accepting archives the proposal rather than applying it. Maintenance
+    proposes and never edits, and that guarantee is enforced at spawn; a
+    route here that applied a diff would be the same power arriving through
+    a different door.
+    """
+    if decision not in {"accept", "reject"}:
+        raise HTTPException(status_code=400, detail="Decision is accept or reject")
+    if not vault_io.is_safe_slug(item_id):
+        raise HTTPException(status_code=400, detail=f"Invalid item: {item_id!r}")
+
+    staged = f"modes/nightshift/inbox/{item_id}.md"
+    if not vault_io.file_exists(staged):
+        raise HTTPException(status_code=404, detail=f"No such proposal: {item_id}")
+
+    archive = f"modes/nightshift/archive/{item_id}.md"
+    if vault_io.file_exists(archive):
+        raise HTTPException(status_code=409, detail=f"{item_id} was already decided")
+
+    vault_io.move_file(staged, archive)
+    return {"item": item_id, "decision": decision, "archived_to": archive}

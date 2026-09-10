@@ -8,7 +8,7 @@
  */
 import { useState } from 'react'
 import { Unreachable } from './Async'
-import { put } from './engine'
+import { post, put } from './engine'
 import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
 import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
@@ -32,6 +32,10 @@ export interface InboxPayload {
     detail: string
     at: string
     confidence?: string | null
+    /** Whether accepting would change a file. Many proposals only surface
+     *  a status and change nothing, and that is the first thing you need to
+     *  know before deciding. */
+    changes_files?: boolean
   }[]
   counts: { proposals: number; flagged: number }
 }
@@ -113,7 +117,12 @@ const KIND_LABEL: Record<string, string> = {
 }
 
 export function Inbox({ data }: { data: InboxPayload }) {
-  if (data.items.length === 0) {
+  // Decided items disappear at once rather than at the next load: a row
+  // that lingers after you dispatch it reads as a decision that failed.
+  const [decided, setDecided] = useState<Set<string>>(new Set())
+  const items = data.items.filter((i) => !decided.has(i.id))
+
+  if (items.length === 0) {
     return (
       <>
         <Heading>Inbox</Heading>
@@ -133,7 +142,7 @@ export function Inbox({ data }: { data: InboxPayload }) {
         {data.counts.flagged} flagged
       </Heading>
       <Card>
-        {data.items.map((item, i) => {
+        {items.map((item, i) => {
           const accent = MODE_ACCENT[item.mode as Mode] ?? 'var(--color-ink-dim)'
           return (
             <div key={item.id} className={`px-4 py-[12px] ${i ? 'border-t border-line' : ''}`}>
@@ -155,10 +164,40 @@ export function Inbox({ data }: { data: InboxPayload }) {
                 </span>
               </div>
               <div className="pl-[16px] text-[12px] leading-[1.55] text-ink-dim">{item.detail}</div>
-              <div className="mt-[5px] pl-[16px] font-mono text-[10.5px] text-ink-faint">
-                {MODE_LABEL[item.mode as Mode] ?? item.mode}
-                {item.at ? ` · ${item.at.slice(0, 10)}` : ''}
-                {item.confidence ? ` · ${item.confidence} confidence` : ''}
+              <div className="mt-[6px] flex items-center gap-[10px] pl-[16px] font-mono text-[10.5px] text-ink-faint">
+                <span>
+                  {MODE_LABEL[item.mode as Mode] ?? item.mode}
+                  {item.at ? ` · ${item.at.slice(0, 10)}` : ''}
+                  {item.confidence ? ` · ${item.confidence} confidence` : ''}
+                  {item.kind === 'proposal' &&
+                    ` · ${item.changes_files ? 'changes files' : 'changes nothing'}`}
+                </span>
+
+                {/* An inbox you cannot dispatch is a report. Accepting
+                    archives the proposal; it never applies a diff, because
+                    maintenance proposes and never edits and a button here
+                    would be that power through another door. */}
+                {item.kind === 'proposal' && (
+                  <span className="ml-auto flex items-center gap-[4px]">
+                    {(['accept', 'reject'] as const).map((decision) => (
+                      <button
+                        key={decision}
+                        type="button"
+                        onClick={async () => {
+                          const out = await post<{ decision: string }>(
+                            `/v2/inbox/${item.id}/${decision}`, {},
+                          )
+                          if (!('error' in out)) {
+                            setDecided((d) => new Set(d).add(item.id))
+                          }
+                        }}
+                        className="rounded-[3px] border border-line px-[7px] py-[2px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink"
+                      >
+                        {decision}
+                      </button>
+                    ))}
+                  </span>
+                )}
               </div>
             </div>
           )
@@ -168,44 +207,15 @@ export function Inbox({ data }: { data: InboxPayload }) {
   )
 }
 
-export function Settings({ data }: { data: ConfigPayload }) {
+/* Settings is now only things that are true until you change them: the
+ * prompts, the regression suite, the schedule. The models table went because
+ * a mode's model does not change unless you change it with /model, so a
+ * read-only table of five rows saying "opus" four times was a page telling
+ * you what you already set. */
+export function Settings() {
   return (
     <>
-      <Heading>Models and tool policy</Heading>
-      {/* Read from the orchestrator rather than restated here, so this cannot
-          drift into describing a system that no longer exists. */}
-      <Card>
-        {data.modes.map((m, i) => (
-          <div
-            key={m.mode}
-            className={`grid grid-cols-[minmax(110px,1fr)_auto_minmax(0,1.6fr)] items-center gap-4 px-4 py-[12px] ${
-              i ? 'border-t border-line' : ''
-            }`}
-          >
-            <span className="flex items-center gap-[8px] text-[13px] text-ink">
-              <span
-                className="h-[8px] w-[8px] shrink-0 rounded-[1px]"
-                style={{ background: MODE_ACCENT[m.mode as Mode] ?? 'var(--color-ink-dim)' }}
-              />
-              {MODE_LABEL[m.mode as Mode] ?? m.mode}
-            </span>
-            <span className="font-mono text-[11.5px] text-ink-dim">{m.model}</span>
-            <span className="font-mono text-[11px] text-ink-faint">
-              {m.allowed.length > 0 && (
-                <span className="text-ink-dim">{m.allowed.join(' · ')}</span>
-              )}
-              {m.disallowed.length > 0 && (
-                <>
-                  {m.allowed.length > 0 && <span> · </span>}
-                  never <span className="text-ink-dim">{m.disallowed.join(' ')}</span>
-                </>
-              )}
-            </span>
-          </div>
-        ))}
-      </Card>
-
-      <Heading className="mt-7">Prompts</Heading>
+      <Heading>Prompts</Heading>
       <Prompts />
 
       <Heading className="mt-7">Regression suite</Heading>
