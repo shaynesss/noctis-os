@@ -159,7 +159,9 @@ concurrent), the Noctis MCP server, and a Tauri shell with chat, mode entry,
 handoff, search and real usage stats. The morning brief, worklist and
 scheduler are next.
 
-See [`STATUS.md`](STATUS.md) for the detailed, non-aspirational build log and
+**[`docs/how-it-works.md`](docs/how-it-works.md)** is the short read: what
+the pieces are and how they fit, in one sitting. See
+[`STATUS.md`](STATUS.md) for the detailed, non-aspirational build log and
 [`CHANGELOG.md`](CHANGELOG.md) for what changed when.
 
 **Deliberately out of scope:** multi-user support or auth beyond a single
