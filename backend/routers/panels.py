@@ -405,3 +405,37 @@ def regression_suite() -> dict:
     return {"cases": cases, "path": path,
             # What running it will actually cost, stated before you press it.
             "sessions": len(cases)}
+
+
+@router.get("/mode-dirs")
+def mode_dirs() -> dict:
+    """Where each mode should start, when you have not said otherwise.
+
+    Noctua, Vesper and Maintenance work across the vault, so they start at
+    its root — not in their own `modes/<name>/` folder, which would be
+    tidier and worse: the engine scopes reads to the working directory, so a
+    Noctua session confined to `modes/learn/` could not read `wiki/`, which
+    is most of what there is to learn from.
+
+    Faber and General get the last directory actually used, because a build
+    session belongs in a repo and which repo is a thing only history knows.
+    """
+    from orchestrator.store import ConversationStore
+
+    vault = str(vault_io.get_vault_path())
+    store = ConversationStore()
+    try:
+        recent = store.recent_cwds()
+    finally:
+        store.close()
+
+    last = recent[0] if recent else str(Path.home())
+    return {
+        "dirs": {
+            "general": last,
+            "faber": next((d for d in recent if d != vault), last),
+            "noctua": vault,
+            "vesper": vault,
+            "maintenance": vault,
+        }
+    }

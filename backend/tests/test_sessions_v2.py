@@ -1009,3 +1009,32 @@ def test_promote_requires_auth(client):
     r = client.post("/v2/sessions/history/1/promote",
                     json={"rel_path": "wiki/x.md", "title": "X"})
     assert r.status_code == 401
+
+
+def test_vault_modes_start_at_the_vault_root_not_their_own_folder(client, monkeypatch):
+    """Tidier and worse: the engine scopes reads to the working directory,
+    so a Noctua session confined to modes/learn/ could not read wiki/ --
+    which is most of what there is to learn from."""
+    dirs = client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]
+    import vault_io
+
+    vault = str(vault_io.get_vault_path())
+    for mode in ("noctua", "vesper", "maintenance"):
+        assert dirs[mode] == vault, f"{mode} should start at the vault root"
+        assert not dirs[mode].endswith(("learn", "research", "maintenance"))
+
+
+def test_faber_starts_in_a_repo_rather_than_the_vault(client, monkeypatch):
+    """A build session belongs in a project, and which project is a thing
+    only history knows."""
+    from routers import panels
+
+    monkeypatch.setattr(panels.vault_io, "get_vault_path", lambda: Path("/vault"))
+    monkeypatch.setattr("orchestrator.store.ConversationStore.recent_cwds",
+                        lambda self, limit=8: ["/vault", "/repo/project"])
+    dirs = client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]
+    assert dirs["faber"] == "/repo/project"
+
+
+def test_mode_dirs_requires_auth(client):
+    assert client.get("/v2/mode-dirs").status_code == 401

@@ -50,15 +50,24 @@ export function Launcher({
    * never learned a project you started using. */
   const recents = useFetched<{ dirs: string[] }>('/v2/recent-dirs')
   const dirs = useMemo(() => (recents ? recents.dirs : []), [recents])
-  const [cwd, setCwd] = useState(handoff?.cwd ?? '')
 
-  /* Filled in once history arrives, and only while untouched — typing a
-   * directory and having it replaced a moment later would be maddening.
-   * `dirs` is memoised on the fetch result, or a fresh array each render
-   * would re-run this effect forever. */
+  /* Where each mode starts. The vault-native modes belong at the vault
+   * root; a build session belongs in a repo. The default used to be
+   * whichever directory was used last regardless of mode, which put a
+   * Noctua session in the home folder — nobody's sensible starting point,
+   * and the reason it opened by remarking on where it was. */
+  const defaults = useFetched<{ dirs: Record<string, string> }>('/v2/mode-dirs')
+  const [cwd, setCwd] = useState(handoff?.cwd ?? '')
+  const [touched, setTouched] = useState(false)
+
+  /* Follows the mode until you type. A handoff keeps its source directory —
+   * the conversation is being continued somewhere, and moving it would be a
+   * second change nobody asked for. */
   useEffect(() => {
-    if (!cwd && dirs.length > 0) setCwd(dirs[0])
-  }, [cwd, dirs])
+    if (touched || handoff) return
+    const suggested = (defaults ? defaults.dirs[mode] : undefined) ?? dirs[0]
+    if (suggested) setCwd(suggested)
+  }, [mode, defaults, dirs, touched, handoff])
   const [prompt, setPrompt] = useState('')
   const [carried, setCarried] = useState(handoff?.carried ?? '')
   const promptRef = useRef<HTMLTextAreaElement>(null)
@@ -218,7 +227,10 @@ export function Launcher({
             </span>
             <input
               value={cwd}
-              onChange={(e) => setCwd(e.target.value)}
+              onChange={(e) => {
+                setTouched(true)     // stop following the mode once you type
+                setCwd(e.target.value)
+              }}
               list="cwd-recents"
               spellCheck={false}
               className="w-full rounded-[4px] border border-line bg-ground px-[10px] py-[7px] font-mono text-[11.5px] text-ink outline-none focus:border-[var(--accent)]"
