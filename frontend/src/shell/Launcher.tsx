@@ -16,7 +16,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFetched } from './useFetched'
 import { MODE_ACCENT, MODE_INFO, MODE_LABEL, type Mode } from './domain'
 
-const MODES: Mode[] = ['general', 'faber', 'noctua', 'vesper', 'maintenance']
+/* Maintenance is deliberately absent.
+ *
+ * It is the overnight auditor: the scheduler wakes it, it reads lessons
+ * files and stages proposals, and the thing you interact with is its output
+ * in the Inbox. Offering it here invited you to sit and chat with an
+ * auditor, which is not a session anyone wants. Its config dir stays, so
+ * the scheduler can still run it. */
+const MODES: Mode[] = ['general', 'faber', 'noctua', 'vesper']
 
 export interface LaunchRequest {
   mode: Mode
@@ -28,12 +35,9 @@ export interface LaunchRequest {
 
 export function Launcher({
   handoff,
-  modeModels,
   onLaunch,
   onClose,
 }: {
-  /** Each mode's model, as the orchestrator reports it. */
-  modeModels?: Record<string, string>
   /** Present when handing off: the source session and what it carries. */
   handoff?: { mode: Mode; label: string; cwd: string; carried: string }
   onLaunch: (req: LaunchRequest) => void
@@ -192,11 +196,6 @@ export function Launcher({
                       {info.policy}
                     </span>
                   )}
-                  {/* From the backend, so this cannot drift into naming a
-                      model the orchestrator no longer runs. */}
-                  <span className="shrink-0 font-mono text-[10.5px] text-ink-faint">
-                    {modeModels?.[m] ?? info.model}
-                  </span>
                   <kbd className="shrink-0 font-mono text-[10px] text-ink-faint">⌘{i + 1}</kbd>
                 </button>
               )

@@ -946,7 +946,6 @@ export default function App() {
       {launcher && (
         <Launcher
           handoff={launcher.handoff}
-          modeModels={modeDefaults}
           onLaunch={launch}
           onClose={() => {
             setLauncher(null)
