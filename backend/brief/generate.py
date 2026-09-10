@@ -95,9 +95,23 @@ def gather() -> dict:
     try:
         # The last session that was actually in a mode. General is the front
         # door, and "you were last in General" tells you nothing.
-        last = next(
-            (s for s in store.recent_sessions(limit=25) if s["mode"] != "general"), None,
-        )
+        def worth_reporting(row) -> bool:
+            """A session you actually did something in.
+
+            General is the front door, so "you were last in General" says
+            nothing. And a session that only ran its opener has no content —
+            reporting it produced "Noctua opened this morning with no recap
+            recorded", which is a sentence about nothing.
+            """
+            if row["mode"] == "general":
+                return False
+            said = store.db.execute(
+                "SELECT COUNT(*) c FROM messages WHERE session_id=? AND role='user'",
+                (row["id"],),
+            ).fetchone()["c"]
+            return said > 0
+
+        last = next((s for s in store.recent_sessions(limit=40) if worth_reporting(s)), None)
         last_session = {
             "mode": last["mode"], "title": last["title"],
             # The recap is far closer to what you want at 9am than a job's
@@ -136,21 +150,23 @@ def _inbox_counts() -> dict:
     return {"waiting": waiting, "empty": empty}
 
 
-PROMPT = """You are writing one person's morning brief. They will read it at 9am and
-decide what to do. Below are the facts, already gathered — use only these, invent nothing,
-and do not soften a number.
+PROMPT = """You are writing one person's morning brief. They read it at 9am, half awake,
+and need to know two things: where they were, and what is waiting. Below are the facts —
+use only these and invent nothing.
 
-Write exactly two short paragraphs of prose, nothing else. No headings, no bullet points,
-no sign-off.
+**One paragraph. Three sentences at the absolute most.** That is the whole budget. The
+rows underneath carry the state; this is only the part a list cannot say.
 
-Paragraph one: where they left off. Name the mode and what was in progress, in plain past
-tense. If the last session was days ago, say so.
+Cover, in this order and only if true: where they left off and how long ago, and what is
+waiting on them. If nothing is waiting, end after the first sentence.
 
-Paragraph two: what is owed a decision, if anything. Rewrite each into one clear clause —
-several of these statuses are notes the vault wrote to itself and read badly as-is. If
-nothing is owed, say the work is all moving and stop.
+Say it as a person would to someone they work with. No greeting, no encouragement, no
+exclamation marks. Do not tell them what they accomplished — they were there. Do not tell
+them they are ready to continue, or offer any assessment of their progress.
 
-Be direct and unhurried. No exclamation marks, no "Good morning", no encouragement.
+Never include: identifiers, variable names, file paths, version or item numbers, or
+anything in backticks. "A settings counter never advanced" — not the name of the counter.
+They can open the job for that.
 
 Dates and times: use only the ages given below, in days. The statuses are notes the vault
 wrote to itself and often contain bare clock times like "14:11" with no date — those are
@@ -208,10 +224,12 @@ def render(facts: dict, prose: str) -> str:
     for label in ROWS:
         jobs = facts["per_mode"][label]
         if not jobs:
-            out.append(f"- **{label}** — —")
+            # Words, not a dash. "Vesper — —" reads as a rendering fault
+            # rather than as an answer, and the answer is a real one.
+            out.append(f"- **{label}** — nothing open")
             continue
         head = jobs[0]
-        extra = f" · +{len(jobs) - 1}" if len(jobs) > 1 else ""
+        extra = f" · +{len(jobs) - 1} more" if len(jobs) > 1 else ""
         out.append(f"- **{label}** — {head['name']}{extra}")
 
     inbox = facts["inbox"]

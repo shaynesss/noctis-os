@@ -74,13 +74,30 @@ function Card({ children }: { children: React.ReactNode }) {
  * Names the exact path so the state is checkable rather than merely
  * asserted — you can go and look, which is the difference between a status
  * and a claim. */
-function NotGenerated({ what, path }: { what: string; path: string }) {
+/** The brief, before the scheduler has written one. */
+function NotGenerated({ path }: { path: string }) {
   return (
     <Card>
       <div className="px-4 py-[13px] text-[12.5px] leading-[1.6] text-ink-dim">
-        No {what} yet. The scheduler writes{' '}
-        <code className="font-mono text-[11.5px] text-ink-faint">{path}</code> each morning; it is
-        not built yet.
+        No brief yet this morning. The scheduler writes{' '}
+        <code className="font-mono text-[11.5px] text-ink-faint">{path}</code> on wake.
+      </div>
+    </Card>
+  )
+}
+
+/** The worklist, before you have written one.
+ *
+ * Not generated, by decision: it is a small hand-kept note of things to get
+ * done, and a generated one would be the job list again under a second
+ * name. This panel said the scheduler wrote it, which was the opposite. */
+function EmptyWorklist({ path }: { path: string }) {
+  return (
+    <Card>
+      <div className="px-4 py-[13px] text-[12.5px] leading-[1.6] text-ink-dim">
+        Nothing on the worklist. It is yours to keep — write{' '}
+        <code className="font-mono text-[11.5px] text-ink-faint">{path}</code> in the vault and it
+        appears here.
       </div>
     </Card>
   )
@@ -95,7 +112,7 @@ export function Brief({ data }: { data: BriefPayload }) {
           <Markdown src={data.brief.markdown} />
         </Card>
       ) : (
-        <NotGenerated what="brief" path={data.brief.path} />
+        <NotGenerated path={data.brief.path} />
       )}
 
       <Heading className="mt-7">Worklist</Heading>
@@ -104,7 +121,7 @@ export function Brief({ data }: { data: BriefPayload }) {
           <Markdown src={data.worklist.markdown} />
         </Card>
       ) : (
-        <NotGenerated what="worklist" path={data.worklist.path} />
+        <EmptyWorklist path={data.worklist.path} />
       )}
     </>
   )

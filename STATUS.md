@@ -49,27 +49,22 @@ Verified live, not only by tests.
 install" is true but "copy one file" is not. A conformance test pins the
 list; the adoption docs the spec wants for the public repo need to say it.
 
-**1. Brief + worklist generator (item 6).** Design half-finished: the shape
-is agreed (overnight line, inbox, three mode-keyed actions, deterministic
-footer), and one fork is open — whether the brief reads email through an MCP
-server on its own session, over IMAP from the backend, or not at all in v1.
-Nothing else on this list is blocked by a decision, so this is where the
-next real conversation is owed.
+**1. The scheduler (launchd on wake).** The brief generator is built and
+writes `brief/today.md`; nothing fires it yet, so it only appears when asked
+for. This is the last piece of item 6. Email was deliberately left out of
+v1 — the vault-only brief is useful on its own, and it unblocked everything
+downstream.
 
-**2. Scheduler (launchd on wake).** Blocked on the brief's shape; the
-mechanism itself is small.
+**2. The worklist is hand-kept and empty.** Write `worklist.md` in the vault
+and the panel shows it. Whether it should be editable in the app rather than
+only readable is undecided.
 
-**3. The worklist spec amendment.** Agreed to become hand-kept notes rather
-than generated from mode state, and has still not reached
-`noctis-v2-SPEC.md`, which by this project's own rule means it does not
-count yet.
-
-**4. Item 8, "tiered loading policy", is undefined.** It appears in the
+**3. Item 8, "tiered loading policy", is undefined.** It appears in the
 build-order table and nowhere else in the spec — no description, no
 reasoning, no acceptance condition. It cannot be built from what is written,
 so it needs either a definition or removal.
 
-**5. Running the regression suite from Settings.** The cases are listed with
+**4. Running the regression suite from Settings.** The cases are listed with
 what running them would cost; firing them needs the orchestrator to host
 thirteen sessions and report back, which is real work rather than a button.
 
