@@ -4,7 +4,7 @@
  * text), so the transcript is built from blocks rather than appended text.
  * That is why the Design Brief takes Ghostty for *rendering* and not for its
  * stream model: a terminal-shaped transcript would fight the data. */
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { Markdown } from './Markdown'
 import { Artifacts } from './Artifacts'
 import { failures, groupTools, summarise, type ToolBlock } from './tools'
@@ -66,6 +66,17 @@ function Disclosure({
   )
 }
 
+/* Scrolling.
+ *
+ * Two behaviours, and they conflict, so the rule is explicit: follow new
+ * output only while you are already at the bottom. Yanking the view down
+ * while someone is reading further up is the thing that makes a streaming
+ * transcript unusable, and it is worse than not following at all.
+ *
+ * Position is remembered per conversation and restored on return. Switching
+ * to Stats and back used to unmount this and rebuild it at the top, so you
+ * came back to the beginning of a conversation you were halfway through.
+ */
 export function Transcript({
   blocks,
   accent,
@@ -76,6 +87,10 @@ export function Transcript({
   lastTurn,
   historyId,
   onOpenDoc,
+  scrollKey,
+  initialScroll,
+  onScroll,
+  streaming,
   onEdit,
   onRetry,
 }: {
@@ -93,13 +108,65 @@ export function Transcript({
   /** Backend row id, for the files this conversation touched. */
   historyId?: number | null
   onOpenDoc?: (vaultPath: string) => void
+  /** Identifies the conversation, so its scroll position is its own. */
+  scrollKey: string
+  /** Where this conversation was last left, in pixels from the top. */
+  initialScroll?: number
+  onScroll?: (key: string, top: number) => void
+  /** True while a turn is streaming, which is when to follow the output. */
+  streaming?: boolean
   /** Put a past message back in the composer to rephrase. */
   onEdit?: (text: string) => void
   /** Ask the same thing again. */
   onRetry?: (text: string) => void
 }) {
+  const box = useRef<HTMLDivElement>(null)
+  // How close to the bottom still counts as "at the bottom". A couple of
+  // lines of slack, so a stray pixel or an image finishing loading does not
+  // silently stop the follow.
+  const NEAR_BOTTOM = 60
+
+  const wasAtBottom = useRef(true)
+
+  const atBottom = () => {
+    const el = box.current
+    if (!el) return true
+    return el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM
+  }
+
+  // Restore before paint, not after, or the conversation is visibly at the
+  // top for a frame before jumping.
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.scrollTop = initialScroll ?? el.scrollHeight
+    /* And decide, from where we just landed, whether output should be
+     * followed. Both layout effects run on mount and this one is declared
+     * first, so without setting it here the follow below would immediately
+     * override the position just restored — returning you to the bottom of
+     * a conversation you had deliberately scrolled up in. */
+    wasAtBottom.current = atBottom()
+    // Only when the conversation changes: re-running on every render would
+    // fight the person scrolling.
+  }, [scrollKey])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Follow the output, if you were already following it.
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el || !wasAtBottom.current) return
+    el.scrollTop = el.scrollHeight
+  }, [blocks, thinking, streaming])
+
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
+    <div
+      ref={box}
+      onScroll={(e) => {
+        const el = e.currentTarget
+        wasAtBottom.current = atBottom()
+        onScroll?.(scrollKey, el.scrollTop)
+      }}
+      className="min-h-0 flex-1 overflow-y-auto"
+    >
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
         {/* Above the transcript, not inside it: this is not something anyone
             said. It is a reminder of where a resumed conversation got to,

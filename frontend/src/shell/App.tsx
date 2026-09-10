@@ -114,6 +114,11 @@ export default function App() {
    * keeps burning the 5h window with nothing rendering it. */
   const aborts = useRef<Record<string, AbortController>>({})
 
+  /* Where each conversation was left. A ref rather than state: it changes on
+   * every scroll event, and re-rendering the transcript while someone is
+   * scrolling it is the one thing that must not happen. */
+  const scrollTops = useRef<Record<string, number>>({})
+
   // Newest rolling-window report, for the status bar. Null until a session
   // has reported one -- see the backend's known:false for why that is not
   // the same as zero.
@@ -802,6 +807,12 @@ export default function App() {
             startedAt={session.startedAt}
             recap={session.recap}
             lastTurn={session.lastTurn}
+            scrollKey={activeTab}
+            initialScroll={scrollTops.current[activeTab]}
+            onScroll={(key, top) => {
+              scrollTops.current[key] = top
+            }}
+            streaming={Boolean(session.busy)}
             historyId={activeTab.startsWith('h') ? Number(activeTab.slice(1)) : null}
             onOpenDoc={setDoc}
             onEdit={(text) => {

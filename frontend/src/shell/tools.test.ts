@@ -92,3 +92,31 @@ describe('which message can be redone', () => {
     expect(lastUserIndex([{ kind: 'text', text: 'unprompted' }])).toBe(-1)
   })
 })
+
+/* Scroll behaviour. Following output and preserving position conflict, so
+ * the rule has to be explicit: follow only while already at the bottom.
+ * Yanking the view down while someone reads further up is worse than not
+ * following at all. */
+describe('scroll following', () => {
+  const NEAR_BOTTOM = 60
+  const atBottom = (scrollHeight: number, scrollTop: number, clientHeight: number) =>
+    scrollHeight - scrollTop - clientHeight <= NEAR_BOTTOM
+
+  it('follows when pinned to the bottom', () => {
+    expect(atBottom(1000, 600, 400)).toBe(true)
+  })
+
+  it('still follows within a couple of lines of the bottom', () => {
+    // Slack, so a stray pixel or an image finishing loading does not
+    // silently stop the follow.
+    expect(atBottom(1000, 560, 400)).toBe(true)
+  })
+
+  it('does not follow when reading further up', () => {
+    expect(atBottom(1000, 200, 400)).toBe(false)
+  })
+
+  it('treats a transcript shorter than the viewport as at the bottom', () => {
+    expect(atBottom(300, 0, 400)).toBe(true)
+  })
+})
