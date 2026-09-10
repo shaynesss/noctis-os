@@ -195,3 +195,34 @@ def test_prompts_and_resources_are_exposed(client):
     assert prompts, "no prompts advertised"
     resources = client.call("resources/list")["result"]["resources"]
     assert resources, "no resources advertised"
+
+
+def test_the_handshake_answers_with_a_version_the_server_speaks(client):
+    """The MCP handshake is a negotiation, not an echo. This replied with
+    whatever the client asked for — told "1999-01-01" it agreed, and a client
+    would then proceed to use features never implemented. It must answer with
+    a version it actually supports so the client can decide."""
+    from mcp.server import PROTOCOL_VERSIONS
+
+    for requested, expected in (
+        ("2024-11-05", "2024-11-05"),          # supported: agree
+        ("1999-01-01", PROTOCOL_VERSIONS[0]),  # unknown: offer ours
+        (None, PROTOCOL_VERSIONS[0]),          # absent: offer ours
+    ):
+        params = {"capabilities": {}, "clientInfo": {"name": "x", "version": "0"}}
+        if requested is not None:
+            params["protocolVersion"] = requested
+        answered = client.call("initialize", params)["result"]["protocolVersion"]
+        assert answered == expected, f"asked {requested}, answered {answered}"
+        assert answered in PROTOCOL_VERSIONS
+
+
+def test_a_notification_gets_no_response(client):
+    """Real clients send notifications/initialized right after the
+    handshake. A notification has no id, and replying to one desynchronises
+    a client that is counting responses."""
+    client.proc.stdin.write('{"jsonrpc":"2.0","method":"notifications/initialized"}\n')
+    client.proc.stdin.flush()
+    # The next response must belong to the request after it, not to the
+    # notification — if the server answered, this returns the wrong message.
+    assert client.call("tools/list")["result"]["tools"]

@@ -29,7 +29,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from retrieval.index import TOP_K, VaultIndex  # noqa: E402
 
-PROTOCOL_FALLBACK = "2025-06-18"
+# Versions this server actually implements, newest first. The spec's
+# handshake is a negotiation: the client names what it wants, and the server
+# answers with a version *it* supports so the client can decide whether to
+# proceed. Echoing the request back instead — which this did — means
+# claiming to speak anything a client names, including versions that do not
+# exist. Asked for "1999-01-01" it agreed, and a client would then have gone
+# on to use features that were never implemented.
+PROTOCOL_VERSIONS = ("2025-06-18", "2024-11-05")
+PROTOCOL_FALLBACK = PROTOCOL_VERSIONS[0]
+
+
+def negotiate(requested: str | None) -> str:
+    """The version to answer with: theirs if we speak it, else our newest."""
+    return requested if requested in PROTOCOL_VERSIONS else PROTOCOL_FALLBACK
 VAULT = Path(os.environ.get("VAULT_PATH", Path(__file__).resolve().parents[3] / "second-brain"))
 HISTORY_DB = os.environ.get("NOCTIS_HISTORY_DB")
 
@@ -269,7 +282,7 @@ def main() -> None:
         try:
             if method == "initialize":
                 ok(rid, {
-                    "protocolVersion": req.get("params", {}).get("protocolVersion", PROTOCOL_FALLBACK),
+                    "protocolVersion": negotiate(req.get("params", {}).get("protocolVersion")),
                     "capabilities": {"tools": {}, "prompts": {}, "resources": {}},
                     "serverInfo": {"name": "noctis", "version": "2.0.0"},
                 })

@@ -159,6 +159,12 @@ exposes five tools:
 Plus MCP *prompts* (mode entry points) and *resources* (vault documents), so
 a client that has never heard of Noctis can discover the whole surface.
 
+It implements the protocol's core method set — `initialize`, `tools/list`,
+`tools/call`, `prompts/list`, `prompts/get`, `resources/list`,
+`resources/read` — as JSON-RPC 2.0 over stdio, negotiating a protocol
+version at handshake and staying silent on notifications, which have no id
+to answer.
+
 It needs no package manager — `python3 server.py` and nothing to install.
 It is not a single file, though: it imports `retrieval/` and `orchestrator/`
 alongside it, so adopting it means copying three directories. A conformance
