@@ -1,4 +1,4 @@
-.PHONY: setup bootstrap dev app open-app
+.PHONY: setup bootstrap dev test app open-app
 
 setup:
 	./scripts/setup.sh
@@ -13,6 +13,12 @@ dev:
 	(cd backend && .venv/bin/uvicorn main:app --reload --reload-exclude 'runtime/*' --reload-exclude 'data/*' --port $${PORT:-8000}) & \
 	(cd frontend && npm run dev) & \
 	wait
+
+# The suite has always been run by typing the venv's interpreter path out in
+# full, which is unmemorable and -- since it is an absolute path under a home
+# directory -- not something a permission rule can name portably.
+test:
+	cd backend && .venv/bin/python -m pytest -q
 
 app:
 	backend/.venv/bin/python desktop/app.py

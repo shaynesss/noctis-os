@@ -105,8 +105,20 @@ class SessionManager:
                 fatal = any(getattr(e, "fatal", False) for e in handle.events)
                 handle.state = "failed" if fatal else "done"
 
-    def resume_spec(self, handle: SessionHandle, prompt: str) -> SessionSpec:
-        """A spec that continues an earlier session rather than starting fresh."""
+    def resume_spec(
+        self, handle: SessionHandle, prompt: str, permission_mode: str
+    ) -> SessionSpec:
+        """A spec that continues an earlier session rather than starting fresh.
+
+        `permission_mode` is required rather than inherited from the handle.
+        Inheriting is what this did, and it is wrong: the chip is a live
+        control, so a session that opened in `manual` would stay in `manual`
+        for the rest of its life no matter what the chip was switched to
+        afterwards. The router happens to dodge this by building its own spec
+        from each request, which is the only reason the chip works today --
+        so the bug was invisible while the wrong behaviour sat here with a
+        test asserting it. Required, so the next caller has to decide.
+        """
         if not handle.session_id:
             raise ValueError(f"session {handle.local_id} has no engine id to resume")
         return SessionSpec(
@@ -115,5 +127,5 @@ class SessionManager:
             resume_id=handle.session_id,
             cwd=handle.spec.cwd,
             vault_path=handle.spec.vault_path,
-            permission_mode=handle.spec.permission_mode,
+            permission_mode=permission_mode,
         )

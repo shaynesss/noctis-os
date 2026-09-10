@@ -143,7 +143,7 @@ def test_manager_records_the_engine_id_so_the_session_can_resume():
     m, handle = asyncio.run(go())
     assert handle.state == "done"
     assert handle.resumable
-    assert m.resume_spec(handle, "carry on").resume_id == handle.session_id
+    assert m.resume_spec(handle, "carry on", "manual").resume_id == handle.session_id
 
 
 def test_manager_marks_a_fatal_run_failed_not_done():
@@ -228,13 +228,20 @@ def test_bypass_is_not_in_the_cycle():
     assert PERMISSION_CYCLE[0] == "plan"
 
 
-def test_resume_preserves_the_permission_mode():
+def test_resume_takes_the_current_permission_mode_not_the_original():
+    """The chip is a live control, not a birth certificate.
+
+    This used to assert the opposite -- that a resume inherits the mode the
+    session started with -- which would pin a session opened in `manual` to
+    `manual` forever, however many times the chip was cycled afterwards. The
+    old test passed and described a bug.
+    """
     async def go():
         m = SessionManager(runner=_fake_runner)
-        spec = SessionSpec(mode="faber", prompt="x", permission_mode="acceptEdits")
+        spec = SessionSpec(mode="faber", prompt="x", permission_mode="manual")
         async for h, _ in m.start(spec):
             handle = h
-        return m.resume_spec(handle, "more")
+        return m.resume_spec(handle, "more", "acceptEdits")
 
     assert asyncio.run(go()).permission_mode == "acceptEdits"
 
@@ -242,23 +249,71 @@ def test_resume_preserves_the_permission_mode():
 # ------------------------------------------------- pre-allowed tools
 
 def test_read_and_web_tools_are_pre_allowed():
-    """With --print the CLI denies anything that would prompt, because there
-    is no interactive session to ask. WebSearch failed with 'you haven't
-    granted it yet' and no way to grant it, so the tools a mode should always
-    have are allowed at spawn."""
+    """Anything that would prompt is denied, because this driver passes
+    --permission-prompts none: there is no host to answer. WebSearch failed
+    with 'you haven't granted it yet' and no way to grant it, so the tools a
+    mode should always have are allowed at spawn."""
     cmd = build_command(SessionSpec(mode="general", prompt="x"))
     allowed = cmd[cmd.index("--allowedTools") + 1]
     assert "WebSearch" in allowed and "Read" in allowed
 
 
 def test_mutating_tools_are_never_pre_allowed():
-    """Bash, Edit and Write stay governed by the permission mode. Listing
-    them here would silently pre-approve changes to the machine in order to
-    make the app feel like it works."""
+    """Edit and Write stay governed by the permission mode. Listing them here
+    would silently pre-approve changes to the machine in order to make the app
+    feel like it works.
+
+    Bash is also absent here, but is not ungoverned: named commands are
+    allowed by orchestrator/permissions.json, which is one tracked, reviewable
+    list rather than a per-mode blanket. See the tests below it."""
     for mode in MODE_MODELS:
         allowed = MODE_TOOLS.get(mode, {}).get("allowed", "")
         for tool in ("Bash", "Edit", "Write"):
             assert tool not in allowed, f"{mode} pre-approves {tool}"
+
+
+# ------------------------------------------------- who answers a prompt
+
+def test_permission_prompts_is_set_to_none():
+    """The flag decides *who answers*, and defaults to "host" -- the SDK host.
+    This driver spawns a subprocess and answers nothing, so under the default
+    a request goes out and nobody replies: every tool needing a decision fails
+    with 'you haven't granted it yet' regardless of the permission mode. Found
+    live when Faber could not write a file with the chip on acceptEdits."""
+    cmd = build_command(SessionSpec(mode="faber", prompt="x"))
+    assert cmd[cmd.index("--permission-prompts") + 1] == "none"
+
+
+def test_shared_settings_file_is_passed_and_exists():
+    """CLAUDE_CONFIG_DIR redirects where user settings are read from, so
+    ~/.claude/settings.json is invisible to a spawned session. Without this
+    every session starts with an empty allowlist."""
+    from orchestrator.driver import SHARED_SETTINGS
+    cmd = build_command(SessionSpec(mode="faber", prompt="x"))
+    assert cmd[cmd.index("--settings") + 1] == str(SHARED_SETTINGS)
+    assert SHARED_SETTINGS.exists(), "the file the spawn points at must be there"
+
+
+def _shared_permissions() -> dict:
+    import json
+    from orchestrator.driver import SHARED_SETTINGS
+    return json.loads(SHARED_SETTINGS.read_text())["permissions"]
+
+
+def test_shared_settings_never_allow_edit_or_write():
+    """The chip has to keep meaning something in *both* directions. Allowing
+    Edit or Write here would make `manual` and `plan` permit edits, which is
+    the same defect as acceptEdits not permitting them -- just quieter."""
+    allowed = " ".join(_shared_permissions()["allow"])
+    for tool in ("Edit", "Write"):
+        assert f"{tool}(" not in allowed and tool not in allowed.split()
+
+
+def test_shared_settings_deny_git_push():
+    """dev.md's 'commits as work progresses, Shayne pushes' was a rule in a
+    markdown file that a session could simply not follow. Here it is a fact
+    about what the process may do."""
+    assert any("git push" in rule for rule in _shared_permissions()["deny"])
 
 
 def test_maintenance_gets_no_web_access():

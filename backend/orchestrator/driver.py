@@ -42,13 +42,18 @@ MODE_MODELS = {
 # Read-only and research tools, pre-allowed wherever a mode should have
 # them. Nothing here mutates anything.
 #
-# **Why this is needed at all.** With `--print`, the CLI's
-# `--permission-prompts` defaults to "none" -- "anything that would prompt is
-# denied automatically". There is no interactive session to ask, so a tool
-# that would normally prompt simply fails. That is why WebSearch and WebFetch
-# came back "you haven't granted it yet" with no way to grant it: the UI's
-# permission chip sets --permission-mode, and "ask each time" means "deny"
-# when nobody can be asked.
+# **Why this is needed at all.** `--permission-prompts` decides *who answers*
+# a permission request under `--print`. It defaults to "host" -- the SDK host,
+# or whatever `--permission-prompt-tool` names. This driver is not a host: it
+# spawns a subprocess, reads its stream and answers nothing. So under the
+# default a request goes out and nobody ever replies, and the tool fails.
+# That is why WebSearch and WebFetch came back "you haven't granted it yet"
+# with no way to grant it.
+#
+# (An earlier version of this comment said the default was "none". It is not,
+# and the difference matters: "none" is a decision, "host" is a promise to
+# answer that this driver does not keep. `build_command` now passes "none"
+# explicitly -- see PERMISSION_PROMPTS below.)
 #
 # Mutating tools are deliberately NOT here. Bash, Edit and Write stay
 # governed by the permission mode, so nothing that changes your machine is
@@ -91,6 +96,40 @@ MODE_TOOLS: dict[str, dict[str, str]] = {
 # flag and remains available to set explicitly, but it should not be
 # reachable by tapping a key repeatedly.
 PERMISSION_CYCLE = ("plan", "manual", "acceptEdits", "auto")
+
+# Nobody is on the other end of a permission request here, so say so instead
+# of leaving the CLI waiting on a host that never answers. With "none" the
+# permission mode alone decides -- which is what the chip's own labels have
+# always claimed: acceptEdits accepts edits, manual refuses what would
+# prompt, plan plans. Until this was passed, every label was aspirational.
+PERMISSION_PROMPTS = "none"
+
+# Bash permissions, shared by every mode and tracked in git.
+#
+# Not in the per-mode CLAUDE_CONFIG_DIRs: `CLAUDE_CONFIG_DIR` redirects where
+# user settings are read from, so ~/.claude/settings.json -- and every
+# permission ever accumulated in it -- is invisible to a spawned session.
+# Writing a block into each config dir instead would work and be untracked
+# (backend/launch_config/* is gitignored), so it would vanish on the next
+# bootstrap and drift between the five dirs in the meantime.
+#
+# **Bash only, deliberately.** Edit and Write stay governed by the permission
+# chip: acceptEdits covers them and manual is meant to refuse them, so listing
+# them here would make the chip meaningless in the other direction -- `manual`
+# would quietly permit edits. Bash is listed because no permission mode short
+# of `auto` covers it, and a build session that cannot run its own test suite
+# is not a build session.
+#
+# **git push is denied, not merely absent.** dev.md's "commits as work
+# progresses, Shayne pushes" was a rule in a markdown file that a session
+# could simply fail to follow; here it is a fact about what the process may
+# do. The scheduler's vault push is backend Python calling git directly, not
+# a session's Bash tool, so it is unaffected.
+#
+# The file carries no comment key of its own: under --print a settings file
+# that fails validation is *silently ignored*, so an unrecognised key would
+# drop every rule here without saying so.
+SHARED_SETTINGS = Path(__file__).resolve().parent / "permissions.json"
 
 
 # Where `claude` actually lives, checked in order. PATH is searched first,
@@ -189,6 +228,8 @@ def build_command(spec: SessionSpec) -> list[str]:
     ]
     if spec.permission_mode:
         cmd += ["--permission-mode", spec.permission_mode]
+    cmd += ["--permission-prompts", PERMISSION_PROMPTS,
+            "--settings", str(SHARED_SETTINGS)]
     if spec.resume_id:
         cmd += ["--resume", spec.resume_id]
     if disallowed := MODE_TOOLS.get(spec.mode, {}).get("disallowed"):

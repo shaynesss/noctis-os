@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git stash*)",
+      "Bash(git worktree*)",
+      "Bash(python3*)",
+      "Bash(pytest*)",
+      "Bash(make test*)",
+      "Bash(make setup*)",
+      "Bash(npm run*)",
+      "Bash(npm test*)",
+      "Bash(npx tsc*)",
+      "Bash(ls*)",
+      "Bash(cat*)",
+      "Bash(head*)",
+      "Bash(tail*)",
+      "Bash(wc*)",
+      "Bash(rg*)",
+      "Bash(grep*)"
+    ],
+    "deny": [
+      "Bash(git push*)"
+    ]
+  }
+}
