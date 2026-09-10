@@ -159,7 +159,16 @@ export default function App() {
    * response event -- otherwise a slow or failing backend leaves the screen
    * showing nothing happened, and the most likely reaction is to type it
    * again. */
-  const turn = async (tabId: string, prompt: string, seed?: SessionState, images: Attachment[] = []) => {
+  const turn = async (
+    tabId: string,
+    prompt: string,
+    seed?: SessionState,
+    images: Attachment[] = [],
+    /* An opener the person did not type. Sent to the engine, kept out of the
+     * transcript — showing it would put words in your mouth, and the reply
+     * reads as unprompted, which is what it should look like. */
+    hidden = false,
+  ) => {
     // `seed` is how a just-launched session runs its opening prompt: it does
     // not exist in the ref yet, because that follows a render and this is
     // called before one. Waiting a tick instead would be a race that passes
@@ -174,7 +183,9 @@ export default function App() {
       // Stamped once here rather than derived from `busy`, so the elapsed
       // timer measures the turn and not the moment the component mounted.
       startedAt: Date.now(),
-      blocks: [...current.blocks, { kind: 'user', text: prompt, at: now() }],
+      blocks: hidden
+        ? current.blocks
+        : [...current.blocks, { kind: 'user', text: prompt, at: now() }],
     }
     setSessions((s) => ({ ...s, [tabId]: withUser }))
 
@@ -424,8 +435,19 @@ export default function App() {
     setLauncher(null)
     composerRef.current?.focus()
 
+    const seed: SessionState = { mode: req.mode, cwd: req.cwd, blocks, draft: '' }
     if (req.prompt.trim()) {
-      void turn(id, req.prompt, { mode: req.mode, cwd: req.cwd, blocks, draft: '' })
+      void turn(id, req.prompt, seed)
+    } else {
+      /* A mode session opens by speaking first.
+       *
+       * Left empty it just sat there and you had to guess what to say — a
+       * "?" to get it going got a confused reply, which is a fair reaction
+       * to being handed a "?". Each mode has a session-start routine in its
+       * methodology (Faber's Patch/Overhaul question, due recall items,
+       * parked triggers); this is what makes it run. General has no routine
+       * and no methodology file, so it is left alone. */
+      if (req.mode !== 'general') void turn(id, OPENING_PROMPT, seed, [], true)
     }
   }
 
@@ -1206,3 +1228,16 @@ function promoteTitle(session: SessionState): string {
   const line = first.text.trim().split('\n')[0].replace(/[?.!]+$/, '')
   return line.length > 60 ? `${line.slice(0, 60).trimEnd()}…` : line
 }
+
+/* The opener sent when a mode session starts with nothing typed.
+ *
+ * Deliberately not a greeting to perform: it points the mode at its own
+ * session-start routine and stops it starting work, so what comes back is
+ * whatever that mode is supposed to ask — not a generic hello.
+ */
+const OPENING_PROMPT = [
+  'Session starting, nothing asked yet.',
+  'Follow your session-start routine: say which mode this is in one line,',
+  'surface anything your methodology or state file says is due or parked,',
+  'and ask what I want to work on. Do not begin any work yet.',
+].join(' ')
