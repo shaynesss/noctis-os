@@ -126,6 +126,19 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
             cwd=_safe_cwd(req.cwd),
             images=[Image(media_type=i.media_type, data=i.data) for i in req.images],
             model=req.model,
+            # The vault, always, as a second allowed directory.
+            #
+            # The engine sandboxes file access to the working directory, so a
+            # Faber session in a repo could not read its own methodology, job
+            # context or lessons — all of which live in the vault. The flag
+            # existed and nothing set it, so every session ran with the half
+            # of the system it is supposed to think with out of reach.
+            #
+            # It is the only directory added. Widening further would trade
+            # away the sandbox, which is doing real work: the failures you
+            # see when a session reaches into the home folder are it
+            # refusing, and that is correct.
+            vault_path=vault_io.get_vault_path(),
         )
     except ValueError as exc:
         # An unknown model, refused where it is named rather than at spawn.

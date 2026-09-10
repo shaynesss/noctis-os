@@ -353,3 +353,21 @@ def test_an_unknown_model_is_refused_at_construction():
     less obvious message."""
     with pytest.raises(ValueError):
         SessionSpec(mode="faber", prompt="x", model="gpt-9")
+
+
+def test_the_vault_is_reachable_from_any_session():
+    """The engine sandboxes file access to the working directory. Without
+    the vault added, a Faber session in a repo cannot read its own
+    methodology, job context or lessons — the half of the system it is meant
+    to think with. The flag existed and nothing set it."""
+    from pathlib import Path as _Path
+
+    cmd = build_command(SessionSpec(mode="faber", prompt="x", vault_path=_Path("/vault")))
+    assert cmd[cmd.index("--add-dir") + 1] == "/vault"
+
+
+def test_only_the_vault_is_added():
+    """Widening further would trade away the sandbox, which is doing real
+    work: a session refusing to read the home folder is it behaving."""
+    cmd = build_command(SessionSpec(mode="faber", prompt="x", vault_path=Path("/vault")))
+    assert cmd.count("--add-dir") == 1
