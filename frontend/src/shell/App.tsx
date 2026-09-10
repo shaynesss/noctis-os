@@ -774,6 +774,14 @@ export default function App() {
             lastTurn={session.lastTurn}
             historyId={activeTab.startsWith('h') ? Number(activeTab.slice(1)) : null}
             onOpenDoc={setDoc}
+            onEdit={(text) => {
+              // Into the composer rather than an inline field: the composer
+              // is where messages are written, has the attach and permission
+              // controls, and already grows to fit.
+              setDrafts((d) => ({ ...d, [activeTab]: text }))
+              composerRef.current?.focus()
+            }}
+            onRetry={(text) => void turn(activeTab, text)}
           />
         ) : (
           <Pane view={view} limits={limits} />

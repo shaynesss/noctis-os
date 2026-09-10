@@ -44,6 +44,11 @@ Verified live, not only by tests.
 
 ## Next
 
+**0. The MCP server travels as three directories, not one file.**
+`mcp/server.py` imports `retrieval/` and `orchestrator/`, so "nothing to
+install" is true but "copy one file" is not. A conformance test pins the
+list; the adoption docs the spec wants for the public repo need to say it.
+
 **1. Brief + worklist generator (item 6).** Design half-finished: the shape
 is agreed (overnight line, inbox, three mode-keyed actions, deterministic
 footer), and one fork is open — whether the brief reads email through an MCP

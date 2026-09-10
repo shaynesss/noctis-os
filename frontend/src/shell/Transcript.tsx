@@ -76,6 +76,8 @@ export function Transcript({
   lastTurn,
   historyId,
   onOpenDoc,
+  onEdit,
+  onRetry,
 }: {
   blocks: Block[]
   accent: string
@@ -91,6 +93,10 @@ export function Transcript({
   /** Backend row id, for the files this conversation touched. */
   historyId?: number | null
   onOpenDoc?: (vaultPath: string) => void
+  /** Put a past message back in the composer to rephrase. */
+  onEdit?: (text: string) => void
+  /** Ask the same thing again. */
+  onRetry?: (text: string) => void
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -111,7 +117,12 @@ export function Transcript({
           if (group.kind === 'tools') return <ToolRun key={`g${gi}`} tools={group.tools} />
           const b = group.block
           const i = gi
-          return renderBlock(b, i)
+          /* The last thing you said is the only one worth offering to redo:
+           * re-asking something from the middle of a conversation would send
+           * it to the end anyway, where it no longer means the same thing. */
+          const isLastUser = b.kind === 'user' && !blocks.slice(blocks.indexOf(b) + 1)
+            .some((later) => later.kind === 'user')
+          return renderBlock(b, i, isLastUser && !startedAt ? { onEdit, onRetry } : undefined)
         })}
 
         {/* Below the conversation, above the turn's closing line: it is a
@@ -182,14 +193,18 @@ function ToolRun({ tools }: { tools: ToolBlock[] }) {
 }
 
 /** One transcript block. */
-function renderBlock(b: Block, i: number) {
+function renderBlock(
+  b: Block,
+  i: number,
+  redo?: { onEdit?: (text: string) => void; onRetry?: (text: string) => void },
+) {
           if (b.kind === 'user') {
             /* A prompt glyph and dimmer ink instead of a YOU label: it is
              * already obvious which turn is yours, and a caption on every
              * one of them was two lines of furniture per exchange. The time
              * moves to a tooltip -- worth having, not worth a line. */
             return (
-              <div key={i} className="mb-[16px] flex gap-[9px]" title={b.at}>
+              <div key={i} className="group mb-[16px] flex gap-[9px]" title={b.at}>
                 <span
                   aria-hidden
                   className="select-none font-mono text-[13px] leading-[1.6] text-ink-faint"
@@ -199,6 +214,34 @@ function renderBlock(b: Block, i: number) {
                 <div className="min-w-0 whitespace-pre-wrap font-mono text-[13px] leading-[1.6] text-ink-dim">
                   {b.text}
                 </div>
+                {/* On hover, and only on the last thing you said. The engine
+                    cannot rewind a session, so neither of these replaces the
+                    exchange -- they ask again with it still in view, which is
+                    what actually happens and so what the UI should look like. */}
+                {redo && (
+                  <span className="ml-auto flex shrink-0 items-start gap-[4px] opacity-0 transition-opacity group-hover:opacity-100">
+                    {redo.onEdit && (
+                      <button
+                        type="button"
+                        onClick={() => redo.onEdit!(b.text)}
+                        title="Put this back in the composer to rephrase"
+                        className="rounded-[3px] px-[6px] py-[2px] font-mono text-[10.5px] text-ink-faint hover:bg-elevated hover:text-ink"
+                      >
+                        edit
+                      </button>
+                    )}
+                    {redo.onRetry && (
+                      <button
+                        type="button"
+                        onClick={() => redo.onRetry!(b.text)}
+                        title="Ask this again"
+                        className="rounded-[3px] px-[6px] py-[2px] font-mono text-[10.5px] text-ink-faint hover:bg-elevated hover:text-ink"
+                      >
+                        retry
+                      </button>
+                    )}
+                  </span>
+                )}
               </div>
             )
           }

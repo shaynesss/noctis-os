@@ -61,3 +61,34 @@ describe('failures', () => {
       .toBe(2)
   })
 })
+
+/* Which message gets the edit/retry controls. The engine cannot rewind a
+ * session, so these ask again rather than replace — and offering them on a
+ * message from the middle of a conversation would send it to the end, where
+ * it no longer means the same thing. */
+describe('which message can be redone', () => {
+  const lastUserIndex = (blocks: Block[]) =>
+    blocks.reduce((last, b, i) => (b.kind === 'user' ? i : last), -1)
+
+  it('is the last thing you said', () => {
+    const blocks: Block[] = [
+      { kind: 'user', text: 'first', at: '10:00' },
+      { kind: 'text', text: 'a reply' },
+      { kind: 'user', text: 'second', at: '10:01' },
+      { kind: 'text', text: 'another reply' },
+    ]
+    expect(lastUserIndex(blocks)).toBe(2)
+  })
+
+  it('is still the last one when a reply followed it', () => {
+    const blocks: Block[] = [
+      { kind: 'user', text: 'only', at: '10:00' },
+      { kind: 'text', text: 'reply' },
+    ]
+    expect(lastUserIndex(blocks)).toBe(0)
+  })
+
+  it('is nothing in a conversation with no messages from you', () => {
+    expect(lastUserIndex([{ kind: 'text', text: 'unprompted' }])).toBe(-1)
+  })
+})
