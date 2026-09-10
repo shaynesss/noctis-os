@@ -46,6 +46,9 @@ export interface LaunchRequest {
   images?: { media_type: string; data: string }[]
   /** Per-session model override; the mode's default when absent. */
   model?: string
+  /** The server supplies the prompt: a mode session opened with nothing
+   *  typed, so it runs its own session-start routine. */
+  opener?: boolean
 }
 
 /* ------------------------------------------------------------------ SSE */

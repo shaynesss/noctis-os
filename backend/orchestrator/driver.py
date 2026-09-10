@@ -338,6 +338,18 @@ def session_id_of(events: Sequence[Event]) -> str | None:
 # concurrency budget (it is not work you are waiting on), it must not appear
 # in history as a conversation, and queueing it behind two real sessions
 # would make a recap arrive long after the transcript it describes.
+# Sent when a mode session is opened with nothing typed, so the mode runs
+# its own session-start routine rather than sitting empty. Owned here rather
+# than by the shell: the backend titles the conversation, and a session
+# titled with the opener's own text is how the brief came to report "Noctua
+# opened this morning with no work yet recorded" as if it were news.
+OPENING_PROMPT = (
+    "Session starting, nothing asked yet. Follow your session-start routine: "
+    "say which mode this is in one line, surface anything your methodology or "
+    "state file says is due or parked, and ask what I want to work on. "
+    "Do not begin any work yet."
+)
+
 RECAP_MODEL = os.environ.get("NOCTIS_RECAP_MODEL", "claude-haiku-4-5")
 
 

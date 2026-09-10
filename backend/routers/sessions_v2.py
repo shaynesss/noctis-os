@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, field_validator
 
 import vault_io
 from orchestrator.driver import (
-    MODE_MODELS, PERMISSION_CYCLE, Image, SessionSpec, one_shot,
+    MODE_MODELS, OPENING_PROMPT, PERMISSION_CYCLE, Image, SessionSpec, one_shot,
 )
 from orchestrator.events import EngineError
 from orchestrator.manager import SessionManager
@@ -80,10 +80,17 @@ class InlineImage(BaseModel):
 
 class LaunchRequest(BaseModel):
     mode: str
-    prompt: str = Field(min_length=1)
+    # Empty only when `opener` is set, in which case the server supplies the
+    # text. Checked below rather than by min_length, which rejected the
+    # opener before the handler could substitute anything.
+    prompt: str = ""
     cwd: str
     permission_mode: str = "manual"
     resume_id: str | None = None
+    # True when the shell opened a mode session with nothing typed. The
+    # server supplies the opener and titles the conversation for what it is,
+    # rather than titling it with the opener's own text.
+    opener: bool = False
     # Sent with the turn rather than written to disk first. The engine takes
     # them in a stream-json message, so there is no file to keep, no path in
     # the transcript, and no Read call standing between the picture and the
@@ -104,10 +111,16 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
         # that exists only in the client is not a guard.
         raise HTTPException(status_code=400, detail=f"Invalid permission mode: {req.permission_mode}")
 
+    # The server supplies the opener, so the conversation can be titled for
+    # what it is rather than with the opener's own text.
+    if not req.opener and not req.prompt.strip():
+        raise HTTPException(status_code=422, detail="A prompt is required")
+    prompt = OPENING_PROMPT if req.opener else req.prompt
+
     try:
         spec = SessionSpec(
             mode=req.mode,
-            prompt=req.prompt,
+            prompt=prompt,
             permission_mode=req.permission_mode,
             resume_id=req.resume_id,
             cwd=_safe_cwd(req.cwd),
@@ -134,12 +147,15 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
     if row_id is not None:
         _store.reopen(row_id)
     else:
-        row_id = _store.open_session(req.mode, cwd=str(spec.cwd), title=req.prompt[:120])
+        title = f"{req.mode} session" if req.opener else req.prompt[:120]
+        row_id = _store.open_session(req.mode, cwd=str(spec.cwd), title=title)
 
     # The prompt is recorded here because nothing else does: `record()` folds
     # engine *events*, and the user's own message is not one of them. Without
     # this every stored transcript is a column of answers with no questions.
-    _store.add_message(row_id, "user", req.prompt)
+    # The opener is not something you said, so it is not recorded as such.
+    if not req.opener:
+        _store.add_message(row_id, "user", req.prompt)
 
     async def stream():
         state = "done"

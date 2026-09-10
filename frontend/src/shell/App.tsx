@@ -175,6 +175,7 @@ export default function App() {
     // on a fast machine.
     const current = seed ?? sessionsRef.current[tabId]
     if (!current || current.busy) return
+    if (!prompt.trim() && !hidden) return
 
     const withUser: SessionState = {
       ...current,
@@ -202,6 +203,9 @@ export default function App() {
           permission_mode: permissionRef.current,
           // Bytes, not a path: the picture is part of what was said.
           images: images.map(({ media_type, data }) => ({ media_type, data })),
+          // The server owns the opener's text, so it can title the
+          // conversation for what it is instead of with the prompt.
+          opener: hidden,
           model: current.model ?? undefined,
           // Absent on the first turn, so the engine starts a session; present
           // afterwards, so the rest continue it instead of forgetting.
@@ -447,7 +451,7 @@ export default function App() {
        * methodology (Faber's Patch/Overhaul question, due recall items,
        * parked triggers); this is what makes it run. General has no routine
        * and no methodology file, so it is left alone. */
-      if (req.mode !== 'general') void turn(id, OPENING_PROMPT, seed, [], true)
+      if (req.mode !== 'general') void turn(id, '', seed, [], true)
     }
   }
 
@@ -1227,16 +1231,3 @@ function promoteTitle(session: SessionState): string {
   const line = first.text.trim().split('\n')[0].replace(/[?.!]+$/, '')
   return line.length > 60 ? `${line.slice(0, 60).trimEnd()}…` : line
 }
-
-/* The opener sent when a mode session starts with nothing typed.
- *
- * Deliberately not a greeting to perform: it points the mode at its own
- * session-start routine and stops it starting work, so what comes back is
- * whatever that mode is supposed to ask — not a generic hello.
- */
-const OPENING_PROMPT = [
-  'Session starting, nothing asked yet.',
-  'Follow your session-start routine: say which mode this is in one line,',
-  'surface anything your methodology or state file says is due or parked,',
-  'and ask what I want to work on. Do not begin any work yet.',
-].join(' ')
