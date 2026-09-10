@@ -170,6 +170,20 @@ def _proposals() -> list[dict]:
     return items
 
 
+@router.post("/brief/generate")
+async def generate_brief() -> dict:
+    """Write today's brief now.
+
+    The scheduler calls this each morning; the Brief panel offers it so you
+    can refresh after changing something rather than waiting until tomorrow
+    to see the effect. It costs one cheap-tier call.
+    """
+    from brief.generate import build, write
+
+    markdown = await build()
+    return {"path": write(markdown), "bytes": len(markdown)}
+
+
 @router.get("/inbox")
 def inbox() -> dict:
     """One list across modes: proposals first, then flagged jobs.

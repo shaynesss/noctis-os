@@ -224,6 +224,7 @@ export default function App() {
             blocks: state.blocks,
             thinking: state.thinking,
             context: state.context,
+            ranModel: state.model ?? s[tabId].ranModel,
             engineId: state.sessionId ?? s[tabId].engineId,
           },
         }))
@@ -830,7 +831,11 @@ export default function App() {
              constant, so switching model with /model changed what the engine
              ran and not what the bar said -- the bar claimed opus while the
              session answered on sonnet. */
-          model: session.model ?? modeDefaults[session.mode] ?? MODE_INFO[session.mode].model,
+          /* What the engine said it ran, when it has said. Falls back to
+             what was requested before the first turn — but once a turn has
+             happened, this is reported rather than assumed. */
+          model: session.ranModel ?? session.model ?? modeDefaults[session.mode]
+            ?? MODE_INFO[session.mode].model,
           branch,
           context: session.context ?? null,
         }}

@@ -199,3 +199,40 @@ describe('readSSE', () => {
     expect(events).toEqual([{ t: 'text', text: 'a' }])
   })
 })
+
+/* The model shown must be the one the engine reported, not the one we asked
+ * for. A session cannot answer this about itself — a model has no
+ * introspective access to its own weights, so "am I really Sonnet?" gets an
+ * honest shrug. The engine reports it twice, and that is the only
+ * authoritative answer available. */
+describe('which model ran', () => {
+  it('takes the model from the start event', () => {
+    const s = run([{ t: 'start', session_id: 'a', model: 'claude-haiku-4-5', cwd: '/x', tools: [] }])
+    expect(s.model).toBe('claude-haiku-4-5')
+  })
+
+  it('confirms it from what was actually billed', () => {
+    const s = run([
+      { t: 'start', session_id: 'a', model: 'claude-opus-5', cwd: '/x', tools: [] },
+      { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+        usage: { input: 1, output: 1, cached: 0, model: 'claude-haiku-4-5', aux_input: 0,
+                 aux_output: 0, context_tokens: 0, context_window: 0 } },
+    ])
+    // Billing is the last word: it is what was charged, not what was asked.
+    expect(s.model).toBe('claude-haiku-4-5')
+  })
+
+  it('is unknown before a turn has run', () => {
+    expect(run([]).model).toBeNull()
+  })
+
+  it('keeps the reported model when a later turn reports none', () => {
+    const s = run([
+      { t: 'start', session_id: 'a', model: 'claude-opus-5', cwd: '/x', tools: [] },
+      { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+        usage: { input: 1, output: 1, cached: 0, model: '', aux_input: 0,
+                 aux_output: 0, context_tokens: 0, context_window: 0 } },
+    ])
+    expect(s.model).toBe('claude-opus-5')
+  })
+})

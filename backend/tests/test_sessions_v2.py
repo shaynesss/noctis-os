@@ -229,14 +229,17 @@ def test_stats_requires_auth(client):
 
 # ------------------------------------------------------------------ panels
 
-def test_brief_reports_absence_rather_than_inventing_one(client):
-    """The generator is build-order item 6. A panel that invents a morning
-    brief is worse than one that says it has not run, because the invented
-    one gets believed."""
+def test_brief_reports_whether_it_was_generated(client):
+    """A panel that invents a morning brief is worse than one saying it has
+    not run, because the invented one gets believed. Asserts the shape rather
+    than the state: whether a brief exists depends on whether one was written
+    today, which is not something a test should depend on."""
     body = client.get("/v2/brief", headers=AUTH).json()
-    assert body["brief"]["generated"] is False
-    assert body["brief"]["markdown"] is None
     assert body["brief"]["path"] == "brief/today.md"
+    assert isinstance(body["brief"]["generated"], bool)
+    # The two must agree: claiming generated with no content, or content with
+    # generated false, is the misreport this guards.
+    assert body["brief"]["generated"] == (body["brief"]["markdown"] is not None)
 
 
 def test_config_reports_what_the_orchestrator_will_really_run(client):
@@ -1091,3 +1094,77 @@ def test_only_accept_or_reject_are_decisions(client):
 
 def test_deciding_requires_auth(client):
     assert client.post("/v2/inbox/x/accept").status_code == 401
+
+
+# --------------------------------------------------------------- brief
+
+def test_the_brief_counts_rather_than_estimates(monkeypatch):
+    """Facts are computed in Python and handed to the prose step. Nothing
+    about a number is left to a model that might round 45 days to "about a
+    month" or name a job that closed in July."""
+    from brief import generate
+
+    jobs = {"modes": ["dev"], "modes/dev/jobs": ["live", "held"]}
+    meta = {
+        "modes/dev/jobs/live/context.md":
+            {"name": "Live", "stage": "Build", "status": "going",
+             "last_touched": "2026-09-08T00:00:00+00:00"},
+        "modes/dev/jobs/held/context.md":
+            {"name": "Held", "stage": "Plan", "status": "On hold. Paused.",
+             "last_touched": "2026-08-01T00:00:00+00:00"},
+    }
+    monkeypatch.setattr(generate.vault_io, "list_subdirs", lambda p: jobs.get(p, []))
+    monkeypatch.setattr(generate.vault_io, "file_exists", lambda p: p.endswith("context.md"))
+    monkeypatch.setattr(generate.vault_io, "read_frontmatter", lambda p: (meta[p], ""))
+    monkeypatch.setattr(generate, "_inbox_counts", lambda: {"waiting": 0, "empty": 0})
+
+    facts = generate.gather()
+    assert facts["open"] == 2
+    assert facts["on_hold"] == 1                       # counted, not guessed
+    assert [j["name"] for j in facts["per_mode"]["Faber"]] == ["Live"]
+    # An on-hold job is not a row telling you to resume it.
+    assert all(j["name"] != "Held" for j in facts["owed"])
+
+
+def test_a_mode_row_names_one_job_and_counts_the_rest(monkeypatch):
+    """What stops Noctua's eleventh topic becoming an eleventh line."""
+    from brief import generate
+
+    facts = {
+        "date": "Monday 1 January",
+        "per_mode": {"Faber": [
+            {"name": "First", "stage": "Build", "status": "", "days": 1},
+            {"name": "Second", "stage": "Plan", "status": "", "days": 9},
+            {"name": "Third", "stage": "Plan", "status": "", "days": 20},
+        ], "Vesper": [], "Noctua": []},
+        "owed": [], "open": 3, "on_hold": 0,
+        "inbox": {"waiting": 0, "empty": 0}, "last_session": None,
+    }
+    rendered = generate.render(facts, "prose")
+    assert "**Faber** — First · +2" in rendered      # freshest named, rest counted
+    assert "Second" not in rendered
+    assert "**Vesper** — —" in rendered              # empty modes keep their row
+
+
+def test_the_brief_still_renders_when_the_prose_fails(monkeypatch):
+    """The rows carry the state, and a missing paragraph beats a missing
+    brief."""
+    import asyncio
+    from brief import generate
+
+    async def broken(*a, **k):
+        raise RuntimeError("engine away")
+
+    monkeypatch.setattr(generate, "one_shot", broken)
+    monkeypatch.setattr(generate, "gather", lambda: {
+        "date": "Monday 1 January", "per_mode": {"Faber": [], "Vesper": [], "Noctua": []},
+        "owed": [], "open": 0, "on_hold": 0,
+        "inbox": {"waiting": 0, "empty": 0}, "last_session": None,
+    })
+    out = asyncio.run(generate.build())
+    assert "**Faber**" in out
+    assert "could not be written" in out
+
+
+def test_generating_the_brief_requires_auth(client):
+    assert client.post("/v2/brief/generate").status_code == 401

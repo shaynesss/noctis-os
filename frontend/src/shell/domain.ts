@@ -101,6 +101,10 @@ export interface SessionState {
   recap?: string | null
   /** Per-session model override; the mode's default when absent. */
   model?: string
+  /** The model the engine reported running. Authoritative, unlike the
+   *  request — and unlike the session's own answer, since a model cannot
+   *  introspect its weights. */
+  ranModel?: string
   /** The last turn's duration and end time, for the line it leaves behind. */
   lastTurn?: { seconds: number; at: number } | null
 }

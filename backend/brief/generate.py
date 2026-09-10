@@ -152,6 +152,12 @@ nothing is owed, say the work is all moving and stop.
 
 Be direct and unhurried. No exclamation marks, no "Good morning", no encouragement.
 
+Dates and times: use only the ages given below, in days. The statuses are notes the vault
+wrote to itself and often contain bare clock times like "14:11" with no date — those are
+not today and not recent, and saying "this morning" because you saw a clock time is the
+one mistake that makes this brief untrustworthy. If you cannot date something from the
+days-untouched figure, do not date it at all.
+
 FACTS:
 """
 

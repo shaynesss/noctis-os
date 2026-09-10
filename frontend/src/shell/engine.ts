@@ -134,6 +134,8 @@ export async function* runSession(
 export interface Fold {
   blocks: Block[]
   sessionId: string | null
+  /** The model the engine says it ran, not the one we asked for. */
+  model: string | null
   /** 0-1 of the context window, null until a turn has reported one. */
   context: number | null
   /** Live thinking-token estimate; null when not currently reasoning. */
@@ -144,6 +146,7 @@ export interface Fold {
 export const emptyFold = (blocks: Block[] = []): Fold => ({
   blocks,
   sessionId: null,
+  model: null,
   context: null,
   thinking: null,
   done: false,
@@ -157,7 +160,12 @@ export const emptyFold = (blocks: Block[] = []): Fold => ({
 export function fold(state: Fold, e: WireEvent): Fold {
   switch (e.t) {
     case 'start':
-      return { ...state, sessionId: e.session_id }
+      /* The engine reports its own model here and again in the billing
+       * record. Keeping it is the difference between the UI showing what
+       * ran and showing what it asked for — and the session itself cannot
+       * tell you, because a model has no introspective access to its own
+       * weights. This is the only authoritative answer available. */
+      return { ...state, sessionId: e.session_id, model: e.model }
 
     case 'text': {
       // Extend the trailing text block rather than pushing one per delta --
@@ -217,6 +225,8 @@ export function fold(state: Fold, e: WireEvent): Fold {
         sessionId: e.session_id,
         thinking: null,
         done: true,
+        // Confirms it at the end too: what was actually billed.
+        model: e.usage.model || state.model,
         // Null when the engine reported no window: unknown must not render
         // as 0%, which reads as a conversation with room to spare.
         context: e.usage.context_window
