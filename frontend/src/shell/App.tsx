@@ -406,7 +406,8 @@ export default function App() {
         carried: req.from.carried,
       })
     }
-    blocks.push({ kind: 'user', text: req.prompt, at: now() })
+    // Only when there is one. An empty launch opens the tab and waits.
+    if (req.prompt.trim()) blocks.push({ kind: 'user', text: req.prompt, at: now() })
 
     // At most one session beside General. The engine's own cap is two
     // concurrent, so a third tab could not run anyway -- and the point of
@@ -423,7 +424,9 @@ export default function App() {
     setLauncher(null)
     composerRef.current?.focus()
 
-    void turn(id, req.prompt, { mode: req.mode, cwd: req.cwd, blocks, draft: '' })
+    if (req.prompt.trim()) {
+      void turn(id, req.prompt, { mode: req.mode, cwd: req.cwd, blocks, draft: '' })
+    }
   }
 
   /* What a handoff carries is a summary, not the transcript -- so it is
@@ -1099,47 +1102,6 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
               )}
             </div>
 
-            {stats.by_mode.length > 0 && (
-              <>
-                <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
-                  By mode
-                </h2>
-                <div className="rounded-[3px] border border-line bg-surface px-4 py-[6px]">
-                  {stats.by_mode.map((m, i) => {
-                    const top = Math.max(...stats.by_mode.map((x) => x.input + x.output))
-                    const total = m.input + m.output
-                    return (
-                      <div
-                        key={m.mode}
-                        className={`grid grid-cols-[minmax(96px,1fr)_minmax(0,2.4fr)_auto] items-center gap-4 py-[11px] ${
-                          i ? 'border-t border-line' : ''
-                        }`}
-                      >
-                        <span className="flex items-center gap-[8px] text-[12.5px] text-ink">
-                          <span
-                            className="h-[8px] w-[8px] shrink-0 rounded-[1px]"
-                            style={{ background: MODE_ACCENT[m.mode as Mode] ?? 'var(--color-ink-dim)' }}
-                          />
-                          {MODE_LABEL[m.mode as Mode] ?? m.mode}
-                        </span>
-                        <div className="h-[6px] overflow-hidden rounded-sm border border-line bg-ground">
-                          <div
-                            className="h-full rounded-sm"
-                            style={{
-                              width: `${Math.round((total / Math.max(1, top)) * 100)}%`,
-                              background: MODE_ACCENT[m.mode as Mode] ?? 'var(--color-ink-dim)',
-                            }}
-                          />
-                        </div>
-                        <span className="text-right font-mono text-[11.5px] tabular-nums text-ink-dim">
-                          {fmt(total)}
-                        </span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
           </>
         )}
       </div>

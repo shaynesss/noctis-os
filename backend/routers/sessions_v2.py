@@ -271,10 +271,6 @@ def stats() -> dict:
             # marginal cost per turn is zero. See events.Usage.
             "list_cost": round(life["list_cost"], 2),
         },
-        "by_mode": [
-            {"mode": r["mode"], "input": r["input"], "output": r["output"], "turns": r["turns"]}
-            for r in _store.usage_by_mode()
-        ],
         # Sessions per day for the contribution grid. Only days with activity
         # are returned; the grid fills the gaps, which keeps the payload
         # proportional to what happened rather than to the window.

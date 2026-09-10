@@ -196,22 +196,6 @@ def test_stats_lifetime_includes_the_background_tier(tmp_path):
     store.close()
 
 
-def test_usage_by_mode_attributes_tokens_to_the_mode_that_spent_them(tmp_path):
-    from orchestrator.events import TurnEnd, Usage
-    from orchestrator.store import ConversationStore
-
-    store = ConversationStore(tmp_path / "h.db")
-    for mode, out in (("faber", 100), ("vesper", 30)):
-        sid = store.open_session(mode, cwd="/tmp")
-        store.record(sid, mode, TurnEnd(
-            session_id="s", duration_ms=1,
-            usage=Usage(input_tokens=1, output_tokens=out, cached_tokens=0, model="m"),
-        ))
-    rows = {r["mode"]: r["output"] for r in store.usage_by_mode()}
-    assert rows == {"faber": 100, "vesper": 30}
-    store.close()
-
-
 def test_an_older_database_gains_the_new_columns(tmp_path):
     """CREATE TABLE IF NOT EXISTS is a no-op on a database that already has
     the table, so without the add-column pass the next INSERT fails on any
@@ -235,7 +219,7 @@ def test_an_older_database_gains_the_new_columns(tmp_path):
 
 def test_stats_route_shape(client):
     body = client.get("/v2/sessions/stats", headers=AUTH).json()
-    assert set(body) == {"lifetime", "by_mode", "activity"}
+    assert set(body) == {"lifetime", "activity"}
     assert set(body["lifetime"]) >= {"input", "output", "cached", "turns", "aux_input"}
 
 

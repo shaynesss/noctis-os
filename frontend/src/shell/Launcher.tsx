@@ -67,8 +67,15 @@ export function Launcher({
     promptRef.current?.focus()
   }, [])
 
+  /* An opening prompt is optional.
+   *
+   * Requiring one meant the Start button silently did nothing when it was
+   * empty — no message, no reason, just an unresponsive button, which reads
+   * as the app being unable to start a session at all. And the requirement
+   * was never real: a new tab can open and wait for you to type, which is
+   * exactly what the General tab does. With no prompt the session simply is
+   * not spawned yet; the first message starts it. */
   const launch = () => {
-    if (!prompt.trim()) return
     onLaunch({
       mode,
       cwd,
@@ -239,11 +246,13 @@ export function Launcher({
         </div>
 
         <div className="flex items-center gap-[10px] border-t border-line px-[14px] py-[10px]">
-          <span className="font-mono text-[10.5px] text-ink-faint">⌘↵ to start · ⌘1–5 to pick</span>
+          <span className="font-mono text-[10.5px] text-ink-faint">
+          ⌘↵ to start · ⌘1–5 to pick{prompt.trim() ? '' : ' · opens empty, type when ready'}
+        </span>
           <button
             type="button"
             onClick={launch}
-            disabled={!prompt.trim()}
+
             className="ml-auto rounded-[4px] px-[13px] py-[6px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
             style={{ background: MODE_ACCENT[mode] }}
           >

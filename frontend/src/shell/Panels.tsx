@@ -205,44 +205,6 @@ export function Settings({ data }: { data: ConfigPayload }) {
         ))}
       </Card>
 
-      <Heading className="mt-7">Permissions</Heading>
-      <Card>
-        <div className="px-4 py-[13px]">
-          <div className="mb-[10px] flex flex-wrap items-center gap-[6px]">
-            {data.permission_cycle.map((p, i) => (
-              <span key={p} className="flex items-center gap-[6px]">
-                {i > 0 && <span className="font-mono text-[11px] text-ink-faint">→</span>}
-                <span className="rounded-[4px] border border-line bg-elevated px-[8px] py-[3px] font-mono text-[11px] text-ink-dim">
-                  {p}
-                </span>
-              </span>
-            ))}
-            <span className="font-mono text-[11px] text-ink-faint">↺</span>
-          </div>
-          {/* Stated rather than left absent: a reader who knows the flag
-              exists would otherwise read its absence as an oversight. */}
-          <div className="space-y-[7px] text-[12px] leading-[1.6] text-ink-faint">
-            <p className="m-0">
-              {data.excluded_from_cycle.join(', ')} stays settable but is deliberately not in the
-              cycle, so it cannot be reached by tapping a key.
-            </p>
-            {/* Stated because the chip would otherwise imply a prompt that
-                never arrives. A hosted session has nobody to ask, so "ask
-                each time" resolves to a refusal for anything not on the
-                mode's allowed list above. */}
-            {!data.prompts_answerable && (
-              <p className="m-0">
-                A hosted session cannot show a prompt, so{' '}
-                <span className="text-ink-dim">manual</span> denies any tool not listed above
-                rather than asking. Modes that need more use{' '}
-                <span className="text-ink-dim">acceptEdits</span> or{' '}
-                <span className="text-ink-dim">auto</span>.
-              </p>
-            )}
-          </div>
-        </div>
-      </Card>
-
       <Heading className="mt-7">Prompts</Heading>
       <Prompts />
 

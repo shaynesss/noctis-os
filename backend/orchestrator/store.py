@@ -342,16 +342,6 @@ class ConversationStore:
             " GROUP BY cwd ORDER BY last DESC LIMIT ?", (limit,)).fetchall()
         return [r["cwd"] for r in rows]
 
-    def usage_by_mode(self) -> list[sqlite3.Row]:
-        """Which modes the tokens actually went to."""
-        return self.db.execute(
-            "SELECT mode,"
-            "       COALESCE(SUM(input_tokens + aux_input_tokens),0) AS input,"
-            "       COALESCE(SUM(output_tokens + aux_output_tokens),0) AS output,"
-            "       COUNT(*) AS turns FROM usage"
-            " GROUP BY mode ORDER BY output DESC").fetchall()
-
-    # ---------------------------------------------------------- promotion
     def promote(self, session_id: int, vault_path: Path, rel_path: str,
                 title: str, note: str = "") -> Path:
         """Write a session's transcript into the vault as a real note.
