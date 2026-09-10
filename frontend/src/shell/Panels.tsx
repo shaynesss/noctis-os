@@ -6,7 +6,7 @@
  * placeholder content. An invented morning brief is worse than a missing
  * one, because the invented one gets believed.
  */
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Unreachable } from './Async'
 import { post, put } from './engine'
 import { useFetched } from './useFetched'
@@ -86,23 +86,6 @@ function NotGenerated({ path }: { path: string }) {
   )
 }
 
-/** The worklist, before you have written one.
- *
- * Not generated, by decision: it is a small hand-kept note of things to get
- * done, and a generated one would be the job list again under a second
- * name. This panel said the scheduler wrote it, which was the opposite. */
-function EmptyWorklist({ path }: { path: string }) {
-  return (
-    <Card>
-      <div className="px-4 py-[13px] text-[12.5px] leading-[1.6] text-ink-dim">
-        Nothing on the worklist. It is yours to keep — write{' '}
-        <code className="font-mono text-[11.5px] text-ink-faint">{path}</code> in the vault and it
-        appears here.
-      </div>
-    </Card>
-  )
-}
-
 export function Brief({ data }: { data: BriefPayload }) {
   return (
     <>
@@ -116,13 +99,7 @@ export function Brief({ data }: { data: BriefPayload }) {
       )}
 
       <Heading className="mt-7">Worklist</Heading>
-      {data.worklist.generated && data.worklist.markdown ? (
-        <Card>
-          <Markdown src={data.worklist.markdown} />
-        </Card>
-      ) : (
-        <EmptyWorklist path={data.worklist.path} />
-      )}
+      <Worklist initial={data.worklist.markdown ?? ''} path={data.worklist.path} />
     </>
   )
 }
@@ -463,5 +440,58 @@ function Loading() {
     <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
       Loading…
     </div>
+  )
+}
+
+
+/* The worklist: the one thing here you write rather than read.
+ *
+ * Editable in place and saved as you stop typing, because a note you have to
+ * open another app to add a line to is one you stop adding lines to. Not
+ * generated, by decision — a generated worklist is the job list again under
+ * a second name.
+ */
+function Worklist({ initial, path }: { initial: string; path: string }) {
+  const [text, setText] = useState(initial)
+  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  /* Debounced rather than saved on every keystroke, and flushed on unmount
+   * so navigating away mid-sentence does not lose the sentence. */
+  const schedule = (next: string) => {
+    setText(next)
+    setState('saving')
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(async () => {
+      const ok = await put('/v2/worklist', { markdown: next })
+      setState(ok ? 'saved' : 'idle')
+    }, 600)
+  }
+
+  useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current)
+  }, [])
+
+  return (
+    <Card>
+      <textarea
+        value={text}
+        onChange={(e) => schedule(e.target.value)}
+        onBlur={() => {
+          if (timer.current) clearTimeout(timer.current)
+          void put('/v2/worklist', { markdown: text }).then((ok) => setState(ok ? 'saved' : 'idle'))
+        }}
+        spellCheck={false}
+        placeholder="- things to get done"
+        rows={8}
+        className="w-full resize-y border-0 bg-transparent px-4 py-[13px] text-[13px] leading-[1.7] text-ink-dim outline-none placeholder:text-ink-faint"
+      />
+      <div className="flex items-center gap-[8px] border-t border-line px-4 py-[7px] font-mono text-[10.5px] text-ink-faint">
+        <span>{path}</span>
+        <span className="ml-auto">
+          {state === 'saving' ? 'saving…' : state === 'saved' ? 'saved' : 'yours to keep'}
+        </span>
+      </div>
+    </Card>
   )
 }

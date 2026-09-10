@@ -510,3 +510,24 @@ def decide(item_id: str, decision: str) -> dict:
 
     vault_io.move_file(staged, archive)
     return {"item": item_id, "decision": decision, "archived_to": archive}
+
+
+class WorklistUpdate(BaseModel):
+    markdown: str = ""
+
+
+@router.put("/worklist")
+def save_worklist(body: WorklistUpdate) -> dict:
+    """Write the worklist.
+
+    The one file here that is yours rather than derived — a hand-kept note of
+    what to get done, not generated from mode state, because a generated one
+    is the job list again under a second name and the two would disagree the
+    moment either drifted.
+
+    A fixed path, so nothing about it is caller-controlled: this writes into
+    the vault, and the only safe version of that is a route that can write
+    exactly one file.
+    """
+    vault_io.write_file(WORKLIST_PATH, body.markdown)
+    return {"path": WORKLIST_PATH, "bytes": len(body.markdown)}

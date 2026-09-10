@@ -1141,9 +1141,11 @@ def test_a_mode_row_names_one_job_and_counts_the_rest(monkeypatch):
         "inbox": {"waiting": 0, "empty": 0}, "last_session": None,
     }
     rendered = generate.render(facts, "prose")
-    assert "**Faber** — First · +2" in rendered      # freshest named, rest counted
+    assert "**Faber** — First · +2 more" in rendered   # freshest named, rest counted
     assert "Second" not in rendered
-    assert "**Vesper** — —" in rendered              # empty modes keep their row
+    # Words, not a dash: "Vesper — —" reads as a rendering fault rather
+    # than as the real answer it is.
+    assert "**Vesper** — nothing open" in rendered
 
 
 def test_the_brief_still_renders_when_the_prose_fails(monkeypatch):
@@ -1168,3 +1170,30 @@ def test_the_brief_still_renders_when_the_prose_fails(monkeypatch):
 
 def test_generating_the_brief_requires_auth(client):
     assert client.post("/v2/brief/generate").status_code == 401
+
+
+def test_the_worklist_writes_one_fixed_path(monkeypatch, client):
+    """It writes into the vault, and the only safe version of that is a
+    route that can write exactly one file — nothing about the path comes
+    from the caller."""
+    from routers import panels
+
+    written = {}
+    monkeypatch.setattr(panels.vault_io, "write_file",
+                        lambda p, c: written.update({"path": p, "content": c}))
+    body = client.put("/v2/worklist", headers=AUTH, json={"markdown": "- ship the brief"}).json()
+    assert written["path"] == "worklist.md"
+    assert written["content"] == "- ship the brief"
+    assert body["path"] == "worklist.md"
+
+
+def test_an_emptied_worklist_is_allowed(monkeypatch, client):
+    """Clearing it is a normal thing to do, and refusing an empty write
+    would mean the only way to empty it is outside the app."""
+    from routers import panels
+    monkeypatch.setattr(panels.vault_io, "write_file", lambda p, c: None)
+    assert client.put("/v2/worklist", headers=AUTH, json={"markdown": ""}).status_code == 200
+
+
+def test_saving_the_worklist_requires_auth(client):
+    assert client.put("/v2/worklist", json={"markdown": "x"}).status_code == 401
