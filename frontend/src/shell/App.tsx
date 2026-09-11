@@ -834,6 +834,10 @@ export default function App() {
       <BottomBar
         limits={limits}
         working={tabs.filter((t) => sessions[t.id]?.busy).map((t) => sessions[t.id].mode)}
+        /* A conversation exists once the engine has given it an id — that is
+           what makes it resumable, and so what makes the mode genuinely
+           "open" rather than merely selected. */
+        open={tabs.filter((t) => sessions[t.id]?.engineId).map((t) => sessions[t.id].mode)}
         state={{
           live: live ?? undefined,
           cwd: shortenHome(activeCwd),

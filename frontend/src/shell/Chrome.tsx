@@ -590,12 +590,15 @@ export function BottomBar({
   limits,
   state,
   working,
+  open,
 }: {
   children: React.ReactNode
   limits?: LiveLimits | null
   state: BarState
   /** Modes with a turn in flight right now. */
   working?: Mode[]
+  /** Modes with a conversation open, streaming or not. */
+  open?: Mode[]
 }) {
   return (
     <div className="flex shrink-0 border-t border-line bg-surface">
@@ -616,7 +619,7 @@ export function BottomBar({
           </div>
           {children}
           <div className="hidden justify-self-end min-[1620px]:flex">
-            <CharacterStrip working={working} live={state.live} />
+            <CharacterStrip working={working} open={open} live={state.live} />
           </div>
         </div>
 
@@ -625,7 +628,7 @@ export function BottomBar({
         <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
           <StatusBar limits={limits} state={state} />
           <div className="ml-auto">
-            <CharacterStrip working={working} live={state.live} />
+            <CharacterStrip working={working} open={open} live={state.live} />
           </div>
         </div>
       </div>
@@ -675,63 +678,89 @@ const SPRITE: Record<Mode, { idle: string; working: string } | null> = {
 
 function CharacterStrip({
   working = [],
+  open = [],
   live,
 }: {
+  /** Modes with a turn streaming this instant. */
   working?: Mode[]
-  /** Sessions running now, and the budget. */
+  /** Modes with a conversation you could go back to. */
+  open?: Mode[]
+  /** Turns in flight now, and the budget. */
   live?: { running: number; max: number }
 }) {
   return (
     <div className="flex shrink-0 items-center gap-[10px]">
-      {/* Here rather than in the status bar, which had no room for it and
-          clipped it to "0/2 l". It belongs beside the characters anyway:
-          they say *which* modes are working, this says how many of the
-          budget are gone. Amber at the cap, when the next launch queues
-          instead of running. */}
-      {live && (
+      {/* Only while something is actually in flight.
+   *
+   * It used to render always, which meant it said "0/2" essentially every
+   * time you looked at it: a turn is a separate `claude -p` process that
+   * exits when the reply ends, so nothing is running in any moment you are
+   * reading the screen. Sitting beside three idle-looking characters it read
+   * as "you have no sessions" while three conversations were open.
+   *
+   * The budget only means something when it is being spent, so it appears
+   * then. Amber at the cap, when the next turn queues instead of running. */}
+      {live && live.running > 0 && (
         <span
           className="font-mono text-[10.5px] tabular-nums"
           style={{
             color: live.running >= live.max ? 'var(--color-noctua)' : 'var(--color-ink-faint)',
           }}
-          title={`${live.running} of ${live.max} concurrent sessions running`}
+          title={`${live.running} of ${live.max} turns running`}
         >
           {live.running}/{live.max}
         </span>
       )}
       {CHARACTERS.map((c) => {
         const accent = MODE_ACCENT[c.mode]
-        const live = working.includes(c.mode)
+        /* Three states, not two.
+         *
+         * `working` is a turn streaming right now, which is true for seconds
+         * at a time. `open` is a conversation that exists and can be resumed,
+         * which is the fact you actually want at a glance -- and the one the
+         * strip could not previously show, so a mode you were mid-session in
+         * looked exactly like one you had never opened. */
+        const busy = working.includes(c.mode)
+        const hasSession = busy || open.includes(c.mode)
         const sprite = SPRITE[c.mode]
         return (
           <button
             key={c.mode}
             type="button"
-            title={`${MODE_LABEL[c.mode]} · ${live ? 'working' : 'idle'}`}
+            title={`${MODE_LABEL[c.mode]} · ${busy ? 'working' : hasSession ? 'open' : 'idle'}`}
             className="group relative grid h-6 w-6 place-items-center rounded-[3px] hover:bg-elevated"
           >
             {sprite ? (
               <img
-                src={live ? sprite.working : sprite.idle}
+                src={busy ? sprite.working : sprite.idle}
                 alt=""
                 /* pixelated, or the browser smooths a 16-grade sprite into
                    mush at this size — the whole point of the art direction
-                   is hard edges. Dimmed rather than greyed when idle, so the
-                   character stays itself. */
+                   is hard edges. Dimmed rather than greyed, so the character
+                   stays itself; an open conversation sits between the two. */
                 className="h-[20px] w-[20px] object-contain transition-opacity"
-                style={{ imageRendering: 'pixelated', opacity: live ? 1 : 0.45 }}
+                style={{ imageRendering: 'pixelated', opacity: busy ? 1 : hasSession ? 0.8 : 0.45 }}
               />
             ) : (
               <span
                 className="font-mono text-[11px] font-bold"
-                style={{ color: live ? accent : 'var(--color-ink-faint)', opacity: live ? 1 : 0.55 }}
+                style={{
+                  color: hasSession ? accent : 'var(--color-ink-faint)',
+                  opacity: busy ? 1 : hasSession ? 0.8 : 0.55,
+                }}
               >
                 {MODE_LABEL[c.mode][0]}
               </span>
             )}
+            {/* Pulses only while a turn is streaming. An open conversation is
+                a steady accent dot: present, not animated, because motion
+                that never stops stops meaning anything. */}
             <span
-              className={`absolute -bottom-px -right-px h-[6px] w-[6px] rounded-full border-[1.5px] border-surface ${live ? 'animate-pulse motion-reduce:animate-none' : ''}`}
-              style={{ background: live ? accent : 'var(--color-ink-faint)' }}
+              className={`absolute -bottom-px -right-px h-[6px] w-[6px] rounded-full border-[1.5px] border-surface ${busy ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+              style={{
+                background: hasSession ? accent : 'var(--color-ink-faint)',
+                opacity: busy ? 1 : hasSession ? 0.7 : 1,
+              }}
             />
           </button>
         )
