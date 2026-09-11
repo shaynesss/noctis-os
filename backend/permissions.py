@@ -47,6 +47,11 @@ class Request:
     # Set when the answer came from a timeout rather than a person, so the UI
     # can say so instead of implying you denied something you never saw.
     expired: bool = False
+    # What the person chose, for a tool whose whole purpose is to ask -- the
+    # answer is the point of the call, not a modifier on it. Question text ->
+    # the label picked for it. None for every ordinary permission request,
+    # where "allow" carries all the meaning there is.
+    answers: dict[str, str] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {"id": self.id, "mode": self.mode, "tool": self.tool,
@@ -80,14 +85,23 @@ class PermissionRegistry:
             self._pending.pop(req.id, None)
         return req
 
-    def decide(self, request_id: str, decision: Decision) -> bool:
+    def decide(
+        self, request_id: str, decision: Decision,
+        answers: dict[str, str] | None = None,
+    ) -> bool:
         """Answer a question. False when there is nothing by that id, which
-        happens when it expired while the dialog was still on screen."""
+        happens when it expired while the dialog was still on screen.
+
+        `answers` carries a choice back for AskUserQuestion, where allowing
+        the call is not the answer -- the selection is. Ignored, and normally
+        absent, for every other tool.
+        """
         with self._lock:
             req = self._pending.get(request_id)
         if req is None:
             return False
         req.decision = decision
+        req.answers = answers
         req.decided.set()
         return True
 

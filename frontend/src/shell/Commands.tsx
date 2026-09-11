@@ -254,12 +254,155 @@ function subject(args: Record<string, unknown>): string {
  * focus and Escape denies — the safe answer should be the one you can give
  * without reading carefully, since the unsafe one is the one worth a moment.
  */
-export function PermissionRequest({
+export type Decide =
+  (id: string, decision: 'allow' | 'deny', answers?: Record<string, string>) => void
+
+interface Asked {
+  question: string
+  header?: string
+  multiSelect?: boolean
+  options: { label: string; description?: string }[]
+}
+
+/** The questions inside an AskUserQuestion call, or null for anything else.
+ *
+ * Defensive about shape rather than trusting it: this arrives as whatever the
+ * engine put in the tool's arguments, and a malformed payload should fall
+ * back to the ordinary dialog -- which can still deny -- instead of rendering
+ * an empty question nobody can answer or dismiss.
+ */
+function questionsOf(request: PendingPermission): Asked[] | null {
+  if (request.tool !== 'AskUserQuestion') return null
+  const raw = (request.args as { questions?: unknown }).questions
+  if (!Array.isArray(raw)) return null
+  const asked = raw.filter((q): q is Asked =>
+    Boolean(q) && typeof (q as Asked).question === 'string' &&
+    Array.isArray((q as Asked).options) &&
+    (q as Asked).options.every((o) => o && typeof o.label === 'string'),
+  )
+  return asked.length ? asked : null
+}
+
+/** The dialog that answers rather than permits.
+ *
+ * Every question must be answered before this can be sent: a partial reply
+ * would come back as a question the session asked and did not get an answer
+ * to, which is indistinguishable from not asking. Escape still declines
+ * outright -- that is a real outcome and stays available, distinct from
+ * answering badly.
+ */
+function QuestionRequest({
+  request,
+  questions,
+  onDecide,
+}: {
+  request: PendingPermission
+  questions: Asked[]
+  onDecide: Decide
+}) {
+  const [picked, setPicked] = useState<Record<string, string>>({})
+  const complete = questions.every((q) => picked[q.question])
+
+  const send = () => {
+    if (complete) onDecide(request.id, 'allow', picked)
+  }
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onDecide(request.id, 'deny')
+      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && complete) {
+        e.preventDefault()
+        onDecide(request.id, 'allow', picked)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [request.id, onDecide, complete, picked])
+
+  return (
+    <Overlay label={`${request.mode} is asking`} onClose={() => onDecide(request.id, 'deny')}>
+      {questions.map((q) => (
+        <div key={q.question} className="mb-[15px]">
+          {q.header && (
+            <div className="mb-[5px] font-mono text-[10.5px] uppercase tracking-[0.11em] text-ink-faint">
+              {q.header}
+            </div>
+          )}
+          <div className="mb-[9px] text-[13.5px] leading-[1.55] text-ink">{q.question}</div>
+          <div className="flex flex-col gap-[5px]">
+            {q.options.map((o) => {
+              const on = picked[q.question] === o.label
+              return (
+                <button
+                  key={o.label}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setPicked((p) => ({ ...p, [q.question]: o.label }))}
+                  className={`rounded-[4px] border px-[10px] py-[7px] text-left transition-colors ${
+                    on ? 'border-ink-faint bg-elevated' : 'border-line hover:bg-elevated'
+                  }`}
+                >
+                  <div className="text-[12.5px] leading-[1.4] text-ink">{o.label}</div>
+                  {o.description && (
+                    <div className="mt-[3px] text-[11.5px] leading-[1.5] text-ink-dim">
+                      {o.description}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="flex items-center gap-[8px]">
+        <button
+          type="button"
+          disabled={!complete}
+          onClick={send}
+          className="rounded-[4px] border border-line px-[12px] py-[5px] font-mono text-[12px] text-ink hover:bg-elevated disabled:cursor-not-allowed disabled:text-ink-faint disabled:hover:bg-transparent"
+        >
+          Send
+        </button>
+        <button
+          type="button"
+          onClick={() => onDecide(request.id, 'deny')}
+          className="rounded-[4px] border border-line px-[12px] py-[5px] font-mono text-[12px] text-ink hover:bg-elevated"
+        >
+          Decline
+        </button>
+        <span className="ml-auto font-mono text-[11px] text-ink-faint">
+          {complete ? '⌘⏎ send · esc decline' : 'pick an answer · esc decline'}
+        </span>
+      </div>
+    </Overlay>
+  )
+}
+
+/** Dispatch, so neither branch renders the other's shape.
+ *
+ * A question is not a permission request wearing a different name. The
+ * generic dialog showed one as raw JSON above an Allow button, which could
+ * grant the call but could not answer it -- so the session got its own
+ * question handed back with no reply in it. Split here rather than branched
+ * inside one component, because the two have different hooks. */
+export function PermissionRequest({ request, onDecide }: {
+  request: PendingPermission
+  onDecide: Decide
+}) {
+  const asked = questionsOf(request)
+  return asked
+    ? <QuestionRequest request={request} questions={asked} onDecide={onDecide} />
+    : <ToolRequest request={request} onDecide={onDecide} />
+}
+
+function ToolRequest({
   request,
   onDecide,
 }: {
   request: PendingPermission
-  onDecide: (id: string, decision: 'allow' | 'deny') => void
+  onDecide: Decide
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

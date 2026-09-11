@@ -130,3 +130,60 @@ def test_an_invalid_decision_is_refused(client):
 @pytest.mark.parametrize("path", ["/v2/sessions/permissions/pending"])
 def test_permission_routes_require_auth(client, path):
     assert client.get(path).status_code in (401, 403)
+
+
+def test_an_answer_reaches_the_session_that_asked(client):
+    """AskUserQuestion is answered by the dialog, not merely permitted.
+
+    Allowing the call without carrying the choice back hands the session its
+    own question with no reply in it, which is indistinguishable from never
+    having asked -- the bug this path exists to close.
+    """
+    from permissions import registry
+    result = {}
+
+    def asker():
+        result["req"] = registry.ask("faber", "AskUserQuestion", {
+            "questions": [{"question": "Which way?", "options": [{"label": "Left"}]}],
+        })
+
+    t = threading.Thread(target=asker)
+    t.start()
+    for _ in range(200):
+        if registry.pending():
+            break
+        time.sleep(0.01)
+
+    listed = client.get("/v2/sessions/permissions/pending", headers=AUTH).json()["pending"]
+    assert len(listed) == 1 and listed[0]["tool"] == "AskUserQuestion"
+
+    r = client.post(f"/v2/sessions/permissions/{listed[0]['id']}/decide",
+                    json={"decision": "allow", "answers": {"Which way?": "Left"}},
+                    headers=AUTH)
+    assert r.status_code == 200
+    t.join(timeout=5)
+    assert result["req"].decision == "allow"
+    assert result["req"].answers == {"Which way?": "Left"}
+
+
+def test_an_ordinary_request_carries_no_answers(client):
+    """The field is absent for every other tool, rather than an empty dict
+    that the MCP layer would then have to distinguish from a real reply."""
+    from permissions import registry
+    result = {}
+
+    def asker():
+        result["req"] = registry.ask("faber", "Bash", {"command": "ls"})
+
+    t = threading.Thread(target=asker)
+    t.start()
+    for _ in range(200):
+        if registry.pending():
+            break
+        time.sleep(0.01)
+
+    listed = client.get("/v2/sessions/permissions/pending", headers=AUTH).json()["pending"]
+    client.post(f"/v2/sessions/permissions/{listed[0]['id']}/decide",
+                json={"decision": "allow"}, headers=AUTH)
+    t.join(timeout=5)
+    assert result["req"].answers is None

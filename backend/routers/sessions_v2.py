@@ -427,6 +427,9 @@ class PermissionAsk(BaseModel):
 
 class PermissionDecision(BaseModel):
     decision: str
+    # Question text -> the label chosen for it. Only AskUserQuestion sends
+    # this; for every other tool the decision itself is the whole answer.
+    answers: dict[str, str] | None = None
 
     @field_validator("decision")
     @classmethod
@@ -448,7 +451,7 @@ async def permission_ask(body: PermissionAsk) -> dict:
     req = await asyncio.to_thread(
         permission_registry.ask, body.mode, body.tool, body.args
     )
-    return {"decision": req.decision, "expired": req.expired}
+    return {"decision": req.decision, "expired": req.expired, "answers": req.answers}
 
 
 @router.get("/permissions/pending")
@@ -462,7 +465,9 @@ def permission_decide(request_id: str, body: PermissionDecision) -> dict:
     """404 rather than a silent success when the request is gone: it expired
     while the dialog was still on screen, and saying 'allowed' about a session
     that already gave up and moved on would be a lie the UI then displays."""
-    if not permission_registry.decide(request_id, body.decision):  # type: ignore[arg-type]
+    if not permission_registry.decide(  # type: ignore[arg-type]
+        request_id, body.decision, body.answers,
+    ):
         raise HTTPException(status_code=404, detail="No pending request by that id")
     return {"id": request_id, "decision": body.decision}
 

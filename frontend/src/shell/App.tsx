@@ -753,12 +753,18 @@ export default function App() {
     }
   }, [])
 
-  const decidePermission = useCallback((id: string, decision: 'allow' | 'deny') => {
+  const decidePermission = useCallback((
+    id: string,
+    decision: 'allow' | 'deny',
+    // Present only for AskUserQuestion, where the choice *is* the answer and
+    // allowing the call without it would return an empty reply.
+    answers?: Record<string, string>,
+  ) => {
     // Dropped from local state first: the dialog must go the instant you
     // click, not one poll later, or it reads as not having registered and
     // invites a second click on a question that is already answered.
     setPermissionRequests((prev) => prev.filter((r) => r.id !== id))
-    void post(`/v2/sessions/permissions/${id}/decide`, { decision })
+    void post(`/v2/sessions/permissions/${id}/decide`, { decision, answers })
   }, [])
 
   /* Slash commands.

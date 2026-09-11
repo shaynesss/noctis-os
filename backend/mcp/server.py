@@ -310,10 +310,14 @@ def t_permission_prompt(args: dict) -> dict:
         }))
 
     if body.get("decision") == "allow":
-        return text(json.dumps({
-            "behavior": "allow",
-            "updatedInput": args.get("input") or args.get("tool_input") or {},
-        }))
+        updated = dict(args.get("input") or args.get("tool_input") or {})
+        # AskUserQuestion is answered *by* the permission component -- its own
+        # schema carries an `answers` field for exactly this, and allowing the
+        # call without it would hand the session back its own question with no
+        # reply in it. Every other tool sends no answers and is unaffected.
+        if body.get("answers"):
+            updated["answers"] = body["answers"]
+        return text(json.dumps({"behavior": "allow", "updatedInput": updated}))
     return text(json.dumps({
         "behavior": "deny",
         "message": ("No answer within the time limit, so this was refused."
