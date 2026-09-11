@@ -67,3 +67,27 @@ def test_a_missing_vault_is_not_fatal(tmp_path, monkeypatch):
     monkeypatch.setattr("prompts.render.PROMPTS", tmp_path / "nope" / "prompts")
     assert modes.mode_agents("faber") == ""
     assert modes.mode_methodology("faber") == ""
+
+
+def test_the_methodology_states_where_the_vault_actually_is(tmp_path, monkeypatch):
+    """The first live Faber session reported the vault unreadable.
+
+    It had the directory the whole time -- --add-dir grants it and
+    vault_search read straight into it -- but nothing ever said where it was.
+    system.md gives 'Vault root: `second-brain/`', which is relative and true
+    only from ~/Developer; a session's cwd is the project it was launched
+    into, so it resolved to <project>/second-brain and then guessed
+    ~/second-brain. Faber's own overlay points at
+    `second-brain/modes/dev/dev.md` for the real methodology, so the wrong
+    path cost it the 22KB document the 672-byte overlay only points to.
+    """
+    prompts = tmp_path / "prompts"
+    (prompts / "overlays").mkdir(parents=True)
+    (prompts / "system.md").write_text("universal")
+    (prompts / "overlays" / "faber.md").write_text("faber overlay")
+    monkeypatch.setattr("prompts.render.VAULT", tmp_path)
+    monkeypatch.setattr("prompts.render.PROMPTS", prompts)
+
+    text = modes.mode_methodology("faber")
+    assert str(tmp_path) in text, "the absolute vault root must be stated"
+    assert "universal" in text and "faber overlay" in text

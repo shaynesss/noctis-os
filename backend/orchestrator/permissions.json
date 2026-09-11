@@ -6,7 +6,11 @@
       "Bash",
       "NotebookEdit",
       "WebSearch",
-      "WebFetch"
+      "WebFetch",
+      "mcp__noctis__vault_search",
+      "mcp__noctis__history_search",
+      "mcp__noctis__job_context",
+      "mcp__noctis__worklist"
     ],
     "deny": [
       "Bash(git push*)"

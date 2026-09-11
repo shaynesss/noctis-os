@@ -62,7 +62,14 @@ MODE_MODELS = {
 # Anything listed here skips the question entirely.
 ALL_TOOLS = (
     "Read Grep Glob WebSearch WebFetch Edit Write Bash "
-    "NotebookEdit TodoWrite Task"
+    "NotebookEdit TodoWrite Task "
+    # Noctis's own retrieval, pre-approved: a session asking permission to
+    # search the vault is asking permission to do the thing the design is
+    # built around, and the first live session was duly stopped by a dialog
+    # to allow `vault_search("design lodge")`. `propose` is deliberately
+    # absent -- that one writes, and it is Custos's, so it keeps asking.
+    "mcp__noctis__vault_search mcp__noctis__history_search "
+    "mcp__noctis__job_context mcp__noctis__worklist"
 )
 
 # What a session can be switched to, and what each is for. The mode's own

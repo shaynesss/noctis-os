@@ -51,10 +51,24 @@ def mode_methodology(mode: str) -> str:
     session at all, and the old code made the same call for the same reason.
     """
     try:
-        from prompts.render import compose
-        return compose(mode)
+        from prompts.render import VAULT, compose
+        text = compose(mode)
     except Exception:       # noqa: BLE001 - see docstring
         return ""
+    # Where the vault actually is, absolutely.
+    #
+    # system.md says 'Vault root: `second-brain/`', which is a *relative*
+    # path and true only from ~/Developer. A session's cwd is the project it
+    # was launched into, so resolving it there gives
+    # <project>/second-brain -- and the first live Faber session duly
+    # reported the vault unreadable and guessed ~/second-brain. It had the
+    # directory the whole time: --add-dir grants it, and vault_search could
+    # see straight into it. It simply did not know the path.
+    #
+    # Stated here rather than fixed in system.md because the value is
+    # machine-specific: VAULT_PATH is an env var, and hardcoding one
+    # person's absolute path into a vault document is how it goes stale.
+    return f"{text.rstrip()}\n\n## Vault location\n\nThe vault root on this machine is `{VAULT}`. Use that absolute path for Read, Grep and Bash -- relative `second-brain/` resolves against the working directory, which is the project, not the vault.\n"
 
 
 def mode_agents(mode: str) -> str:
