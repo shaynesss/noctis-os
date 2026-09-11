@@ -66,6 +66,12 @@ export type Block =
    * toast would put it somewhere the session's own history does not record,
    * and a failed turn is exactly the thing you scroll back to find. */
   | { kind: 'error'; message: string; fatal: boolean }
+  /* A turn that ended without saying anything. It is a legal shape -- the
+   * model runs tools, treats the last result as "still working", and the
+   * turn stops -- but the transcript renders text, so it drew nothing, and
+   * nothing looks identical to a dead backend, a session still thinking,
+   * and a finished job. Rendering it makes those four states four pictures. */
+  | { kind: 'silent'; tools: number }
   /* A handed-off session opens with its provenance rather than a blank
    * transcript, so a tab you return to an hour later says where it came
    * from instead of looking like something you started and forgot. */

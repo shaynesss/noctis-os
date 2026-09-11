@@ -350,6 +350,24 @@ function renderBlock(
               </div>
             )
           }
+          if (b.kind === 'silent') {
+            /* Deliberately plain, and deliberately not an error: the turn
+             * did not fail, it just did not speak. What it needs to do is
+             * end the ambiguity -- you are looking at a finished turn, not
+             * a crash and not a pause. */
+            return (
+              <div
+                key={i}
+                className="mb-[16px] flex items-center gap-[7px] rounded-[3px] border border-dashed border-line px-[11px] py-[7px] font-mono text-[11px] text-ink-faint"
+              >
+                <span className="h-[5px] w-[5px] rounded-full bg-ink-faint" />
+                turn ended with no reply
+                <span className="text-ink-dim">
+                  · {b.tools} tool {b.tools === 1 ? 'call' : 'calls'}, no text
+                </span>
+              </div>
+            )
+          }
           if (b.kind === 'error') {
             /* In the transcript rather than a toast: a failed turn is
              * exactly the thing you scroll back to find, and a toast puts it

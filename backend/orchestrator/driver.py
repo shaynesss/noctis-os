@@ -17,11 +17,12 @@ import json
 import os
 import shutil
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, AsyncIterator, Sequence
 
-from .events import EngineError, Event, SessionStart, TextDelta
+from .events import (EngineError, Event, SessionStart, TextDelta,
+                     ToolCall, TurnEnd)
 from .parser import parse_line
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -380,6 +381,31 @@ async def launch(
             await proc.wait()
 
 
+async def with_turn_totals(events: AsyncIterator[Event]) -> AsyncIterator[Event]:
+    """Fill in TurnEnd's `text_chars` and `tool_calls` as the turn streams.
+
+    Separate from `run_session` so it can be tested against a synthetic
+    stream rather than a spawned process -- the thing it detects is a turn
+    that produces no text, and making a real engine do that on demand is not
+    something a test can rely on.
+
+    The parser cannot do this itself: it builds TurnEnd from the `result`
+    event, which carries usage and timing and no knowledge of the text that
+    came before it. Only something watching the whole stream can count.
+    """
+    text_chars = 0
+    tool_calls = 0
+    async for event in events:
+        if isinstance(event, TextDelta):
+            text_chars += len(event.text)
+        elif isinstance(event, ToolCall):
+            tool_calls += 1
+        elif isinstance(event, TurnEnd):
+            event = replace(event, text_chars=text_chars, tool_calls=tool_calls)
+            text_chars = tool_calls = 0   # a run may carry more than one turn
+        yield event
+
+
 async def run_session(spec: SessionSpec, timeout: float | None = 600) -> AsyncIterator[Event]:
     """Production entry point: spec → spawned session → Events."""
     config_dir = CONFIG_ROOT / spec.mode
@@ -388,10 +414,10 @@ async def run_session(spec: SessionSpec, timeout: float | None = 600) -> AsyncIt
             f"config dir missing for '{spec.mode}' — run ./bootstrap/bootstrap.sh", fatal=True
         )
         return
-    async for event in launch(
+    async for event in with_turn_totals(launch(
         build_command(spec), env=build_env(spec), cwd=spec.cwd, timeout=timeout,
         stdin_data=build_stdin(spec),
-    ):
+    )):
         yield event
 
 

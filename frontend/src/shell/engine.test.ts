@@ -105,6 +105,32 @@ describe('fold', () => {
     expect(s.done).toBe(true)
   })
 
+  it('puts a silent turn in the transcript instead of leaving it blank', () => {
+    // The failure this exists for: tools ran, no text came back, and the
+    // transcript drew nothing -- which looks exactly like a dead backend.
+    const s = run([
+      { t: 'tool_call', id: '1', name: 'Bash', summary: 'ls' },
+      { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+        silent: true, text_chars: 0, tool_calls: 3,
+        usage: { input: 1, output: 0, cached: 0, model: 'm', aux_input: 0,
+                 aux_output: 0, context_window: 1000 } },
+    ])
+    const last = s.blocks[s.blocks.length - 1]
+    expect(last.kind).toBe('silent')
+    expect(last).toMatchObject({ tools: 3 })
+  })
+
+  it('adds nothing when the turn actually replied', () => {
+    const s = run([
+      { t: 'text', text: 'here you go' },
+      { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+        silent: false, text_chars: 11, tool_calls: 0,
+        usage: { input: 1, output: 1, cached: 0, model: 'm', aux_input: 0,
+                 aux_output: 0, context_window: 1000 } },
+    ])
+    expect(s.blocks.some((b) => b.kind === 'silent')).toBe(false)
+  })
+
   it('records context occupancy from the last snapshot, not the turn total', () => {
     const s = run([
       { t: 'context', tokens: 26589 },

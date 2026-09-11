@@ -28,6 +28,9 @@ export type WireEvent =
   | { t: 'limits'; five_hour: Window; seven_day: Window; using_overage: boolean }
   | { t: 'context'; tokens: number }
   | { t: 'turn_end'; session_id: string; duration_ms: number; stop_reason: string | null
+      // A turn may end with tool calls and no text. `silent` says so outright,
+      // so the transcript can show that rather than nothing at all.
+      silent?: boolean; text_chars?: number; tool_calls?: number
       usage: { input: number; output: number; cached: number; model: string
                aux_input: number; aux_output: number
                context_window: number } }
@@ -247,8 +250,17 @@ export function fold(state: Fold, e: WireEvent): Fold {
       // null must render as unknown rather than as 0%, which would read as a
       // conversation with room to spare.
       const window = e.usage.context_window || state.contextWindow
+      /* A turn that emitted no text leaves the transcript unchanged, which
+       * reads as nothing having happened. Say so instead. The backend
+       * counts it; asking the model to always write something was tried
+       * three times and cannot work -- there is no reply to attach a rule
+       * to on a turn that has none. */
+      const blocks: Block[] = e.silent
+        ? [...state.blocks, { kind: 'silent', tools: e.tool_calls ?? 0 }]
+        : state.blocks
       return {
         ...state,
+        blocks,
         sessionId: e.session_id,
         thinking: null,
         done: true,

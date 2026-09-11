@@ -12,9 +12,10 @@ import pytest
 from orchestrator.driver import (
     MODE_MODELS, MODE_TOOLS, Image, SessionSpec, build_command, build_env, build_stdin,
     claude_binary, launch,
-    session_id_of,
+    session_id_of, with_turn_totals,
 )
-from orchestrator.events import EngineError, SessionStart, TextDelta, TurnEnd
+from orchestrator.events import (EngineError, SessionStart, TextDelta, ToolCall,
+                                 ToolResult, TurnEnd, Usage)
 from orchestrator.manager import SessionManager
 
 FIXTURE = Path(__file__).parent / "fixtures" / "stream_with_tools.jsonl"
@@ -471,3 +472,70 @@ def test_only_the_vault_is_added():
     work: a session refusing to read the home folder is it behaving."""
     cmd = build_command(SessionSpec(mode="faber", prompt="x", vault_path=Path("/vault")))
     assert cmd.count("--add-dir") == 1
+
+
+# ------------------------------------------------------- silent turns
+
+def _turn_end() -> TurnEnd:
+    return TurnEnd(session_id="s", usage=Usage(0, 0, 0, "m"), duration_ms=1)
+
+
+async def _stream(*events):
+    for e in events:
+        yield e
+
+
+def test_a_turn_that_says_nothing_is_marked_silent():
+    """The failure this exists for: tool calls, no text, turn over.
+
+    The shell renders the transcript, so this turn drew a blank screen that
+    looked exactly like a dead backend. It is a legal shape, and the only fix
+    that holds is making it a fact on the event rather than an absence.
+    """
+    events = asyncio.run(_collect(with_turn_totals(_stream(
+        ToolCall(id="1", name="Bash", args={"command": "ls"}),
+        ToolResult(id="1", content="a.txt"),
+        ToolCall(id="2", name="Read", args={"file_path": "a.txt"}),
+        ToolResult(id="2", content="hello"),
+        _turn_end(),
+    ))))
+    end = events[-1]
+    assert end.silent
+    assert end.text_chars == 0
+    assert end.tool_calls == 2
+
+
+def test_a_turn_that_replies_is_not_silent():
+    events = asyncio.run(_collect(with_turn_totals(_stream(
+        ToolCall(id="1", name="Bash", args={"command": "ls"}),
+        TextDelta("here is what I found"),
+        _turn_end(),
+    ))))
+    end = events[-1]
+    assert not end.silent
+    assert end.text_chars == len("here is what I found")
+    assert end.tool_calls == 1
+
+
+def test_counts_reset_between_turns_in_one_run():
+    """A resumed run carries several turns; a reply in the first must not
+    make a silent second one look answered."""
+    events = asyncio.run(_collect(with_turn_totals(_stream(
+        TextDelta("first turn spoke"),
+        _turn_end(),
+        ToolCall(id="1", name="Bash", args={"command": "ls"}),
+        _turn_end(),
+    ))))
+    first, second = [e for e in events if isinstance(e, TurnEnd)]
+    assert not first.silent
+    assert second.silent and second.tool_calls == 1
+
+
+def test_whitespace_only_text_still_counts_as_a_reply():
+    """Deliberate: the check is "did the engine emit text", not a judgement
+    about whether the text was worth reading. Anything cleverer would be the
+    same guesswork this replaced."""
+    events = asyncio.run(_collect(with_turn_totals(_stream(
+        TextDelta(" "), _turn_end(),
+    ))))
+    assert not events[-1].silent

@@ -72,6 +72,12 @@ def to_dict(e: Event) -> dict[str, Any]:
     if isinstance(e, TurnEnd):
         return {"t": "turn_end", "session_id": e.session_id,
                 "duration_ms": e.duration_ms, "stop_reason": e.stop_reason,
+                # What the turn actually produced. `silent` is the one the
+                # shell renders: a turn can legally end with tool calls and
+                # no text, and without this the transcript draws nothing --
+                # indistinguishable from a crash, a pause, or being done.
+                "text_chars": e.text_chars, "tool_calls": e.tool_calls,
+                "silent": e.silent,
                 # `model` names the model these counts describe. `aux` is
                 # what the turn also spent on the CLI's background tier --
                 # separate, because per-turn and per-day are different

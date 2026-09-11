@@ -178,10 +178,33 @@ class ContextSnapshot:
 
 @dataclass(frozen=True)
 class TurnEnd:
+    """The end of one turn, and what the turn actually produced.
+
+    `text_chars` and `tool_calls` exist because a turn is allowed to end with
+    tool calls and no assistant text at all -- the model treats a tool result
+    as "still working" and the turn simply stops there. That is a legal shape,
+    not a crash, but the shell renders the transcript, so an empty turn draws
+    a blank screen identical to a dead backend, a session still thinking, and
+    a finished job. Four states, one rendering, and the only way to tell them
+    apart was to ask.
+
+    Counting them here makes silence a fact on the event rather than an
+    absence to be inferred. A rule asking the model to always write something
+    cannot fix this -- it needs a reply to attach to, and on these turns there
+    is none; it was tried three times and failed three times. This is a health
+    check, and CLAUDE.md says health checks are backend code.
+    """
     session_id: str
     usage: Usage
     duration_ms: int
     stop_reason: str | None = None
+    text_chars: int = 0
+    tool_calls: int = 0
+
+    @property
+    def silent(self) -> bool:
+        """Ended without saying anything. Worth rendering explicitly."""
+        return self.text_chars == 0
 
 
 @dataclass(frozen=True)
