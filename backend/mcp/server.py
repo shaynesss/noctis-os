@@ -27,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from jobs import MODE_VAULT_DIR  # noqa: E402
 from retrieval.index import TOP_K, VaultIndex  # noqa: E402
 
 # Versions this server actually implements, newest first. The spec's
@@ -211,9 +212,11 @@ def t_job_context(args: dict) -> dict:
     mode = args.get("mode", "")
     if mode not in MODES:
         return text(f"Unknown mode '{mode}'. Known: {', '.join(MODES)}.")
-    jobs_dir = VAULT / "modes" / ("dev" if mode == "faber" else
-                                  "learn" if mode == "noctua" else
-                                  "research" if mode == "vesper" else "settings") / "jobs"
+    # Mapping owned by `jobs.py`, which the launch path also reads. It was
+    # inline here until a second caller needed it; two copies drift by
+    # returning "no jobs" rather than raising, which reads as an empty
+    # backlog instead of a bug.
+    jobs_dir = VAULT / "modes" / MODE_VAULT_DIR[mode] / "jobs"
     slug = args.get("slug")
     if not slug:
         if not jobs_dir.is_dir():

@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
+import jobs
 import vault_io
 from permissions import registry as permission_registry
 from orchestrator.driver import (
@@ -135,8 +136,23 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
     # Cheap to do here: render() compares the composed text against what is
     # on disk (ignoring the banner's timestamp) and returns without writing
     # when they match, so an ordinary launch is a read, not a write.
+    #
+    # The job context goes in with it. `compose()` has always accepted a
+    # `job_context` argument and spliced it in under "This session's job",
+    # and no caller has ever passed one — so the block existed, was
+    # correct, and never rendered. Resolved from the working directory
+    # rather than a new request field: the job whose `project_path` is this
+    # directory is the job this session is about to work on.
+    #
+    # Known limit, documented rather than engineered around: a config dir
+    # is per-mode, not per-session, so two concurrent sessions of the same
+    # mode in *different* projects share one CLAUDE.md and the second
+    # launch rewrites it. The window is narrow — the file is read once at
+    # spawn, not continuously — and the session can call `job_context` for
+    # the authoritative record either way.
+    cwd = _safe_cwd(req.cwd)
     try:
-        render(req.mode)
+        render(req.mode, job_context=jobs.job_brief(req.mode, cwd))
     except Exception as exc:  # noqa: BLE001 - never fatal, see below
         # A stale prompt makes a worse session; a raised exception here
         # makes no session at all. Logged rather than swallowed, because
@@ -149,7 +165,7 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
             prompt=prompt,
             permission_mode=req.permission_mode,
             resume_id=req.resume_id,
-            cwd=_safe_cwd(req.cwd),
+            cwd=cwd,
             images=[Image(media_type=i.media_type, data=i.data) for i in req.images],
             model=req.model,
             # The vault, always, as a second allowed directory.

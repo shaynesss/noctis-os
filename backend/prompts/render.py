@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """System-prompt renderer — Noctis v2 Stage 1 item 7.
 
-Composes `second-brain/prompts/system.md` plus a mode's overlay into that
-mode's `CLAUDE_CONFIG_DIR/CLAUDE.md`. The orchestrator calls `render()` on
-every launch; the CLI reads the result as the session's project memory.
+Composes `second-brain/prompts/system.md` plus a mode's overlay — and the
+active job's context, when the session's working directory matches one —
+into that mode's `CLAUDE_CONFIG_DIR/CLAUDE.md`. `routers/sessions_v2.py`
+calls `render()` on every launch; the CLI reads the result as the session's
+project memory.
+
+This docstring asserted that caller for a long time while the only one was
+the Prompts panel's Save button, and the generated banner said the same.
+A docstring naming a caller that does not exist is worse than none, because
+it reads as verification. Both are true now, and `tests/test_prompts.py`
+pins the launch path to calling it.
 
     python3 backend/prompts/render.py            # render every mode
     python3 backend/prompts/render.py faber      # one mode
