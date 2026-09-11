@@ -14,7 +14,7 @@
  * as a distinct object rather than as differently-coloured prose.
  */
 import { useState } from 'react'
-import { parseBlocks, parseInline, type Block, type Span } from './md'
+import { parseBlocks, parseInline, type Align, type Block, type Span } from './md'
 
 export function Markdown({ src, className = '' }: { src: string; className?: string }) {
   return (
@@ -74,6 +74,49 @@ function Node({ block, first }: { block: Block; first: boolean }) {
 
     case 'rule':
       return <hr className="my-[14px] border-0 border-t border-line" />
+
+    case 'table': {
+      /* Ruled by row, not boxed by cell. A full grid draws more lines than
+       * there is data and turns a three-column comparison into a spreadsheet;
+       * a single rule under the header, and hairlines between rows, give the
+       * eye the same alignment for a fraction of the ink. Horizontally
+       * scrollable rather than wrapped, because a table that reflows to two
+       * lines per cell stops being scannable, which is the only reason to
+       * use one. */
+      const cell = (a: Align) =>
+        `px-[10px] py-[6px] align-top ${
+          a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left'
+        }`
+      return (
+        <div className="mb-[12px] overflow-x-auto">
+          <table className="w-full border-collapse text-[13px] leading-[1.55]">
+            <thead>
+              <tr className="border-b border-line">
+                {block.header.map((h, i) => (
+                  <th
+                    key={i}
+                    className={`${cell(block.align[i] ?? 'left')} font-mono text-[11px] font-bold uppercase tracking-[0.08em] text-ink-faint`}
+                  >
+                    <Inline text={h} />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, r) => (
+                <tr key={r} className="border-b border-line/40 last:border-0">
+                  {row.map((c, i) => (
+                    <td key={i} className={cell(block.align[i] ?? 'left')}>
+                      <Inline text={c} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
 
     case 'paragraph':
       return (

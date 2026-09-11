@@ -29,6 +29,23 @@ describe('groupTools', () => {
   it('returns nothing for an empty transcript', () => {
     expect(groupTools([])).toEqual([])
   })
+
+  it('drops a thinking block that reports nothing, and folds across it', () => {
+    // The row would read "Thinking · 0 tokens · 0.0s" -- no information, and
+    // it splits one stretch of work into two runs.
+    const empty: Block = { kind: 'thinking', tokens: 0, ms: 0 }
+    const grouped = groupTools([tool('Bash'), empty, tool('Grep')])
+    expect(grouped).toHaveLength(1)
+    expect(grouped[0]).toMatchObject({ kind: 'tools' })
+    expect(summarise((grouped[0] as { tools: ToolBlock[] }).tools))
+      .toBe('Ran 1 shell command · searched for 1 pattern')
+  })
+
+  it('keeps a thinking block that has real numbers', () => {
+    const real: Block = { kind: 'thinking', tokens: 412, ms: 2300 }
+    expect(groupTools([tool('Bash'), real, tool('Grep')]).map((g) => g.kind))
+      .toEqual(['tools', 'other', 'tools'])
+  })
 })
 
 describe('summarise', () => {

@@ -21,7 +21,10 @@ export type Block =
   | { type: 'list'; ordered: boolean; start: number; items: string[] }
   | { type: 'quote'; text: string }
   | { type: 'rule' }
+  | { type: 'table'; header: string[]; align: Align[]; rows: string[][] }
   | { type: 'paragraph'; text: string }
+
+export type Align = 'left' | 'center' | 'right'
 
 const HEADING = /^(#{1,6})\s+(.*)$/
 const BULLET = /^[-*+]\s+(.*)$/
@@ -29,6 +32,20 @@ const ORDERED = /^(\d+)[.)]\s+(.*)$/
 const FENCE = /^```(\w*)\s*$/
 const QUOTE = /^>\s?(.*)$/
 const RULE = /^(?:---+|\*\*\*+|___+)$/
+const TABLE_DELIM = /^\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?$/
+
+/** The cells of one row, with the optional outer pipes removed. */
+function splitRow(line: string): string[] {
+  return line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim())
+}
+
+/** `:---`, `---:` and `:---:` are left, right and centre respectively. */
+function alignOf(spec: string): Align {
+  const left = spec.startsWith(':')
+  const right = spec.endsWith(':')
+  if (left && right) return 'center'
+  return right ? 'right' : 'left'
+}
 
 export function parseBlocks(src: string): Block[] {
   const lines = src.replace(/\r\n/g, '\n').split('\n')
@@ -67,6 +84,31 @@ export function parseBlocks(src: string): Block[] {
     if (RULE.test(trimmed)) {
       flush()
       blocks.push({ type: 'rule' })
+      continue
+    }
+
+    /* Tables, recognised at the header row.
+     *
+     * A row is only a header if the line under it is a delimiter row, and
+     * both lines have to carry a pipe -- that pair is the entire difference
+     * between a table and an ordinary sentence containing a "|", so neither
+     * line is consumed until both are confirmed. Without this the whole
+     * table fell through to `paragraph` and rendered as raw pipes. */
+    const delim = i + 1 < lines.length ? lines[i + 1].trim() : ''
+    if (trimmed.includes('|') && delim.includes('|') && TABLE_DELIM.test(delim)) {
+      flush()
+      const header = splitRow(trimmed)
+      const align = splitRow(lines[++i].trim()).map(alignOf)
+      const rows: string[][] = []
+      while (i + 1 < lines.length && lines[i + 1].trim().includes('|')) {
+        const cells = splitRow(lines[++i].trim())
+        // Ragged rows are padded, never dropped: a row with too few cells is
+        // a flaw in the text, and showing it with blanks says so, where
+        // silently discarding the row would hide it.
+        while (cells.length < header.length) cells.push('')
+        rows.push(cells.slice(0, header.length))
+      }
+      blocks.push({ type: 'table', header, align, rows })
       continue
     }
 

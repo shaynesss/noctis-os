@@ -33,10 +33,27 @@ export type Grouped =
   | { kind: 'tools'; tools: ToolBlock[] }
   | { kind: 'other'; block: Block }
 
+/** A thinking block with nothing to report.
+ *
+ * Reasoning is billed but never returned under display:"omitted", so a
+ * thinking block carries a token count and a duration and no text. When the
+ * engine reports neither, the row renders as a literal "Thinking · 0 tokens ·
+ * 0.0s" -- it states nothing, and worse, it sits between two tool runs and
+ * splits them, so a single stretch of work reads as a stack of alternating
+ * rows instead of one line naming what was done. Dropping these before
+ * grouping is what lets those runs fold back together.
+ *
+ * Only the empty ones. A thinking block with real numbers is genuine
+ * information about where a turn's time went, and stays. */
+function isEmptyThinking(block: Block): boolean {
+  return block.kind === 'thinking' && !block.tokens && !block.ms
+}
+
 /** Fold consecutive tool blocks together; everything else passes through. */
 export function groupTools(blocks: Block[]): Grouped[] {
   const out: Grouped[] = []
   for (const block of blocks) {
+    if (isEmptyThinking(block)) continue
     if (block.kind === 'tool') {
       const last = out.at(-1)
       if (last?.kind === 'tools') last.tools.push(block)

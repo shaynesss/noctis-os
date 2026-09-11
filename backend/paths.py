@@ -20,8 +20,9 @@ runtime-written directory without excluding it fails loudly.
 """
 
 RUNTIME_WRITE_DIRS = (
-    "runtime",   # hook-written action logs and busy markers
-    "data",      # conversation store: history.db and its WAL/shm sidecars
+    "runtime",        # hook-written action logs and busy markers
+    "data",           # conversation store: history.db and its WAL/shm sidecars
+    "launch_config",  # each mode's rendered CLAUDE.md, rewritten on launch
 )
 
 RELOAD_EXCLUDES = tuple(f"{d}/*" for d in RUNTIME_WRITE_DIRS)

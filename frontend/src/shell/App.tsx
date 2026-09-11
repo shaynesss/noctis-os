@@ -508,6 +508,16 @@ export default function App() {
     setDrafts((d) => ({ ...d, [tabId]: '' }))
     setActiveTab(tabId)
     setView('chat')
+
+    /* Same rule as the General restore below: fetched after the transcript,
+     * never with it, so the conversation you asked for is not held behind the
+     * sentence describing it. Without this, a recap only ever appeared on the
+     * one conversation restored at launch -- every conversation opened from
+     * search, which is all of them, silently had none. */
+    const r = await get<{ recap: string | null }>(`/v2/sessions/history/${id}/recap`)
+    if (r?.recap) {
+      setSessions((s) => (s[tabId] ? { ...s, [tabId]: { ...s[tabId], recap: r.recap } } : s))
+    }
   }
 
   // Cmd+1/2/3 switches tab. Implemented rather than merely labelled: a
@@ -1008,6 +1018,16 @@ export default function App() {
             composerRef.current?.focus()
           }}
         />
+      )}
+
+      {/* Last in the stack, so it paints above every other overlay: the
+          session is blocked inside a tool call until this is answered, which
+          makes it the one question that must not sit behind a picker you
+          happened to leave open. Only the oldest is shown -- answering it
+          reveals the next, so what you are reading is always the request that
+          has been waiting longest rather than a pile of them at once. */}
+      {permissionRequests.length > 0 && (
+        <PermissionRequest request={permissionRequests[0]} onDecide={decidePermission} />
       )}
     </div>
   )

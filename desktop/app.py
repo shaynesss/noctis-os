@@ -192,6 +192,8 @@ def main() -> None:
             "runtime/*",
             "--reload-exclude",
             "data/*",
+            "--reload-exclude",
+            "launch_config/*",
             "--port",
             "8000",
         ],

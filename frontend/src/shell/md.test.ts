@@ -49,6 +49,32 @@ describe('parseBlocks', () => {
   it('reads a horizontal rule', () => {
     expect(parseBlocks('---')).toEqual([{ type: 'rule' }])
   })
+
+  it('reads a table, with alignment', () => {
+    const blocks = parseBlocks('| # | Item | State |\n|---|:----:|------:|\n| 3 | Dialog | done |')
+    expect(blocks).toEqual([{
+      type: 'table',
+      header: ['#', 'Item', 'State'],
+      align: ['left', 'center', 'right'],
+      rows: [['3', 'Dialog', 'done']],
+    }])
+  })
+
+  it('pads a row with too few cells rather than dropping it', () => {
+    const blocks = parseBlocks('| a | b |\n|---|---|\n| 1 |')
+    expect(blocks[0]).toMatchObject({ rows: [['1', '']] })
+  })
+
+  it('leaves a sentence containing a pipe as a paragraph', () => {
+    // The delimiter row is the whole difference; without one there is no
+    // table, however many pipes the prose happens to contain.
+    expect(parseBlocks('Run a | b to pipe it.').map((b) => b.type)).toEqual(['paragraph'])
+  })
+
+  it('does not turn a paragraph followed by a rule into a table', () => {
+    const blocks = parseBlocks('Piped a | b here.\n---')
+    expect(blocks.map((b) => b.type)).toEqual(['paragraph', 'rule'])
+  })
 })
 
 describe('parseInline', () => {

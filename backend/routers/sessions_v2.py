@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -31,6 +32,9 @@ from orchestrator.events import EngineError
 from orchestrator.manager import SessionManager
 from orchestrator.store import ConversationStore
 from orchestrator.wire import blocks_from_messages, to_sse
+from prompts.render import render
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v2/sessions", tags=["sessions"])
 
@@ -117,6 +121,27 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
     if not req.opener and not req.prompt.strip():
         raise HTTPException(status_code=422, detail="A prompt is required")
     prompt = OPENING_PROMPT if req.opener else req.prompt
+
+    # The mode's CLAUDE.md, rebuilt from prompts/system.md + its overlay
+    # before the spawn reads it.
+    #
+    # render()'s own docstring has always said "the orchestrator calls
+    # render() on every launch", and its banner says "Rewritten on every
+    # launch". Neither was true: the only caller was the Prompts panel's
+    # Save button. So an edit to system.md reached a session only if it
+    # happened to be saved through that one UI, which made a preference
+    # meant to be universal behave as though it were per-interface.
+    #
+    # Cheap to do here: render() compares the composed text against what is
+    # on disk (ignoring the banner's timestamp) and returns without writing
+    # when they match, so an ordinary launch is a read, not a write.
+    try:
+        render(req.mode)
+    except Exception as exc:  # noqa: BLE001 - never fatal, see below
+        # A stale prompt makes a worse session; a raised exception here
+        # makes no session at all. Logged rather than swallowed, because
+        # silently continuing is the exact failure that produced this bug.
+        log.warning("prompt render failed for mode %r: %s", req.mode, exc)
 
     try:
         spec = SessionSpec(
