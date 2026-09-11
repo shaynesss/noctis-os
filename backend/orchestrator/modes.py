@@ -22,17 +22,23 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-# Which vault folder holds a mode's agents. The overlays name these
-# themselves -- faber's points at modes/dev, noctua's at modes/learn,
-# vesper's at modes/research -- and this mirrors that rather than inventing
-# a second naming scheme. General and maintenance have no roster of their
-# own and get the built-in agents only.
-MODE_VAULT_FOLDER = {
-    "faber": "dev",
-    "noctua": "learn",
-    "vesper": "research",
-    "maintenance": "nightshift",
-}
+# Which vault folder a mode's files live in. Imported rather than restated:
+# `jobs.py` has needed the same mapping since it was written, and a second
+# copy here had already drifted (it sent maintenance to modes/nightshift,
+# where jobs.py sends it to modes/settings) before anything used it. General
+# is absent from both, deliberately -- it has no vault folder of its own.
+from jobs import MODE_VAULT_DIR
+
+
+def vault_folder(mode: str) -> str | None:
+    """The mode's folder under `modes/`, or None when it has none."""
+    return MODE_VAULT_DIR.get(mode)
+
+
+# The inverse, for the launchers that name modes by folder rather than by
+# character -- launch_surfaces.py speaks "dev"/"learn", the orchestrator
+# speaks "faber"/"noctua", and something has to reconcile them once.
+MODE_OF_FOLDER = {folder: mode for mode, folder in MODE_VAULT_DIR.items()}
 
 
 def mode_methodology(mode: str) -> str:
@@ -64,7 +70,7 @@ def mode_agents(mode: str) -> str:
     Front matter is not parsed beyond `description`: the rest of an agent
     file is its prompt, which is what `--agents` wants.
     """
-    folder = MODE_VAULT_FOLDER.get(mode)
+    folder = vault_folder(mode)
     if not folder:
         return ""
     from prompts.render import VAULT

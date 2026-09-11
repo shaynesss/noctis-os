@@ -165,16 +165,26 @@ fi
 # ── 6. mode config dirs ───────────────────────────────────────────────
 head_ "6. Mode config dirs"
 
-# Each mode needs its OWN CLAUDE_CONFIG_DIR, for two reasons:
+# OBSOLETE as of 2026-09-11, kept only so an existing install still has the
+# dirs it already logged into. Nothing reads them any more.
 #
-#   1. The orchestrator rewrites a dir's CLAUDE.md on every launch. Two
-#      concurrent sessions sharing one dir would race on that file, and the
-#      concurrency cap is 2.
-#   2. Claude Code stores credentials in the macOS Keychain keyed to the
-#      config-dir PATH (Claude Code-credentials-<hash>). A fresh or copied
-#      dir is therefore NOT logged in -- verified 2026-09-07. This cannot be
-#      scripted, seeded, or copied from another dir. It is one interactive
-#      login per dir, once, forever.
+# The two reasons this section used to give:
+#
+#   1. The orchestrator rewrote a dir's CLAUDE.md on every launch, and two
+#      concurrent sessions sharing one dir would race on that file. Real --
+#      and solved by not using a file: a mode's methodology travels in the
+#      argv now via --append-system-prompt, so there is nothing to race on.
+#   2. Credentials are Keychain entries keyed to the config-dir PATH, so each
+#      dir needs its own interactive login, once, forever. That was never a
+#      reason for the split; it was its price, and it is gone with it.
+#
+# What the split actually cost: the config root is where plugins, skills,
+# subagents, slash commands, MCP servers, accumulated permissions and memory
+# live, so redirecting it did not override some settings -- it replaced the
+# whole surface with an empty one. Faber was reading a methodology naming
+# seven tools its own process could not reach.
+#
+# Safe to delete these dirs once no session is mid-flight.
 CONFIG_ROOT="$REPO_ROOT/backend/launch_config"
 NEEDS_LOGIN=()
 for mode in general faber noctua vesper maintenance; do

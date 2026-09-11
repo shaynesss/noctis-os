@@ -12,6 +12,9 @@ import subprocess
 import threading
 from pathlib import Path
 
+from orchestrator.driver import settings_config
+from orchestrator.modes import MODE_OF_FOLDER, mode_methodology
+
 # Serializes the two real races in launch_terminal (found 2026-07-22,
 # chasing a report that Noctua's session-start callout worked reliably
 # launched alone but not launched alongside Vesper): FastAPI runs each
@@ -252,9 +255,20 @@ def _write_resume_task(project_path: str, prompt: str, model: str | None) -> Non
     approach launch_terminal already uses successfully for Terminal.app.
     """
     model_flag = f"--model {shlex.quote(model)} " if model else ""
+    # Faber's methodology, passed rather than inherited.
+    #
+    # It used to arrive because ~/.claude/CLAUDE.md symlinked to dev.md -- the
+    # machine itself was Faber, and anything reading the default config root
+    # became Faber with it. That was fine while Noctis pointed its sessions at
+    # private config dirs and stopped being fine the moment they stopped:
+    # every mode inherited the build process, which is exactly the
+    # contamination the non-dev config existed to prevent. The config root is
+    # infrastructure now, so identity is passed here instead.
+    method = mode_methodology("faber")
+    method_flag = f"--append-system-prompt {shlex.quote(method)} " if method else ""
     command = (
         "export CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 && "
-        f"claude {model_flag}{shlex.quote(prompt)}"
+        f"claude {method_flag}{model_flag}{shlex.quote(prompt)}"
     )
     task = {
         "version": "2.0.0",
@@ -343,15 +357,31 @@ def launch_terminal(
         title = f"{character} — {mode} — {job_label}"
 
         model_flag = f"--model {shlex.quote(model)} " if model else ""
-        system_prompt_flag = (
-            f"--append-system-prompt {shlex.quote(system_prompt)} " if system_prompt else ""
+        # The mode's own methodology, then its session-start callout. Order
+        # matters: the callout is the more specific instruction and goes last.
+        #
+        # No CLAUDE_CONFIG_DIR any more. It pointed at a minimal config so
+        # these sessions would not inherit Faber's build methodology from
+        # ~/.claude/CLAUDE.md -- but it bought that isolation by giving up the
+        # whole config root, so a Learn session had no plugins, no skills, no
+        # subagents and none of the permissions accumulated over months. The
+        # leak it was guarding against is gone at the source: the global
+        # CLAUDE.md is the universal prompt now, not a mode, so identity is
+        # passed here and nothing has to be given up to get it.
+        method = mode_methodology(MODE_OF_FOLDER.get(mode, mode))
+        flags = "".join(
+            f"--append-system-prompt {shlex.quote(text)} "
+            for text in (method, system_prompt) if text
         )
+        # Permissions and the telemetry hooks, the same composition the
+        # in-app sessions get -- previously merged into the non-dev config's
+        # settings.json, which is not read any more.
+        flags += f"--settings {shlex.quote(settings_config())} "
         command = (
             f"export NOCTIS_MODE={shlex.quote(mode)} "
             f"NOCTIS_JOB_ID={shlex.quote(job_slug or 'general')} "
-            f"CLAUDE_CONFIG_DIR={shlex.quote(str(NONDEV_CONFIG_DIR))} "
             f"CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1 && "
-            f"claude {system_prompt_flag}{model_flag}{shlex.quote(prompt)}"
+            f"claude {flags}{model_flag}{shlex.quote(prompt)}"
         )
 
         script = f"""

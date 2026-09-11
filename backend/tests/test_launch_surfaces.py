@@ -231,3 +231,38 @@ def test_launch_terminal_omits_append_system_prompt_when_absent(monkeypatch):
 
     script = calls[0][0][2]
     assert "--append-system-prompt" not in script
+
+
+# ------------------------------------------- identity is passed, not inherited
+
+def test_no_launcher_redirects_the_config_root():
+    """Both surfaces used to. The Terminal one pointed at a minimal non-dev
+    config so a Learn session would not inherit Faber's build methodology from
+    ~/.claude/CLAUDE.md -- and paid for that isolation with the whole config
+    root: no plugins, no skills, no subagents, none of the permissions built
+    up over months. The leak is gone at the source now (the global CLAUDE.md
+    is the universal prompt, not a mode), so nothing has to be given up.
+    """
+    source = Path(launch_surfaces.__file__).read_text()
+    assert "CLAUDE_CONFIG_DIR=" not in source
+
+
+def test_each_surface_passes_its_own_methodology():
+    """Identity travels in the argv. The folder names these launchers use are
+    not the orchestrator's mode names, and that translation is the kind of
+    thing that silently sends the wrong methodology -- assert it end to end."""
+    from orchestrator.modes import MODE_OF_FOLDER
+    assert MODE_OF_FOLDER["learn"] == "noctua"
+    assert MODE_OF_FOLDER["settings"] == "maintenance"
+    assert "dev" not in MODE_OF_FOLDER.values()
+
+
+def test_the_two_mode_folder_mappings_agree():
+    """There were two, and they disagreed: modes.py sent maintenance to
+    modes/nightshift while jobs.py sent it to modes/settings. Only one had a
+    caller at the time, which is the only reason it had not bitten yet."""
+    from jobs import MODE_VAULT_DIR
+    from orchestrator.modes import MODE_OF_FOLDER, vault_folder
+    for mode, folder in MODE_VAULT_DIR.items():
+        assert vault_folder(mode) == folder
+        assert MODE_OF_FOLDER[folder] == mode
