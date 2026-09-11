@@ -17,8 +17,17 @@ dev:
 # The suite has always been run by typing the venv's interpreter path out in
 # full, which is unmemorable and -- since it is an absolute path under a home
 # directory -- not something a permission rule can name portably.
+#
+# The frontend halves are here because they were not, and a missing React
+# import reached a running app as a white screen: tsc catches that outright,
+# oxlint does not (it has no no-undef), and nothing was running tsc. Note
+# `npm run typecheck`, never `tsc --noEmit -p tsconfig.json` -- that config is
+# a solution file with "files": [], so the obvious form checks nothing and
+# exits 0 on a broken tree.
 test:
 	cd backend && .venv/bin/python -m pytest -q
+	cd frontend && npm run typecheck
+	cd frontend && npm run test
 
 app:
 	backend/.venv/bin/python desktop/app.py
