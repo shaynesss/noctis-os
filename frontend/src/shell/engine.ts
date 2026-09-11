@@ -296,6 +296,14 @@ export async function get<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       headers: { Authorization: `Bearer ${API_TOKEN}` },
+      /* A restarting backend does not always refuse a connection -- it can
+       * accept and then never answer, and fetch has no timeout of its own.
+       * The promise then never settles, so the caller sits in its loading
+       * state forever and a panel reads "Loading..." for a reply that is
+       * never coming. That is worse than an error, because it looks like
+       * work in progress. Ten seconds turns a hang into a failure the UI
+       * already knows how to show. */
+      signal: AbortSignal.timeout(10_000),
     })
     return res.ok ? ((await res.json()) as T) : null
   } catch {

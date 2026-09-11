@@ -5,7 +5,7 @@
  * that a chunk boundary landing mid-frame does not lose an event.
  */
 import { describe, expect, it } from 'vitest'
-import { emptyFold, fold, readSSE, type WireEvent } from './engine'
+import { emptyFold, fold, get, readSSE, type WireEvent } from './engine'
 import type { Block } from './domain'
 
 const run = (events: WireEvent[]) => events.reduce(fold, emptyFold())
@@ -254,5 +254,57 @@ describe('which model ran', () => {
                  aux_output: 0, context_window: 0 } },
     ])
     expect(s.model).toBe('claude-opus-5')
+  })
+})
+
+describe('get', () => {
+  const withFetch = async (impl: typeof fetch, run: () => Promise<unknown>) => {
+    const real = globalThis.fetch
+    globalThis.fetch = impl
+    try {
+      return await run()
+    } finally {
+      globalThis.fetch = real
+    }
+  }
+
+  it('returns null when the request fails outright', async () => {
+    // A refused connection, which is what a restarting backend usually gives.
+    const out = await withFetch(
+      (() => Promise.reject(new TypeError('Load failed'))) as unknown as typeof fetch,
+      () => get('/v2/brief'),
+    )
+    expect(out).toBeNull()
+  })
+
+  it('returns null when the request is aborted by its timeout', async () => {
+    // The case that produced a permanent "Loading…": a backend that accepts
+    // and never answers. Without a timeout the promise never settles at all,
+    // so the caller cannot distinguish slow from never.
+    const out = await withFetch(
+      (() => Promise.reject(new DOMException('timed out', 'TimeoutError'))) as unknown as typeof fetch,
+      () => get('/v2/brief'),
+    )
+    expect(out).toBeNull()
+  })
+
+  it('returns null on a non-ok response rather than throwing', async () => {
+    const out = await withFetch(
+      (() => Promise.resolve(new Response('nope', { status: 500 }))) as unknown as typeof fetch,
+      () => get('/v2/brief'),
+    )
+    expect(out).toBeNull()
+  })
+
+  it('passes an abort signal, so a hung request cannot wait forever', async () => {
+    let seen: RequestInit | undefined
+    await withFetch(
+      ((_url: string, init: RequestInit) => {
+        seen = init
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      }) as unknown as typeof fetch,
+      () => get('/v2/brief'),
+    )
+    expect(seen?.signal).toBeInstanceOf(AbortSignal)
   })
 })
