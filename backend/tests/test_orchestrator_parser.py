@@ -305,3 +305,49 @@ def test_the_captured_totals_account_for_the_whole_turn():
     shown = (end.usage.input_tokens + end.usage.output_tokens
              + end.usage.cached_tokens + end.usage.cache_write_tokens)
     assert shown == engine_total
+
+
+def test_a_refused_tool_is_reported_not_dropped():
+    """The engine has always sent `permission_denials` and nothing read it.
+
+    That is why a caged Faber session rendered exactly like one with nothing
+    to say: its mutating tools sat behind a permission prompt, every prompt
+    went unanswered, and the refusals were in the stream the whole time.
+    """
+    events = parse_line(json.dumps({
+        "type": "result", "subtype": "success", "session_id": "s",
+        "duration_ms": 10, "is_error": False, "terminal_reason": "completed",
+        "usage": {}, "modelUsage": {},
+        "permission_denials": [
+            {"tool_name": "Bash", "tool_input": {"command": "git commit -m x"}},
+            {"tool_name": "Write", "tool_input": {"file_path": "/tmp/a.py"}},
+        ],
+    }))
+    end = events[0]
+    assert [d.tool for d in end.denials] == ["Bash", "Write"]
+    assert end.denials[0].target == "git commit -m x"
+    assert end.terminal_reason == "completed"
+
+
+def test_a_silent_turn_with_denials_reads_as_blocked_not_quiet():
+    """The distinction the whole thing exists for: refused is not the same
+    as declined, and only one of the two names something fixable."""
+    events = parse_line(json.dumps({
+        "type": "result", "subtype": "success", "session_id": "s",
+        "duration_ms": 10, "is_error": False, "usage": {}, "modelUsage": {},
+        "permission_denials": [{"tool_name": "Bash", "tool_input": {}}],
+    }))
+    end = events[0]
+    assert end.silent and end.blocked
+
+
+def test_a_malformed_denial_does_not_cost_the_turn_its_usage():
+    """This field was unread until 2026-09-11, so its shape is unexercised."""
+    events = parse_line(json.dumps({
+        "type": "result", "subtype": "success", "session_id": "s",
+        "duration_ms": 10, "is_error": False, "usage": {"input_tokens": 7},
+        "modelUsage": {}, "permission_denials": ["nonsense", None, {}],
+    }))
+    end = events[0]
+    assert end.usage.input_tokens == 7
+    assert [d.tool for d in end.denials] == ["?"]

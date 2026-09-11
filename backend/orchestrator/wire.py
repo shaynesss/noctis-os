@@ -78,6 +78,13 @@ def to_dict(e: Event) -> dict[str, Any]:
                 # indistinguishable from a crash, a pause, or being done.
                 "text_chars": e.text_chars, "tool_calls": e.tool_calls,
                 "silent": e.silent,
+                # `blocked` is the one that names a cause. A silent turn with
+                # denials on it was not a session declining to answer -- it
+                # was one refused the tools it needed, which is a fixable
+                # thing and a different message.
+                "blocked": e.blocked,
+                "terminal_reason": e.terminal_reason,
+                "denials": [{"tool": d.tool, "target": d.target} for d in e.denials],
                 # `model` names the model these counts describe. `aux` is
                 # what the turn also spent on the CLI's background tier --
                 # separate, because per-turn and per-day are different

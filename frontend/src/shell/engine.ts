@@ -31,6 +31,10 @@ export type WireEvent =
       // A turn may end with tool calls and no text. `silent` says so outright,
       // so the transcript can show that rather than nothing at all.
       silent?: boolean; text_chars?: number; tool_calls?: number
+      // A silent turn that was *refused* its tools. Different message, and
+      // unlike plain silence it names something you can fix.
+      blocked?: boolean; terminal_reason?: string
+      denials?: { tool: string; target: string }[]
       usage: { input: number; output: number; cached: number; model: string
                aux_input: number; aux_output: number
                context_window: number } }
@@ -256,7 +260,13 @@ export function fold(state: Fold, e: WireEvent): Fold {
        * three times and cannot work -- there is no reply to attach a rule
        * to on a turn that has none. */
       const blocks: Block[] = e.silent
-        ? [...state.blocks, { kind: 'silent', tools: e.tool_calls ?? 0 }]
+        ? [...state.blocks, {
+            kind: 'silent',
+            tools: e.tool_calls ?? 0,
+            /* Denials turn "it said nothing" into "it was not allowed to do
+             * anything" -- the engine reported these all along. */
+            denials: e.denials ?? [],
+          }]
         : state.blocks
       return {
         ...state,

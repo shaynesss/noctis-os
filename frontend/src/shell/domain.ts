@@ -71,7 +71,7 @@ export type Block =
    * turn stops -- but the transcript renders text, so it drew nothing, and
    * nothing looks identical to a dead backend, a session still thinking,
    * and a finished job. Rendering it makes those four states four pictures. */
-  | { kind: 'silent'; tools: number }
+  | { kind: 'silent'; tools: number; denials?: { tool: string; target: string }[] }
   /* A handed-off session opens with its provenance rather than a blank
    * transcript, so a tab you return to an hour later says where it came
    * from instead of looking like something you started and forgot. */

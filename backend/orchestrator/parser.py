@@ -23,12 +23,37 @@ from typing import Any, Iterable, Iterator
 from .events import (
     ContextSnapshot, EngineError, Event, Limits, SessionStart, TextDelta,
     ThinkingDelta, ThinkingProgress, ToolCall, ToolResult, TurnEnd, Usage,
+    Denial,
 )
 
 # Emitted by the CLI for its own bookkeeping; nothing above this layer needs
 # them. Named rather than silently ignored, so a genuinely new event type
 # still reaches the `unknown` branch and can be noticed.
 IGNORED_SUBTYPES = {"hook_started", "hook_response", "status"}
+
+
+def _denials(raw: list) -> list[Denial]:
+    """Normalize `permission_denials` into something renderable.
+
+    Defensive about shape: this field was unread until 2026-09-11, so it has
+    never been exercised, and a malformed entry must not cost the turn its
+    usage totals -- the event it rides on carries everything else about the
+    turn.
+    """
+    out: list[Denial] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        args = item.get("tool_input") or item.get("input") or {}
+        target = ""
+        if isinstance(args, dict):
+            for key in ("file_path", "command", "path", "pattern", "url"):
+                if key in args:
+                    target = str(args[key])[:100]
+                    break
+        out.append(Denial(tool=str(item.get("tool_name") or item.get("tool") or "?"),
+                          target=target))
+    return out
 
 
 def _split_model_usage(
@@ -175,6 +200,12 @@ def parse_line(line: str) -> list[Event]:
             ),
             duration_ms=int(d.get("duration_ms", 0)),
             stop_reason=d.get("stop_reason"),
+            # Read at last. The engine has always reported why it stopped and
+            # what it was refused; nothing looked, so a session that was
+            # denied every tool it needed rendered exactly like one that had
+            # nothing to say. `denials` is what tells those two apart.
+            terminal_reason=str(d.get("terminal_reason") or ""),
+            denials=tuple(_denials(d.get("permission_denials") or [])),
         )]
         # `is_error` rides on the same event as the turn's totals, so the
         # failure is reported without losing the usage that led to it.

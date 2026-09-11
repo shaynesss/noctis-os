@@ -355,16 +355,35 @@ function renderBlock(
              * did not fail, it just did not speak. What it needs to do is
              * end the ambiguity -- you are looking at a finished turn, not
              * a crash and not a pause. */
+            const denied = b.denials ?? []
             return (
               <div
                 key={i}
-                className="mb-[16px] flex items-center gap-[7px] rounded-[3px] border border-dashed border-line px-[11px] py-[7px] font-mono text-[11px] text-ink-faint"
+                className="mb-[16px] rounded-[3px] border border-dashed border-line font-mono text-[11px]"
               >
-                <span className="h-[5px] w-[5px] rounded-full bg-ink-faint" />
-                turn ended with no reply
-                <span className="text-ink-dim">
-                  · {b.tools} tool {b.tools === 1 ? 'call' : 'calls'}, no text
-                </span>
+                <div className="flex items-center gap-[7px] px-[11px] py-[7px] text-ink-faint">
+                  <span className="h-[5px] w-[5px] rounded-full bg-ink-faint" />
+                  {denied.length > 0 ? 'turn ended blocked' : 'turn ended with no reply'}
+                  <span className="text-ink-dim">
+                    · {b.tools} tool {b.tools === 1 ? 'call' : 'calls'}, no text
+                  </span>
+                </div>
+                {denied.length > 0 && (
+                  /* The cause, not a footnote. A session refused its tools had
+                   * nothing it could report -- naming the refusals turns an
+                   * unexplained silence into something you can go and fix. */
+                  <div className="border-t border-line px-[11px] py-[7px] text-ink-dim">
+                    <div className="mb-[4px] uppercase tracking-[0.1em] text-ink-faint">
+                      refused {denied.length} {denied.length === 1 ? 'tool' : 'tools'}
+                    </div>
+                    {denied.map((d, j) => (
+                      <div key={j} className="truncate">
+                        {d.tool}
+                        {d.target && <span className="text-ink-faint"> · {d.target}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           }

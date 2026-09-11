@@ -200,11 +200,42 @@ class TurnEnd:
     stop_reason: str | None = None
     text_chars: int = 0
     tool_calls: int = 0
+    # Why the engine stopped, in its own words -- "completed" on a normal
+    # turn, something else when it did not get there.
+    terminal_reason: str = ""
+    # Tools the turn asked for and was refused. A non-empty list is the
+    # difference between "said nothing" and "was not allowed to do anything".
+    denials: tuple[Denial, ...] = ()
 
     @property
     def silent(self) -> bool:
         """Ended without saying anything. Worth rendering explicitly."""
         return self.text_chars == 0
+
+    @property
+    def blocked(self) -> bool:
+        """Ended without speaking *because* it was refused the tools it
+        needed. The honest reading of a silent turn with denials on it, and
+        the one that names something fixable rather than blaming the model."""
+        return self.silent and bool(self.denials)
+
+
+@dataclass(frozen=True)
+class Denial:
+    """A tool the engine refused, reported on the turn that wanted it.
+
+    The engine has always sent these, on the `result` event's
+    `permission_denials`, and nothing read them. That is the whole reason a
+    caged session looked like a broken one: Faber's mutating tools sit behind
+    a permission prompt, every prompt went unanswered, and the turn ended
+    with nothing done and nothing to say. The refusals were in the stream the
+    entire time.
+
+    A session that cannot act is a different thing from a session that chose
+    not to speak, and until this was read there was no way to tell them apart.
+    """
+    tool: str
+    target: str = ""
 
 
 @dataclass(frozen=True)
@@ -217,10 +248,11 @@ class EngineError:
 
 Event = Union[
     SessionStart, TextDelta, ThinkingDelta, ThinkingProgress, ToolCall,
-    ToolResult, Limits, ContextSnapshot, TurnEnd, EngineError,
+    ToolResult, Limits, ContextSnapshot, TurnEnd, Denial, EngineError,
 ]
 
 __all__ = [
     "SessionStart", "TextDelta", "ThinkingDelta", "ThinkingProgress", "ToolCall", "ToolResult",
-    "Limits", "Usage", "ContextSnapshot", "TurnEnd", "EngineError", "Event",
+    "Limits", "Usage", "ContextSnapshot", "TurnEnd", "Denial", "EngineError",
+    "Event",
 ]
