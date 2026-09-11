@@ -1,12 +1,17 @@
 # STATUS.md
 
-Last updated: 2026-09-09
+Last updated: 2026-09-11
 
 ## Current state
 
 **v1.5.2 is shipped and still the working system. v2 is mid-build — Stage 1
-complete, Stage 2 items 1-4 complete and verified live, item 6 (brief,
-worklist, scheduler) is next and its design is still being settled.**
+complete, Stage 2 items 1-5 and 7 complete and verified live, and item 6 done
+except its scheduler. The remaining work is the launchd-on-wake trigger, then
+items 8 and 9.**
+
+Verified 2026-09-11: working tree clean, 383 backend tests, 76 frontend,
+`tsc -b` clean. 113 commits unpushed on `main` — the manual-push rule working
+as designed, not drift.
 
 v2's premise: the app drives Claude Code as a subprocess rather than calling
 the API, so it runs on the existing subscription at no marginal cost. The
@@ -55,9 +60,17 @@ for. This is the last piece of item 6. Email was deliberately left out of
 v1 — the vault-only brief is useful on its own, and it unblocked everything
 downstream.
 
-**2. The worklist is hand-kept and empty.** Write `worklist.md` in the vault
-and the panel shows it. Whether it should be editable in the app rather than
-only readable is undecided.
+**2. `compose()`'s `job_context` parameter is never passed.**
+`backend/prompts/render.py:41` accepts it and line 61 would splice a
+`## This session's job` block into the rendered prompt, but both callers —
+`routers/sessions_v2.py:139` and `routers/panels.py:413` — call `render(mode)`
+with nothing. No session has ever received its job context. Same never-called
+shape as the defects found on 09-11: built, wired to nothing, and silent
+about it.
+
+*(The worklist question that stood here is settled: hand-kept, not generated,
+and editable in place since `0839e38`. A generated worklist is the job list
+again under a second name.)*
 
 **3. Item 8, "tiered loading policy", is undefined.** It appears in the
 build-order table and nowhere else in the spec — no description, no
@@ -322,13 +335,13 @@ The 5-angle code review (3 correctness + reuse/simplification/efficiency + altit
 - **`nightshift/apply.py` doesn't actually run `git commit`**, despite `settings.md`'s stage-3 text describing the accept flow as applying "and commits." The apply half is real; the commit half was never built. Needs a real design pass (which repo — this one or the vault's? failure handling if the commit itself fails?), not a rushed addition.
 - Minor code-quality items, not correctness bugs: `apply.py`/`runner.py` each have their own near-identical markdown-section-extraction loop (3 copies of the same logic across 2 files); `mode.py`'s settings branch and `triggers.py` both independently re-read `modes/settings/state.md` on the same request; `compute_triggers()` loops over all 5 modes twice with no early exit once every trigger is already lit.
 
-## Not started
+## Not started (v1)
 
 - Sprite sheet split into individual per-character assets (distinct from the expression extraction above — this is about the *idle* sprites' own source format)
 - Exact character hex palette (now sampled from real sprites rather than guessed, but still interim until the grid-data pass locks final production values)
 - Deferred by explicit choice: library catalog, token audit, per-mode default model config
 - Deferred by this pass's ship-gate review, documented above: `busy`'s missing self-healing recovery, dev-hook overwrite on a second same-project job, nightshift diff-apply's missing schema validation, the settings.md read-modify-write race, `apply.py`'s missing git-commit-on-accept, and a handful of code-quality dedup opportunities
 
-## Blocking
+## Blocking (v1, as of the v1.5.2 ship gate)
 
 Nothing. All Phase 3 build-order milestones are done and verified live. This pass's review found one real live bug (the hook-purge fix above) and fixed it; everything else found is either already-accepted risk or explicitly deferred with a reason, not silently dropped.

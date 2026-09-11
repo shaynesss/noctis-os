@@ -5,8 +5,8 @@
 **v2 replaces Claude Desktop as the entry point. The app drives Claude Code as
 a subprocess, so it runs on the existing subscription with no API billing.**
 
-Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-4
-are complete and verified live.
+Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5
+and 7 are complete and verified live. Item 6 is done except its scheduler.
 
 ### Session orchestrator
 - `orchestrator/` drives `claude -p --output-format stream-json --verbose` and
@@ -36,6 +36,22 @@ are complete and verified live.
   data; where data does not exist yet the page says so and names the file it
   is waiting for.
 
+### Panels — brief, worklist, inbox
+- **Morning brief**, two halves deliberately separated: facts computed in
+  Python (which jobs are open, how old, what is waiting) and prose written
+  over them. Counted, not estimated, so nothing rounds 45 days to "about a
+  month" or invents a job that closed in July.
+- **The worklist is hand-kept, not generated** — a generated worklist is the
+  job list again under a second name, and the two would disagree the moment
+  one drifted. Editable in place, saved on idle, through a route that writes
+  one fixed path: writing into the vault is only safe from a route that
+  cannot be told where to write.
+- **Inbox** parses proposal sections properly. It had been taking the body's
+  first line as the summary — the markdown header — so every row read
+  `## Rationale` while the sentence explaining the proposal sat unread below.
+- The scheduler that would fire these does not exist yet, so Settings names
+  what it *will* run rather than showing dead toggles.
+
 ### Bugs worth recording (all found by running it, not by tests)
 - **PATH.** launchd starts processes with `/usr/bin:/bin:/usr/sbin:/sbin` — no
   Homebrew — so a scheduled backend would never have found `claude` while
@@ -55,8 +71,33 @@ are complete and verified live.
   conversation's transcript across many rows. A row is the conversation now.
 - **No user messages.** `record()` folds engine *events*, and the person's own
   prompt is not one, so every stored transcript was answers with no questions.
+- **Permissions never reached a session.** `CLAUDE_CONFIG_DIR` redirects where
+  user settings are read from, so `~/.claude/settings.json` — and every rule
+  ever accumulated in it — is invisible to a spawned session. Every mode had
+  been starting with an empty allowlist. Fixed with one tracked
+  `permissions.json` passed via `--settings`.
+- **MCP version echo.** The handshake returned whatever version the client
+  asked for. Told `1999-01-01` it agreed — and a client told its requested
+  version is supported will then use features that were never implemented.
+  The spec's handshake is a negotiation, not an echo.
+- **Fonts vendored and never loaded.** JetBrains Mono shipped in every build
+  with its `@font-face` in v1's `index.css`, which stopped being imported at
+  the v2 cutover. The guard written to catch that then missed Cascadia Code
+  itself, deriving the family from the filename before stripping the
+  extension — the test would have passed while the font went unloaded.
+- **Absence rendered as an answer.** The activity grid drew "0 sessions in the
+  last year" while its data was still loading; ⌘K rendered "No matches." for a
+  query it never ran against an unreachable backend; and "Loading…" could
+  outlive its request, because a restarting backend can accept a connection
+  and never answer while `fetch` has no timeout of its own — so the failure
+  state the UI already knew how to draw could not be entered.
+- **A cwd of `~`.** `openSession` fell back to it when a stored transcript had
+  none, and the handoff built `~/Developer/`. Both are real directories, so
+  validation passed and the session simply started in the wrong place — which
+  made filesystem search sweep the home folder and time out, reading as a
+  broken tool rather than a bad working directory.
 
-258 backend tests, 19 frontend.
+383 backend tests, 76 frontend, `tsc -b` clean.
 
 ## v1.5.2 — 2026-07-28
 
