@@ -300,13 +300,27 @@ def _shared_permissions() -> dict:
     return json.loads(SHARED_SETTINGS.read_text())["permissions"]
 
 
-def test_shared_settings_never_allow_edit_or_write():
-    """The chip has to keep meaning something in *both* directions. Allowing
-    Edit or Write here would make `manual` and `plan` permit edits, which is
-    the same defect as acceptEdits not permitting them -- just quieter."""
-    allowed = " ".join(_shared_permissions()["allow"])
-    for tool in ("Edit", "Write"):
-        assert f"{tool}(" not in allowed and tool not in allowed.split()
+def test_shared_settings_allow_edit_and_write_and_this_costs_the_chip():
+    """A recorded concession, not a preference.
+
+    This asserted the opposite first: that Edit and Write must never be listed
+    here, because the chip has to keep meaning something in *both* directions
+    and a blanket allow makes `manual` and `plan` permit edits anyway.
+
+    It was tried and it does not work. With `--permission-prompts none` and
+    the chip on acceptEdits, writes were still refused -- so leaving Edit and
+    Write to the permission mode leaves Faber unable to write at all, which is
+    a worse failure than a chip that under-blocks. Verified live: the same
+    session could write before the shared file took precedence and not after.
+
+    So the allow list grants them, and the price is real -- `manual` and `plan`
+    no longer refuse edits. The honest fix is a host that answers permission
+    requests (--permission-prompt-tool), at which point this test should go
+    back to asserting absence. Until then it exists to make sure the trade
+    stays deliberate rather than becoming a thing nobody remembers choosing.
+    """
+    allowed = _shared_permissions()["allow"]
+    assert "Edit" in allowed and "Write" in allowed
 
 
 def test_shared_settings_deny_git_push():
