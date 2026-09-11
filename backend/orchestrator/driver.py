@@ -16,6 +16,7 @@ import asyncio
 import json
 import os
 import shutil
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncIterator, Sequence
@@ -97,12 +98,39 @@ MODE_TOOLS: dict[str, dict[str, str]] = {
 # reachable by tapping a key repeatedly.
 PERMISSION_CYCLE = ("plan", "manual", "acceptEdits", "auto")
 
-# Nobody is on the other end of a permission request here, so say so instead
-# of leaving the CLI waiting on a host that never answers. With "none" the
-# permission mode alone decides -- which is what the chip's own labels have
-# always claimed: acceptEdits accepts edits, manual refuses what would
-# prompt, plan plans. Until this was passed, every label was aspirational.
-PERMISSION_PROMPTS = "none"
+# Who answers a permission request.
+#
+# "none" means nobody, and everything that would ask is refused -- which is
+# what this was, and why the chip's labels were aspirational: a request went
+# out and died. "host" hands the question to --permission-prompt-tool, which
+# is the MCP tool below. That is what makes `manual` actually ask you, and so
+# what makes the chip a control rather than a caption.
+PERMISSION_PROMPTS = "host"
+
+# The Noctis MCP server, attached to every spawn.
+#
+# It was built and verified in Stage 2 item 2 and then never wired to a
+# session: no --mcp-config anywhere, no .mcp.json in any config dir. So every
+# session has been running without the vault retrieval the whole design rests
+# on -- `vault_search` existed and nothing could call it.
+#
+# Dependency-free by design, so the interpreter running the backend can run it
+# directly and there is nothing to install.
+MCP_SERVER = REPO_ROOT / "backend" / "mcp" / "server.py"
+
+# The tool the CLI calls when it needs a decision. The name is the MCP
+# convention: mcp__<server>__<tool>.
+PERMISSION_TOOL = "mcp__noctis__permission_prompt"
+
+
+def mcp_config() -> str:
+    """--mcp-config takes a JSON string as readily as a file, and a string
+    keeps the spawn self-describing: no generated file on disk to drift from
+    the code that depends on it."""
+    return json.dumps({"mcpServers": {"noctis": {
+        "command": sys.executable,
+        "args": [str(MCP_SERVER)],
+    }}})
 
 # Bash permissions, shared by every mode and tracked in git.
 #
@@ -229,6 +257,8 @@ def build_command(spec: SessionSpec) -> list[str]:
     if spec.permission_mode:
         cmd += ["--permission-mode", spec.permission_mode]
     cmd += ["--permission-prompts", PERMISSION_PROMPTS,
+            "--permission-prompt-tool", PERMISSION_TOOL,
+            "--mcp-config", mcp_config(),
             "--settings", str(SHARED_SETTINGS)]
     if spec.resume_id:
         cmd += ["--resume", spec.resume_id]

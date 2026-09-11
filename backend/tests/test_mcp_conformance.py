@@ -136,13 +136,20 @@ def test_initialize_announces_the_server(client):
     assert "protocolVersion" in result
 
 
+# The retrieval surface a portfolio client would use. `permission_prompt` is
+# deliberately not one of them: it is plumbing for --permission-prompt-tool,
+# not something a session or a third-party client should call, and the
+# spec's criterion-3 claim is about these five.
+SESSION_TOOLS = {"vault_search", "history_search", "job_context", "worklist", "propose"}
+
+
 def test_all_five_tools_are_advertised(client):
-    """The spec's five. Read from the server rather than asserted from a
-    list here, so this fails if the surface changes rather than if this test
-    goes stale."""
+    """The spec's five, plus the internal prompt tool. Read from the server
+    rather than asserted from a list here, so this fails if the surface
+    changes rather than if this test goes stale."""
     tools = client.call("tools/list")["result"]["tools"]
     names = {t["name"] for t in tools}
-    assert names == {"vault_search", "history_search", "job_context", "worklist", "propose"}
+    assert names == SESSION_TOOLS | {"permission_prompt"}
     for tool in tools:
         assert tool.get("description"), f"{tool['name']} has no description for a client to show"
         assert "inputSchema" in tool, f"{tool['name']} advertises no schema"
@@ -151,7 +158,13 @@ def test_all_five_tools_are_advertised(client):
 def test_every_advertised_tool_is_actually_callable(client):
     """Advertised and callable are different claims. A tool listed but
     erroring on invocation is worse than one that is absent, because a client
-    shows it to the person as available."""
+    shows it to the person as available.
+
+    permission_prompt is excluded from the probe rather than given one: by
+    design it blocks until a person answers, so calling it here would hang
+    this test for the registry's full expiry and then assert on a refusal.
+    Its own behaviour is covered in test_permissions.py.
+    """
     tools = client.call("tools/list")["result"]["tools"]
     probes = {
         "vault_search": {"query": "noctis"},
@@ -160,11 +173,16 @@ def test_every_advertised_tool_is_actually_callable(client):
         "worklist": {},
         "propose": {"title": "conformance probe", "body": "not applied", "dry_run": True},
     }
+    probed = 0
     for tool in tools:
         name = tool["name"]
+        if name not in probes:
+            continue
         response = client.call("tools/call", {"name": name, "arguments": probes[name]})
         assert "error" not in response, f"{name} errored: {response.get('error')}"
         assert "content" in response["result"], f"{name} returned no content"
+        probed += 1
+    assert probed == len(SESSION_TOOLS), "a session tool stopped being probed"
 
 
 def test_a_vault_only_question_is_answerable_through_the_tools(client):

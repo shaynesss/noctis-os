@@ -274,14 +274,27 @@ def test_mutating_tools_are_never_pre_allowed():
 
 # ------------------------------------------------- who answers a prompt
 
-def test_permission_prompts_is_set_to_none():
-    """The flag decides *who answers*, and defaults to "host" -- the SDK host.
-    This driver spawns a subprocess and answers nothing, so under the default
-    a request goes out and nobody replies: every tool needing a decision fails
-    with 'you haven't granted it yet' regardless of the permission mode. Found
-    live when Faber could not write a file with the chip on acceptEdits."""
+def test_permission_requests_are_routed_to_the_prompt_tool():
+    """The flag decides *who answers*. It was "none" -- nobody -- so every
+    request was refused and the chip's labels were fiction: manual meant
+    never, and acceptEdits could not write. "host" hands the question to the
+    prompt tool, which asks the person."""
     cmd = build_command(SessionSpec(mode="faber", prompt="x"))
-    assert cmd[cmd.index("--permission-prompts") + 1] == "none"
+    assert cmd[cmd.index("--permission-prompts") + 1] == "host"
+    assert cmd[cmd.index("--permission-prompt-tool") + 1] == "mcp__noctis__permission_prompt"
+
+
+def test_the_mcp_server_is_attached_to_every_spawn():
+    """It was built in Stage 2 item 2 and never wired to a session: no
+    --mcp-config, no .mcp.json in any config dir. vault_search existed and
+    nothing could call it, so sessions ran without the retrieval the design
+    rests on -- and the permission tool needs the same channel."""
+    import json as _json
+    from orchestrator.driver import MCP_SERVER
+    cmd = build_command(SessionSpec(mode="faber", prompt="x"))
+    cfg = _json.loads(cmd[cmd.index("--mcp-config") + 1])
+    assert str(MCP_SERVER) in cfg["mcpServers"]["noctis"]["args"]
+    assert MCP_SERVER.exists(), "the spawn points at a server that is not there"
 
 
 def test_shared_settings_file_is_passed_and_exists():
@@ -303,11 +316,13 @@ def test_every_mode_gets_the_same_permission_plumbing():
     exactly the failure -- one mode quietly unable to act while the interface
     says otherwise.
     """
-    from orchestrator.driver import SHARED_SETTINGS
+    from orchestrator.driver import PERMISSION_TOOL, SHARED_SETTINGS
     for mode in MODE_MODELS:
         cmd = build_command(SessionSpec(mode=mode, prompt="x"))
-        assert cmd[cmd.index("--permission-prompts") + 1] == "none", mode
+        assert cmd[cmd.index("--permission-prompts") + 1] == "host", mode
+        assert cmd[cmd.index("--permission-prompt-tool") + 1] == PERMISSION_TOOL, mode
         assert cmd[cmd.index("--settings") + 1] == str(SHARED_SETTINGS), mode
+        assert "--mcp-config" in cmd, mode
 
 
 def _shared_permissions() -> dict:

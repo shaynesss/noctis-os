@@ -223,6 +223,93 @@ function name(models: ModelOption[], id: string): string {
   return models.find((m) => m.id === id)?.name ?? id
 }
 
+export interface PendingPermission {
+  id: string
+  mode: string
+  tool: string
+  args: Record<string, unknown>
+  age: number
+}
+
+/** The argument worth reading, not all of them.
+ *
+ * "Write" is not a question anyone can answer; "Write to bootstrap.sh" is.
+ * Tools name their subject differently, so the first match wins and anything
+ * unrecognised falls back to the whole payload rather than showing nothing —
+ * an unfamiliar tool is exactly when you most want to see what it was given.
+ */
+function subject(args: Record<string, unknown>): string {
+  for (const key of ['command', 'file_path', 'path', 'pattern', 'url', 'query']) {
+    const v = args[key]
+    if (typeof v === 'string' && v) return v
+  }
+  const json = JSON.stringify(args ?? {})
+  return json === '{}' ? '' : json
+}
+
+/** Asks before something changes, and blocks the session until answered.
+ *
+ * This is what makes the chip a control: with nothing here, a request had
+ * nobody to go to, so `manual` silently meant `never`. Deny is the default
+ * focus and Escape denies — the safe answer should be the one you can give
+ * without reading carefully, since the unsafe one is the one worth a moment.
+ */
+export function PermissionRequest({
+  request,
+  onDecide,
+}: {
+  request: PendingPermission
+  onDecide: (id: string, decision: 'allow' | 'deny') => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        onDecide(request.id, 'deny')
+      } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        onDecide(request.id, 'allow')
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [request.id, onDecide])
+
+  const detail = subject(request.args)
+  return (
+    <Overlay label={`${request.mode} wants permission`} onClose={() => onDecide(request.id, 'deny')}>
+      <div className="mb-[13px]">
+        <div className="font-mono text-[13px] text-ink">{request.tool}</div>
+        {detail && (
+          <div className="mt-[6px] max-h-[180px] overflow-auto whitespace-pre-wrap break-all rounded-[4px] border border-line bg-elevated px-[9px] py-[7px] font-mono text-[12px] leading-[1.55] text-ink-dim">
+            {detail}
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-[8px]">
+        <button
+          type="button"
+          onClick={() => onDecide(request.id, 'allow')}
+          className="rounded-[4px] border border-line px-[12px] py-[5px] font-mono text-[12px] text-ink hover:bg-elevated"
+        >
+          Allow
+        </button>
+        <button
+          type="button"
+          autoFocus
+          onClick={() => onDecide(request.id, 'deny')}
+          className="rounded-[4px] border border-line px-[12px] py-[5px] font-mono text-[12px] text-ink hover:bg-elevated"
+        >
+          Deny
+        </button>
+        <span className="ml-auto font-mono text-[11px] text-ink-faint">
+          ⌘⏎ allow · esc deny
+        </span>
+      </div>
+    </Overlay>
+  )
+}
+
 function Overlay({
   label,
   children,

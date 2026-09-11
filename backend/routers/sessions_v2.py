@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 import vault_io
+from permissions import registry as permission_registry
 from orchestrator.driver import (
     MODE_MODELS, OPENING_PROMPT, PERMISSION_CYCLE, Image, SessionSpec, one_shot,
 )
@@ -385,6 +386,60 @@ def delete_conversation(session_id: int) -> dict:
     _store.db.execute("DELETE FROM sessions WHERE id=?", (session_id,))
     _store.db.commit()
     return {"deleted": session_id}
+
+
+# ----------------------------------------------------------- permissions
+#
+# Three routes for one conversation between three processes: the MCP server
+# asks, the shell shows and answers, the CLI acts on the result.
+
+
+class PermissionAsk(BaseModel):
+    mode: str = "general"
+    tool: str
+    args: dict = Field(default_factory=dict)
+
+
+class PermissionDecision(BaseModel):
+    decision: str
+
+    @field_validator("decision")
+    @classmethod
+    def _known(cls, v: str) -> str:
+        if v not in ("allow", "deny"):
+            raise ValueError("decision must be allow or deny")
+        return v
+
+
+@router.post("/permissions/ask")
+async def permission_ask(body: PermissionAsk) -> dict:
+    """Called by the MCP permission tool. Blocks until answered or expired.
+
+    Run off the event loop: the wait is a threading.Event held for up to three
+    minutes, and doing that on the loop would stop every other request in the
+    process -- including the poll this is waiting for an answer from, which
+    would deadlock the feature against itself.
+    """
+    req = await asyncio.to_thread(
+        permission_registry.ask, body.mode, body.tool, body.args
+    )
+    return {"decision": req.decision, "expired": req.expired}
+
+
+@router.get("/permissions/pending")
+def permission_pending() -> dict:
+    """What is waiting on you right now."""
+    return {"pending": permission_registry.pending()}
+
+
+@router.post("/permissions/{request_id}/decide")
+def permission_decide(request_id: str, body: PermissionDecision) -> dict:
+    """404 rather than a silent success when the request is gone: it expired
+    while the dialog was still on screen, and saying 'allowed' about a session
+    that already gave up and moved on would be a lie the UI then displays."""
+    if not permission_registry.decide(request_id, body.decision):  # type: ignore[arg-type]
+        raise HTTPException(status_code=404, detail="No pending request by that id")
+    return {"id": request_id, "decision": body.decision}
 
 
 # Regenerate once the conversation has moved this far past the recap it has.

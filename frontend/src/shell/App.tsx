@@ -8,7 +8,7 @@
  * the Stage 2 cutover removes them with their routes — the same
  * "move the new thing, leave the old until it can go cleanly" pattern the
  * mode merge used. */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { BottomBar, Composer, OverageBanner, Rail, TabBar, TitleStrip } from './Chrome'
 import {
@@ -20,7 +20,8 @@ import { Unreachable } from './Async'
 import { useFetched } from './useFetched'
 import { hasImage } from './clipboard'
 import {
-  CommandMenu, ModelPicker, PermissionPicker, PromotePicker, type ModelOption,
+  CommandMenu, ModelPicker, PermissionPicker, PermissionRequest, PromotePicker,
+  type ModelOption, type PendingPermission,
 } from './Commands'
 import { matching } from './slash'
 import { Launcher, type LaunchRequest } from './Launcher'
@@ -707,6 +708,37 @@ export default function App() {
       alive = false
       clearInterval(id)
     }
+  }, [])
+
+  /* Permission requests waiting on you.
+   *
+   * Polled fast and unconditionally. A session is *blocked* while one of
+   * these is outstanding — it is sitting inside a tool call waiting for the
+   * answer — so latency here is latency you watch, unlike the live counter
+   * next door where a few seconds of staleness costs nothing. The request
+   * expires server-side, so a missed poll costs a denial rather than a hang.
+   */
+  const [permissionRequests, setPermissionRequests] = useState<PendingPermission[]>([])
+  useEffect(() => {
+    let alive = true
+    const read = () =>
+      void get<{ pending: PendingPermission[] }>('/v2/sessions/permissions/pending').then((d) => {
+        if (alive && d) setPermissionRequests(d.pending ?? [])
+      })
+    read()
+    const id = setInterval(read, 900)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [])
+
+  const decidePermission = useCallback((id: string, decision: 'allow' | 'deny') => {
+    // Dropped from local state first: the dialog must go the instant you
+    // click, not one poll later, or it reads as not having registered and
+    // invites a second click on a question that is already answered.
+    setPermissionRequests((prev) => prev.filter((r) => r.id !== id))
+    void post(`/v2/sessions/permissions/${id}/decide`, { decision })
   }, [])
 
   /* Slash commands.

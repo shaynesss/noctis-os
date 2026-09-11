@@ -281,11 +281,12 @@ def config() -> dict:
         # both read the same list the orchestrator validates against.
         "models": MODEL_CATALOG,
         "permission_cycle": list(PERMISSION_CYCLE),
-        # The CLI denies anything that would prompt when run with --print,
-        # because there is no interactive session to answer. Reported so the
-        # UI can say what "ask each time" actually means here instead of
-        # implying a prompt that never arrives.
-        "prompts_answerable": False,
+        # True since the permission prompt tool landed: a request now reaches
+        # a dialog in this window and waits for an answer, so "ask each time"
+        # asks. It was False because --print has no interactive session, which
+        # made every prompt an automatic refusal -- the UI said so rather than
+        # implying a dialog that never arrived.
+        "prompts_answerable": True,
         # bypassPermissions is a real flag that stays settable, but is
         # deliberately unreachable by tapping a key. Reported so Settings can
         # state that rather than leave its absence looking like an oversight.

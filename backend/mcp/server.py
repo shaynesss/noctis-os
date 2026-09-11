@@ -46,6 +46,12 @@ def negotiate(requested: str | None) -> str:
 VAULT = Path(os.environ.get("VAULT_PATH", Path(__file__).resolve().parents[3] / "second-brain"))
 HISTORY_DB = os.environ.get("NOCTIS_HISTORY_DB")
 
+# Where to reach the backend for a permission decision. Only the permission
+# tool uses these: everything else here reads the vault directly, which is
+# what keeps "clone it and point it at your own vault" true.
+BACKEND = os.environ.get("NOCTIS_BACKEND", "http://127.0.0.1:8000")
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "http://localhost:5180")
+
 MODES = ("faber", "noctua", "vesper", "maintenance")
 
 
@@ -69,6 +75,22 @@ def text(s: str) -> dict:
 
 # ---------------------------------------------------------------- tools
 TOOLS = [
+    {
+        "name": "permission_prompt",
+        "description": (
+            "Internal. Named by --permission-prompt-tool, called by the CLI when a "
+            "tool needs a decision; it surfaces the request in Noctis and waits for "
+            "a person. Not for a session to call directly."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "tool_name": {"type": "string"},
+                "input": {"type": "object"},
+            },
+            "required": ["tool_name"],
+        },
+    },
     {
         "name": "vault_search",
         "description": (
@@ -241,12 +263,71 @@ def t_propose(args: dict) -> dict:
     )
 
 
+def t_permission_prompt(args: dict) -> dict:
+    """Answer a permission request by asking the person.
+
+    This is what `--permission-prompt-tool` names, and it is why the chip is a
+    control rather than a caption: with nothing here, `--permission-prompts`
+    had nobody to hand the question to, so everything that would ask was
+    refused and `manual` silently meant `never`.
+
+    The reply shape is the CLI's, not ours: an allow carries the (possibly
+    updated) input back, a deny carries a message. Anything else reads as a
+    malformed answer and is treated as a refusal.
+
+    Failure is a denial, deliberately. If the backend is down or slow there is
+    nobody to ask, and a tool that fails open the moment its asking mechanism
+    breaks is worse than no gate at all.
+    """
+    import urllib.error
+    import urllib.request
+
+    tool = args.get("tool_name") or args.get("tool") or "unknown"
+    payload = json.dumps({
+        "mode": os.environ.get("NOCTIS_MODE", "general"),
+        "tool": tool,
+        "args": args.get("input") or args.get("tool_input") or {},
+    }).encode()
+
+    req = urllib.request.Request(
+        f"{BACKEND}/v2/sessions/permissions/ask",
+        data=payload,
+        headers={"Content-Type": "application/json",
+                 "Origin": ALLOWED_ORIGIN,
+                 "Authorization": f"Bearer {os.environ.get('NOCTIS_API_TOKEN', '')}"},
+    )
+    try:
+        # Longer than the registry's own expiry, so the timeout that decides
+        # this is the one that can explain itself rather than a socket giving
+        # up first and reporting a network error for a question that was
+        # merely unanswered.
+        with urllib.request.urlopen(req, timeout=200) as r:
+            body = json.loads(r.read())
+    except Exception as e:                        # noqa: BLE001 - see docstring
+        return text(json.dumps({
+            "behavior": "deny",
+            "message": f"Noctis could not ask for permission ({type(e).__name__}).",
+        }))
+
+    if body.get("decision") == "allow":
+        return text(json.dumps({
+            "behavior": "allow",
+            "updatedInput": args.get("input") or args.get("tool_input") or {},
+        }))
+    return text(json.dumps({
+        "behavior": "deny",
+        "message": ("No answer within the time limit, so this was refused."
+                    if body.get("expired") else "Denied in Noctis."),
+    }))
+
+
 HANDLERS = {
     "vault_search": t_vault_search,
     "history_search": t_history_search,
     "job_context": t_job_context,
     "worklist": t_worklist,
     "propose": t_propose,
+    "permission_prompt": t_permission_prompt,
 }
 
 PROMPTS = [

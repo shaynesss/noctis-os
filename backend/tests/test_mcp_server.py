@@ -68,7 +68,8 @@ def test_lists_the_five_tools(vault):
                   {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
                   {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {t["name"] for t in replies[-1]["result"]["tools"]}
-    assert names == {"vault_search", "history_search", "job_context", "worklist", "propose"}
+    assert names == {"vault_search", "history_search", "job_context", "worklist",
+                     "propose", "permission_prompt"}
 
 
 def test_vault_search_returns_the_relevant_document(vault):
