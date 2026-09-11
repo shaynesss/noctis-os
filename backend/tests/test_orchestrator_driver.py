@@ -5,6 +5,7 @@ of the real CLI: same async subprocess, same line reading, same parsing, no
 quota and no network. `build_command` is pure and asserted directly.
 """
 import asyncio
+import json
 from pathlib import Path
 
 import pytest
@@ -88,10 +89,87 @@ def test_unknown_mode_is_rejected_at_construction():
         SessionSpec(mode="nonsense", prompt="x")
 
 
-def test_env_points_at_the_modes_own_config_dir():
+def test_sessions_inherit_the_real_config_root(monkeypatch):
+    """No CLAUDE_CONFIG_DIR, deliberately.
+
+    The config root is where plugins, skills, subagents, slash commands, MCP
+    servers, accumulated permissions and memory live. Pointing at a private
+    copy did not override some settings, it replaced all of them -- which is
+    how Faber came to be reading a methodology naming seven tools its own
+    process could not reach. Unset even when the environment already has one,
+    so a backend started from a shell that exports it does not quietly get
+    the old behaviour back.
+    """
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", "/somewhere/else")
     env = build_env(SessionSpec(mode="noctua", prompt="x"))
-    assert env["CLAUDE_CONFIG_DIR"].endswith("launch_config/noctua")
+    assert "CLAUDE_CONFIG_DIR" not in env
     assert env["NOCTIS_MODE"] == "noctua"      # the telemetry hooks read this
+
+
+def test_the_mode_travels_in_the_argv_not_in_a_file(monkeypatch):
+    """What used to be a per-mode CLAUDE.md rewritten on every launch.
+
+    Writing it was the only real reason for the split config dirs -- two
+    concurrent sessions of one mode would race on the file. In the argv there
+    is no file to race on, and --append-system-prompt also turns snapshotting
+    off, so an edited methodology reaches a resumed session instead of being
+    shadowed by the prompt it was born with.
+    """
+    import orchestrator.driver as driver
+    monkeypatch.setattr(driver, "mode_methodology", lambda mode: f"# {mode} method")
+    cmd = build_command(SessionSpec(mode="faber", prompt="x"))
+    assert cmd[cmd.index("--append-system-prompt") + 1] == "# faber method"
+
+
+def test_a_modes_subagents_are_registered(monkeypatch):
+    """dev.md lists the Critic in its subagent roster and no Faber session
+    could ever call it: a subagent has to be registered in the config root,
+    and the config root was a copy with no agents dir in it."""
+    import orchestrator.driver as driver
+    monkeypatch.setattr(driver, "mode_agents", lambda mode: '{"critic": {}}')
+    cmd = build_command(SessionSpec(mode="faber", prompt="x"))
+    assert json.loads(cmd[cmd.index("--agents") + 1]) == {"critic": {}}
+
+
+def test_an_unreadable_vault_costs_the_overlay_not_the_session(monkeypatch):
+    """Non-fatal by design, and the flags are omitted rather than sent empty.
+
+    A session with the base prompt and no overlay is a worse session; a
+    session that fails to spawn is no session at all. Passing "" would be the
+    third and worst option -- the CLI taking an empty override seriously.
+    """
+    import orchestrator.driver as driver
+    monkeypatch.setattr(driver, "mode_methodology", lambda mode: "")
+    monkeypatch.setattr(driver, "mode_agents", lambda mode: "")
+    cmd = build_command(SessionSpec(mode="faber", prompt="x"))
+    assert "--append-system-prompt" not in cmd and "--agents" not in cmd
+
+
+def test_effort_is_passed_and_defaults_high():
+    """dev.md has said "default high" since it was written, and nothing ever
+    passed it -- so every session ran at the CLI's default and the rule
+    described a setting no code applied."""
+    cmd = build_command(SessionSpec(mode="faber", prompt="x"))
+    assert cmd[cmd.index("--effort") + 1] == "high"
+    cmd = build_command(SessionSpec(mode="faber", prompt="x", effort="xhigh"))
+    assert cmd[cmd.index("--effort") + 1] == "xhigh"
+    with pytest.raises(ValueError):
+        SessionSpec(mode="faber", prompt="x", effort="turbo")
+
+
+def test_the_telemetry_hooks_survive_the_config_root_change():
+    """They lived in the per-mode settings.json, which is not read any more.
+
+    Worth a test precisely because the failure is silent: a hook that stops
+    firing reports nothing, and the action feed would simply have gone quiet.
+    """
+    from orchestrator.driver import settings_config
+    hooks = json.loads(settings_config())["hooks"]
+    assert set(hooks) == {"PostToolUse", "SessionEnd"}
+    for event in hooks.values():
+        command = event[0]["hooks"][0]["command"]
+        assert Path(command.split()[0]).is_absolute()
+        assert Path(command.split()[1]).exists(), "hook script must be there"
 
 
 # ---------------------------------------------------------------- streaming
@@ -311,14 +389,16 @@ def test_the_mcp_server_is_attached_to_every_spawn():
     assert MCP_SERVER.exists(), "the spawn points at a server that is not there"
 
 
-def test_shared_settings_file_is_passed_and_exists():
-    """CLAUDE_CONFIG_DIR redirects where user settings are read from, so
-    ~/.claude/settings.json is invisible to a spawned session. Without this
-    every session starts with an empty allowlist."""
-    from orchestrator.driver import SHARED_SETTINGS
+def test_the_tracked_policy_reaches_the_spawn():
+    """Passed as inline JSON rather than a path: the hooks composed in beside
+    it need absolute machine paths, which is exactly what cannot be committed.
+    The policy half stays a tracked file so it is reviewable in a diff."""
+    from orchestrator.driver import SHARED_SETTINGS, settings_config
     cmd = build_command(SessionSpec(mode="faber", prompt="x"))
-    assert cmd[cmd.index("--settings") + 1] == str(SHARED_SETTINGS)
-    assert SHARED_SETTINGS.exists(), "the file the spawn points at must be there"
+    sent = json.loads(cmd[cmd.index("--settings") + 1])
+    assert SHARED_SETTINGS.exists(), "the tracked policy must be there"
+    assert sent["permissions"] == json.loads(SHARED_SETTINGS.read_text())["permissions"]
+    assert settings_config()
 
 
 def test_every_mode_gets_the_same_permission_plumbing():
@@ -335,7 +415,8 @@ def test_every_mode_gets_the_same_permission_plumbing():
         cmd = build_command(SessionSpec(mode=mode, prompt="x"))
         assert cmd[cmd.index("--permission-prompts") + 1] == "host", mode
         assert cmd[cmd.index("--permission-prompt-tool") + 1] == PERMISSION_TOOL, mode
-        assert cmd[cmd.index("--settings") + 1] == str(SHARED_SETTINGS), mode
+        assert json.loads(cmd[cmd.index("--settings") + 1])["permissions"] == \
+            json.loads(SHARED_SETTINGS.read_text())["permissions"], mode
         assert "--mcp-config" in cmd, mode
 
 
@@ -382,7 +463,8 @@ def test_the_shared_allowlist_applies_to_every_mode():
     from orchestrator.driver import SHARED_SETTINGS
     for mode in MODE_MODELS:
         cmd = build_command(SessionSpec(mode=mode, prompt="x"))
-        assert cmd[cmd.index("--settings") + 1] == str(SHARED_SETTINGS)
+        assert json.loads(cmd[cmd.index("--settings") + 1])["permissions"] == \
+            json.loads(SHARED_SETTINGS.read_text())["permissions"]
 
 
 def test_a_line_larger_than_asyncios_default_is_read(tmp_path):

@@ -21,6 +21,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, AsyncIterator, Sequence
 
+from .modes import mode_agents, mode_methodology
 from .events import (EngineError, Event, SessionStart, TextDelta,
                      ToolCall, TurnEnd)
 from .parser import parse_line
@@ -93,6 +94,22 @@ MODE_TOOLS: dict[str, dict[str, str]] = {
 # reachable by tapping a key repeatedly.
 PERMISSION_CYCLE = ("plan", "manual", "acceptEdits", "auto")
 
+# How hard the engine thinks, in the order the chip cycles.
+#
+# This replaces the permission chip in the interface, and the swap is not
+# cosmetic. Every mode now spawns with the same tools and a shared allowlist,
+# so the permission mode changes almost nothing a person would notice --
+# whereas effort changes the answer. dev.md has asked for this routing since
+# it was written ("default high; medium/low for mechanical or repetitive
+# work; xhigh for genuine deep exploration") and no code ever passed it.
+#
+# It takes effect on the next turn, which is immediately: every turn is its
+# own `claude -p` spawn, resumed by session id, so a flag chosen now governs
+# the very next thing the session does. `max` is left out of the cycle for
+# the same reason bypassPermissions is -- real, settable, but not something
+# to land on by tapping a key.
+EFFORT_CYCLE = ("low", "medium", "high", "xhigh")
+
 # Who answers a permission request.
 #
 # "none" means nobody, and everything that would ask is refused -- which is
@@ -121,11 +138,43 @@ PERMISSION_TOOL = "mcp__noctis__permission_prompt"
 def mcp_config() -> str:
     """--mcp-config takes a JSON string as readily as a file, and a string
     keeps the spawn self-describing: no generated file on disk to drift from
-    the code that depends on it."""
+    the code that depends on it.
+
+    Noctis's own server, plus whatever ~/.claude already has -- the config
+    root is no longer redirected, so a server configured once for ordinary
+    Claude Code use is available here too rather than needing a second entry.
+    """
     return json.dumps({"mcpServers": {"noctis": {
         "command": sys.executable,
         "args": [str(MCP_SERVER)],
     }}})
+
+
+def settings_config() -> str:
+    """Permissions from the tracked file, plus the telemetry hooks.
+
+    Inline JSON rather than a path, because the hooks need absolute
+    interpreter and script paths and those cannot be committed -- which is
+    exactly why they used to live in the per-mode settings.json that
+    bootstrap generated and gitignored. That file is not read any more: it
+    belonged to a CLAUDE_CONFIG_DIR this no longer points at, so the hooks
+    would have silently stopped firing, and a telemetry hook that stops
+    firing tells you nothing by staying quiet.
+
+    Composing here keeps one tracked policy (permissions.json, reviewable in
+    a diff) and one machine-specific part (these paths, derived not stored).
+    """
+    policy = json.loads(SHARED_SETTINGS.read_text())
+    hook = lambda script: [{"matcher": "", "hooks": [{                # noqa: E731
+        "type": "command",
+        "command": f"{REPO_ROOT}/backend/.venv/bin/python3 "
+                   f"{REPO_ROOT}/backend/hooks/{script}",
+    }]}]
+    policy["hooks"] = {
+        "PostToolUse": hook("log_action.py"),
+        "SessionEnd": hook("mark_session_end.py"),
+    }
+    return json.dumps(policy)
 
 # Bash permissions, shared by every mode and tracked in git.
 #
@@ -217,6 +266,11 @@ class SessionSpec:
     # Overrides the mode's default for this session only. None means the
     # mode decides, which is what almost every session wants.
     model: str | None = None
+    # How hard the engine thinks. dev.md has always said "default high,
+    # medium/low for mechanical work, xhigh for deep exploration" -- and
+    # nothing passed it, so every session ran at whatever the CLI defaulted
+    # to and the rule described a setting no code applied.
+    effort: str = "high"
 
     def __post_init__(self) -> None:
         if self.mode not in MODE_MODELS:
@@ -226,6 +280,8 @@ class SessionSpec:
             # Rejected here rather than passed through: an unknown model is a
             # spawn that fails seconds later with a less obvious message.
             raise ValueError(f"unknown model: {self.model}")
+        if self.effort not in EFFORT_CYCLE:
+            raise ValueError(f"unknown effort: {self.effort}")
 
     @property
     def resolved_model(self) -> str:
@@ -255,7 +311,19 @@ def build_command(spec: SessionSpec) -> list[str]:
     cmd += ["--permission-prompts", PERMISSION_PROMPTS,
             "--permission-prompt-tool", PERMISSION_TOOL,
             "--mcp-config", mcp_config(),
-            "--settings", str(SHARED_SETTINGS)]
+            "--settings", settings_config(),
+            "--effort", spec.effort]
+    # The mode, as text rather than as a file. This is what used to be
+    # written into a per-mode CLAUDE_CONFIG_DIR/CLAUDE.md on every launch,
+    # and writing it was the only reason those dirs existed. In the argv it
+    # cannot be raced by a concurrent session of the same mode, and it also
+    # switches system-prompt snapshotting off -- so an edit to a mode's
+    # methodology reaches a *resumed* session, which under the recorded
+    # snapshot it never did.
+    if methodology := mode_methodology(spec.mode):
+        cmd += ["--append-system-prompt", methodology]
+    if agents := mode_agents(spec.mode):
+        cmd += ["--agents", agents]
     if spec.resume_id:
         cmd += ["--resume", spec.resume_id]
     if disallowed := MODE_TOOLS.get(spec.mode, {}).get("disallowed"):
@@ -271,13 +339,26 @@ def build_command(spec: SessionSpec) -> list[str]:
 def build_env(spec: SessionSpec) -> dict[str, str]:
     """Environment for a spawn.
 
-    CLAUDE_CONFIG_DIR points at the mode's own pre-authenticated directory.
-    It is never created here: credentials are Keychain entries keyed to the
-    directory path, so a directory invented at spawn time would be
-    unauthenticated and the session would die with "Not logged in".
+    **CLAUDE_CONFIG_DIR is deliberately not set.** Sessions run against the
+    real ~/.claude, the same config root an ordinary Claude Code session
+    uses, and that is the whole point: the config root is where plugins,
+    skills, subagents, slash commands, MCP servers, accumulated permissions
+    and memory all live. Redirecting it did not override some settings, it
+    replaced the entire surface -- so a Noctis session had none of them, and
+    Faber was handed a methodology naming seven tools (Impeccable,
+    code-review, the Critic, Playwright, shadcn/Magic MCP, CodeRabbit) that
+    its own process could not reach.
+
+    The redirect existed for one reason: the orchestrator rewrote each dir's
+    CLAUDE.md on every launch, and two concurrent sessions sharing a dir
+    would race on that file. That is solved better by not using a file --
+    the mode's methodology now travels in the argv via
+    --append-system-prompt, so there is nothing on disk to race on. (The
+    second reason bootstrap gives, one Keychain login per dir, was never a
+    reason for the split; it was its price.)
     """
     env = dict(os.environ)
-    env["CLAUDE_CONFIG_DIR"] = str(CONFIG_ROOT / spec.mode)
+    env.pop("CLAUDE_CONFIG_DIR", None)      # inherit ~/.claude, never a copy
     env["NOCTIS_MODE"] = spec.mode          # read by the telemetry hooks
     return env
 
