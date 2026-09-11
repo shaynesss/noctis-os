@@ -14,6 +14,20 @@
  * here per dev.md §3.0 — screens before wiring. */
 
 import { buildGrid } from './grid'
+import { Unreachable } from './Async'
+
+/** The heading, shared by the grid and by the two states that replace it, so
+ *  the section does not vanish entirely while it is unavailable. */
+function Frame({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+        Activity
+      </h2>
+      {children}
+    </>
+  )
+}
 
 const LEVELS = ['#171717', '#4a1710', '#8a2410', '#c22d11', '#e53311']
 /** Count to swatch. The ramp is Faber red because the grid measures work,
@@ -28,9 +42,29 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 
 
-/** Deterministic sample data — a fixed seed so the grid does not reshuffle on
- *  every render, which would make a layout problem look like a data problem. */
-export function Activity({ days = [] }: { days?: { day: string; sessions: number }[] }) {
+export function Activity(
+  { days }: { days: { day: string; sessions: number }[] | null | false },
+) {
+  /* Absent data is not zero activity.
+   *
+   * This was handed `[]` while the request was still in flight or had
+   * failed, so a year of real work rendered as "0 sessions in the last
+   * year" — a measurement, stated confidently, of something that had not
+   * been measured. It sat directly above a "Lifetime tokens" panel that
+   * handled the same two states properly, which is what made it obvious.
+   *
+   * Neither state draws a grid: an empty grid *is* the zero reading. */
+  if (days === false) return <Frame><Unreachable what="usage history" /></Frame>
+  if (days === null) {
+    return (
+      <Frame>
+        <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
+          Loading…
+        </div>
+      </Frame>
+    )
+  }
+
   /* Real today, at local midnight.
    *
    * This was hardcoded to a fixed date from the mock era, and once the grid
@@ -53,10 +87,7 @@ export function Activity({ days = [] }: { days?: { day: string; sessions: number
   }
 
   return (
-    <>
-      <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
-        Activity
-      </h2>
+    <Frame>
       <div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
         <div className="mb-[14px] flex items-baseline gap-2">
           <b className="text-[14px] font-semibold text-ink tabular-nums">{total}</b>
@@ -95,15 +126,7 @@ export function Activity({ days = [] }: { days?: { day: string; sessions: number
             </div>
           </div>
         </div>
-
-        <div className="mt-[11px] flex items-center justify-end gap-1 font-mono text-[9.5px] text-ink-faint">
-          Less
-          {LEVELS.map((l) => (
-            <span key={l} className="inline-block h-[10px] w-[10px] rounded-[2px]" style={{ background: l }} />
-          ))}
-          More
-        </div>
       </div>
-    </>
+    </Frame>
   )
 }

@@ -1143,7 +1143,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
           </div>
         )}
 
-        <Activity days={stats ? stats.activity : []} />
+        <Activity days={stats === null || stats === false ? stats : stats.activity} />
 
         <h2 className="m-0 mb-[14px] mt-7 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           Lifetime tokens
