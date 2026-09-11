@@ -294,6 +294,22 @@ def test_shared_settings_file_is_passed_and_exists():
     assert SHARED_SETTINGS.exists(), "the file the spawn points at must be there"
 
 
+def test_every_mode_gets_the_same_permission_plumbing():
+    """One file, five modes, no per-mode special case.
+
+    The whole defect this replaced was permissions that silently applied to
+    nothing, so "it happens to be unconditional today" is not good enough: a
+    mode added later, or a well-meant `if spec.mode == ...`, would reintroduce
+    exactly the failure -- one mode quietly unable to act while the interface
+    says otherwise.
+    """
+    from orchestrator.driver import SHARED_SETTINGS
+    for mode in MODE_MODELS:
+        cmd = build_command(SessionSpec(mode=mode, prompt="x"))
+        assert cmd[cmd.index("--permission-prompts") + 1] == "none", mode
+        assert cmd[cmd.index("--settings") + 1] == str(SHARED_SETTINGS), mode
+
+
 def _shared_permissions() -> dict:
     import json
     from orchestrator.driver import SHARED_SETTINGS
