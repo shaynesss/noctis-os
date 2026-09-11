@@ -21,8 +21,8 @@ import json
 from typing import Any, Iterable, Iterator
 
 from .events import (
-    EngineError, Event, Limits, SessionStart, TextDelta, ThinkingDelta,
-    ThinkingProgress, ToolCall, ToolResult, TurnEnd, Usage,
+    ContextSnapshot, EngineError, Event, Limits, SessionStart, TextDelta,
+    ThinkingDelta, ThinkingProgress, ToolCall, ToolResult, TurnEnd, Usage,
 )
 
 # Emitted by the CLI for its own bookkeeping; nothing above this layer needs
@@ -113,6 +113,17 @@ def parse_line(line: str) -> list[Event]:
                     name=b.get("name", ""),
                     args=b.get("input") or {},
                 ))
+
+        # This message's own usage describes the single API call that produced
+        # it, so its prompt size is how full the window is right now. Emitted
+        # last, after the content it describes.
+        mu = (d.get("message") or {}).get("usage") or {}
+        if mu:
+            out.append(ContextSnapshot(
+                tokens=(int(mu.get("input_tokens", 0))
+                        + int(mu.get("cache_read_input_tokens", 0))
+                        + int(mu.get("cache_creation_input_tokens", 0))),
+            ))
         return out
 
     if kind == "user":
@@ -151,9 +162,6 @@ def parse_line(line: str) -> list[Event]:
                 model=primary,
                 aux_input_tokens=aux_in,
                 aux_output_tokens=aux_out,
-                context_tokens=(int(u.get("input_tokens", 0))
-                                + int(u.get("cache_read_input_tokens", 0))
-                                + int(u.get("cache_creation_input_tokens", 0))),
                 # Reported per model; the primary's is the session's.
                 context_window=int(
                     (d.get("modelUsage") or {}).get(primary, {}).get("contextWindow", 0)

@@ -26,10 +26,11 @@ export type WireEvent =
   | { t: 'tool_call'; id: string; name: string; summary: string }
   | { t: 'tool_result'; id: string; content: string; truncated: boolean; is_error: boolean }
   | { t: 'limits'; five_hour: Window; seven_day: Window; using_overage: boolean }
+  | { t: 'context'; tokens: number }
   | { t: 'turn_end'; session_id: string; duration_ms: number; stop_reason: string | null
       usage: { input: number; output: number; cached: number; model: string
                aux_input: number; aux_output: number
-               context_tokens: number; context_window: number } }
+               context_window: number } }
   | { t: 'error'; message: string; fatal: boolean }
 
 export interface Window {
@@ -136,8 +137,13 @@ export interface Fold {
   sessionId: string | null
   /** The model the engine says it ran, not the one we asked for. */
   model: string | null
-  /** 0-1 of the context window, null until a turn has reported one. */
+  /** 0-1 of the context window, null until both halves are known. */
   context: number | null
+  /** Prompt size of the most recent API call — occupancy right now. */
+  contextTokens: number | null
+  /** Window size, which only the turn_end event reports. Remembered across
+   *  turns: it is a property of the model, not of the turn. */
+  contextWindow: number | null
   /** Live thinking-token estimate; null when not currently reasoning. */
   thinking: number | null
   done: boolean
@@ -148,6 +154,8 @@ export const emptyFold = (blocks: Block[] = []): Fold => ({
   sessionId: null,
   model: null,
   context: null,
+  contextTokens: null,
+  contextWindow: null,
   thinking: null,
   done: false,
 })
@@ -219,7 +227,26 @@ export function fold(state: Fold, e: WireEvent): Fold {
       return { ...state, blocks }
     }
 
-    case 'turn_end':
+    /* Occupancy, from the API call that just happened.
+     *
+     * Arrives several times a turn — once per assistant message — so a long
+     * tool-running turn shows the window filling as it goes, rather than one
+     * jump at the end. The window itself only comes with turn_end, so the
+     * ratio stays null until the first turn completes. */
+    case 'context': {
+      const window = state.contextWindow
+      return {
+        ...state,
+        contextTokens: e.tokens,
+        context: window ? e.tokens / window : state.context,
+      }
+    }
+
+    case 'turn_end': {
+      // Remembered across turns: the window is a property of the model, and
+      // null must render as unknown rather than as 0%, which would read as a
+      // conversation with room to spare.
+      const window = e.usage.context_window || state.contextWindow
       return {
         ...state,
         sessionId: e.session_id,
@@ -227,12 +254,12 @@ export function fold(state: Fold, e: WireEvent): Fold {
         done: true,
         // Confirms it at the end too: what was actually billed.
         model: e.usage.model || state.model,
-        // Null when the engine reported no window: unknown must not render
-        // as 0%, which reads as a conversation with room to spare.
-        context: e.usage.context_window
-          ? e.usage.context_tokens / e.usage.context_window
+        contextWindow: window,
+        context: window && state.contextTokens
+          ? state.contextTokens / window
           : state.context,
       }
+    }
 
     case 'error':
       return {

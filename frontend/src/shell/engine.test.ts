@@ -99,25 +99,45 @@ describe('fold', () => {
       { t: 'start', session_id: 'abc', model: 'opus-5', cwd: '/x', tools: [] },
       { t: 'turn_end', session_id: 'abc', duration_ms: 5, stop_reason: null,
         usage: { input: 1, output: 2, cached: 0, model: 'opus-5', aux_input: 0,
-                 aux_output: 0, context_tokens: 26589, context_window: 1000000 } },
+                 aux_output: 0, context_window: 1000000 } },
     ])
     expect(s.sessionId).toBe('abc')
     expect(s.done).toBe(true)
   })
 
-  it('records context occupancy from a turn that reports a window', () => {
-    const s = run([{ t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
-      usage: { input: 2, output: 5, cached: 0, model: 'm', aux_input: 0, aux_output: 0,
-               context_tokens: 26589, context_window: 1000000 } }])
+  it('records context occupancy from the last snapshot, not the turn total', () => {
+    const s = run([
+      { t: 'context', tokens: 26589 },
+      { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+        usage: { input: 2, output: 5, cached: 0, model: 'm', aux_input: 0, aux_output: 0,
+                 context_window: 1000000 } },
+    ])
     expect(s.context).toBeCloseTo(0.0265, 3)
+  })
+
+  it('tracks the newest snapshot as a tool-running turn proceeds', () => {
+    // The bug this replaced: summing every API call in the turn and dividing
+    // by one window, which reported 470% full on a real turn.
+    const s = run([
+      { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+        usage: { input: 2, output: 5, cached: 0, model: 'm', aux_input: 0, aux_output: 0,
+                 context_window: 1000000 } },
+      { t: 'context', tokens: 100000 },
+      { t: 'context', tokens: 300000 },
+    ])
+    expect(s.context).toBeCloseTo(0.3, 3)
+    expect(s.context!).toBeLessThanOrEqual(1)
   })
 
   it('leaves context unknown when no window is reported', () => {
     // Unknown must not become 0%, which reads as a conversation with room to
     // spare rather than one we know nothing about.
-    const s = run([{ t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
-      usage: { input: 2, output: 5, cached: 0, model: 'm', aux_input: 0, aux_output: 0,
-               context_tokens: 500, context_window: 0 } }])
+    const s = run([
+      { t: 'context', tokens: 500 },
+      { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+        usage: { input: 2, output: 5, cached: 0, model: 'm', aux_input: 0, aux_output: 0,
+                 context_window: 0 } },
+    ])
     expect(s.context).toBeNull()
   })
 
@@ -216,7 +236,7 @@ describe('which model ran', () => {
       { t: 'start', session_id: 'a', model: 'claude-opus-5', cwd: '/x', tools: [] },
       { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
         usage: { input: 1, output: 1, cached: 0, model: 'claude-haiku-4-5', aux_input: 0,
-                 aux_output: 0, context_tokens: 0, context_window: 0 } },
+                 aux_output: 0, context_window: 0 } },
     ])
     // Billing is the last word: it is what was charged, not what was asked.
     expect(s.model).toBe('claude-haiku-4-5')
@@ -231,7 +251,7 @@ describe('which model ran', () => {
       { t: 'start', session_id: 'a', model: 'claude-opus-5', cwd: '/x', tools: [] },
       { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
         usage: { input: 1, output: 1, cached: 0, model: '', aux_input: 0,
-                 aux_output: 0, context_tokens: 0, context_window: 0 } },
+                 aux_output: 0, context_window: 0 } },
     ])
     expect(s.model).toBe('claude-opus-5')
   })

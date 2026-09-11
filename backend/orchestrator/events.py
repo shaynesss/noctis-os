@@ -131,12 +131,15 @@ class Usage:
     cache_write_tokens: int = 0
     aux_input_tokens: int = 0
     aux_output_tokens: int = 0
-    # What the turn actually sent: fresh input plus everything read from or
-    # written to the cache. Against `context_window` this is how full the
-    # window is -- the one number in the status bar that says whether a long
-    # conversation is approaching its limit. Zero when the engine did not
-    # report a window, which the UI must show as unknown rather than as 0%.
-    context_tokens: int = 0
+    # The model's window size, reported per model on the result event. Zero
+    # when the engine did not report one, which the UI must show as unknown
+    # rather than as 0%.
+    #
+    # There is deliberately no `context_tokens` beside it. There was, summing
+    # this turn's input + cache reads + cache writes, and dividing the two
+    # gave 470% -- because those counts are cumulative across every API call
+    # the turn made, while the window is the size of one. Occupancy is a
+    # moment, not a total, so it comes from ContextSnapshot instead.
     context_window: int = 0
     # What this turn would have cost at API list price, summed across every
     # model it billed. Explicitly NOT what you were charged: the engine
@@ -147,17 +150,30 @@ class Usage:
     list_cost_usd: float = 0.0
 
     @property
-    def context_pct(self) -> float:
-        """0.0-1.0, or 0.0 when the window is unknown."""
-        return self.context_tokens / self.context_window if self.context_window else 0.0
-
-    @property
     def total_input(self) -> int:
         return self.input_tokens + self.aux_input_tokens
 
     @property
     def total_output(self) -> int:
         return self.output_tokens + self.aux_output_tokens
+
+
+@dataclass(frozen=True)
+class ContextSnapshot:
+    """How full the window is *at one moment*, from one assistant message.
+
+    Occupancy cannot be read off the `result` event. That event's usage is
+    cumulative across every API call the turn made, and a turn that runs
+    fifteen tools makes fifteen calls, each re-sending the whole conversation.
+    Summing them measures traffic, not occupancy: one real turn recorded
+    2,599,073 cache-read tokens against a 1M window, and the status bar
+    faithfully reported 470% full.
+
+    An assistant message carries the usage of the single call that produced
+    it, so its prompt size *is* the window's occupancy at that instant. The
+    last one to arrive is the current answer.
+    """
+    tokens: int
 
 
 @dataclass(frozen=True)
@@ -178,10 +194,10 @@ class EngineError:
 
 Event = Union[
     SessionStart, TextDelta, ThinkingDelta, ThinkingProgress, ToolCall,
-    ToolResult, Limits, TurnEnd, EngineError,
+    ToolResult, Limits, ContextSnapshot, TurnEnd, EngineError,
 ]
 
 __all__ = [
     "SessionStart", "TextDelta", "ThinkingDelta", "ThinkingProgress", "ToolCall", "ToolResult",
-    "Limits", "Usage", "TurnEnd", "EngineError", "Event",
+    "Limits", "Usage", "ContextSnapshot", "TurnEnd", "EngineError", "Event",
 ]

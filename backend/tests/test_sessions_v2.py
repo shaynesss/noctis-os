@@ -74,11 +74,11 @@ def test_omitted_thinking_still_sends_the_field():
 def test_turn_end_nests_usage_under_the_names_the_ui_reads():
     usage = Usage(input_tokens=10, output_tokens=20, cached_tokens=30, model="opus-5",
                   aux_input_tokens=900, aux_output_tokens=12,
-                  context_tokens=26589, context_window=1000000)
+                  context_window=1000000)
     d = to_dict(TurnEnd(session_id="s", usage=usage, duration_ms=7))
     assert d["usage"] == {"input": 10, "output": 20, "cached": 30, "model": "opus-5",
                           "aux_input": 900, "aux_output": 12,
-                          "context_tokens": 26589, "context_window": 1000000}
+                          "context_window": 1000000}
 
 
 def test_sse_frame_is_one_json_line_then_a_blank():

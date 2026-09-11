@@ -15,8 +15,8 @@ import json
 from typing import Any, Iterable
 
 from .events import (
-    EngineError, Event, Limits, SessionStart, TextDelta, ThinkingDelta,
-    ThinkingProgress, ToolCall, ToolResult, TurnEnd,
+    ContextSnapshot, EngineError, Event, Limits, SessionStart, TextDelta,
+    ThinkingDelta, ThinkingProgress, ToolCall, ToolResult, TurnEnd,
 )
 
 # Tool output is unbounded -- a Read of a large file, a Bash dump. The
@@ -66,6 +66,9 @@ def to_dict(e: Event) -> dict[str, Any]:
                 "seven_day": {"used": e.seven_day_used, "resets_at": e.seven_day_resets_at},
                 "using_overage": e.using_overage}
 
+    if isinstance(e, ContextSnapshot):
+        return {"t": "context", "tokens": e.tokens}
+
     if isinstance(e, TurnEnd):
         return {"t": "turn_end", "session_id": e.session_id,
                 "duration_ms": e.duration_ms, "stop_reason": e.stop_reason,
@@ -79,7 +82,6 @@ def to_dict(e: Event) -> dict[str, Any]:
                           "model": e.usage.model,
                           "aux_input": e.usage.aux_input_tokens,
                           "aux_output": e.usage.aux_output_tokens,
-                          "context_tokens": e.usage.context_tokens,
                           "context_window": e.usage.context_window}}
 
     if isinstance(e, EngineError):

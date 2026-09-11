@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from orchestrator.events import (
-    EngineError, Limits, SessionStart, TextDelta, ThinkingDelta,
-    ThinkingProgress, ToolCall, ToolResult, TurnEnd,
+    ContextSnapshot, EngineError, Limits, SessionStart, TextDelta,
+    ThinkingDelta, ThinkingProgress, ToolCall, ToolResult, TurnEnd,
 )
 from orchestrator.parser import parse_line, parse_stream
 
@@ -194,14 +194,15 @@ def test_missing_model_usage_does_not_crash():
     assert end.usage.model == ""
 
 
-def test_context_usage_comes_from_the_whole_prompt():
-    """Window occupancy is fresh input plus everything read from or written
-    to the cache -- input_tokens alone was 2 on a turn that actually sent
-    26,589, so it would have reported a full conversation as empty."""
+def test_the_result_event_carries_a_window_but_no_occupancy():
+    """The result's usage is cumulative over every API call the turn made, so
+    it cannot say how full the window is. It used to try: input + cache reads
+    + cache writes, divided by the window, which read 470% on a real turn that
+    ran fifteen tools. Only the window survives here; occupancy comes from
+    ContextSnapshot."""
     (end,) = [e for e in parse_line(_multi_model_result()) if isinstance(e, TurnEnd)]
-    assert end.usage.context_tokens == 2 + 7444 + 19143
     assert end.usage.context_window == 1_000_000
-    assert round(end.usage.context_pct * 100, 1) == 2.7
+    assert not hasattr(end.usage, "context_tokens")
 
 
 def test_unknown_context_window_is_not_reported_as_empty():
@@ -211,7 +212,39 @@ def test_unknown_context_window_is_not_reported_as_empty():
                        "usage": {"input_tokens": 5, "output_tokens": 1}})
     (end,) = [e for e in parse_line(line) if isinstance(e, TurnEnd)]
     assert end.usage.context_window == 0
-    assert end.usage.context_pct == 0.0
+
+
+def test_an_assistant_message_reports_occupancy_at_that_moment():
+    """Its usage describes the one call that produced it, so the prompt size
+    is the window's occupancy right then -- the number the status bar wants."""
+    line = json.dumps({"type": "assistant", "message": {
+        "content": [{"type": "text", "text": "hi"}],
+        "usage": {"input_tokens": 2, "cache_read_input_tokens": 7444,
+                  "cache_creation_input_tokens": 19143, "output_tokens": 5},
+    }})
+    (snap,) = [e for e in parse_line(line) if isinstance(e, ContextSnapshot)]
+    assert snap.tokens == 2 + 7444 + 19143
+
+
+def test_repeated_snapshots_do_not_accumulate():
+    """Each one replaces the last. Summing them is precisely the bug: fifteen
+    tool calls re-sending a 170k prompt summed to 2.6M against a 1M window."""
+    snaps = []
+    for size in (100_000, 170_000, 170_000):
+        line = json.dumps({"type": "assistant", "message": {
+            "content": [{"type": "text", "text": "x"}],
+            "usage": {"input_tokens": size},
+        }})
+        snaps += [e for e in parse_line(line) if isinstance(e, ContextSnapshot)]
+    assert [s.tokens for s in snaps] == [100_000, 170_000, 170_000]
+
+
+def test_an_assistant_message_without_usage_reports_nothing():
+    """Absent usage must not become a snapshot of zero, which would render as
+    an empty window mid-conversation."""
+    line = json.dumps({"type": "assistant",
+                       "message": {"content": [{"type": "text", "text": "hi"}]}})
+    assert not [e for e in parse_line(line) if isinstance(e, ContextSnapshot)]
 
 
 def test_cache_writes_are_counted():
