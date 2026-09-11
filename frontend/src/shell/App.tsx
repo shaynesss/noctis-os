@@ -474,7 +474,12 @@ export default function App() {
       handoff: {
         mode: tab.mode,
         label: tab.label,
-        cwd: `~/Developer/${tab.label.split(' · ')[1] ?? ''}`,
+        /* A label with no project half would otherwise hand over
+           `~/Developer/`, which exists, so nothing rejects it and the
+           session simply starts in the wrong place. */
+        cwd: tab.label.split(' · ')[1]
+          ? `~/Developer/${tab.label.split(' · ')[1]}`
+          : EMPTY_SESSION.cwd,
         carried: lastText && lastText.kind === 'text' ? lastText.text.slice(0, 240) : '',
       },
     })
@@ -503,7 +508,12 @@ export default function App() {
     }])
     setSessions((s) => ({ ...s, [tabId]: {
       mode: full.mode, blocks: full.blocks, draft: '',
-      cwd: full.cwd ?? '~', engineId: full.engine_id ?? undefined,
+      /* The project, not the home directory. A stored cwd of '~' makes
+         every filesystem search sweep the whole home folder, which times
+         out rather than failing -- so it reads as a broken tool instead
+         of a bad working directory. EMPTY_SESSION holds the one default
+         worth falling back to; '~' was never it. */
+      cwd: full.cwd ?? EMPTY_SESSION.cwd, engineId: full.engine_id ?? undefined,
     } }))
     setDrafts((d) => ({ ...d, [tabId]: '' }))
     setActiveTab(tabId)
