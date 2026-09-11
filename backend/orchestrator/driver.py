@@ -36,32 +36,33 @@ MODE_MODELS = {
     "maintenance": "claude-haiku-4-5",
 }
 
-# Tool policy per mode, enforced at spawn rather than by instruction. A
-# prompt asking a session not to edit files is a request; --disallowedTools
-# is a fact. Maintenance is the one that matters: propose-never-apply is
-# the guardrail the regression suite caught failing on a plainly-worded
-# request, so it gets a cage as well as a rule.
-# Read-only and research tools, pre-allowed wherever a mode should have
-# them. Nothing here mutates anything.
+# Tool policy, identical for every mode.
 #
-# **Why this is needed at all.** `--permission-prompts` decides *who answers*
-# a permission request under `--print`. It defaults to "host" -- the SDK host,
-# or whatever `--permission-prompt-tool` names. This driver is not a host: it
-# spawns a subprocess, reads its stream and answers nothing. So under the
-# default a request goes out and nobody ever replies, and the tool fails.
-# That is why WebSearch and WebFetch came back "you haven't granted it yet"
-# with no way to grant it.
+# **There is deliberately no per-mode cage any more.** Modes used to differ
+# here -- maintenance and the research modes had Bash, Edit and Write in
+# --disallowedTools, general had Edit and Write -- and that was the wrong axis
+# to vary on. What makes Noctua research and Faber build is the methodology
+# each one reads, composed into its own CLAUDE_CONFIG_DIR/CLAUDE.md by
+# prompts/render.py. Varying *capability* on top of that produced a mode
+# handed a task it could not perform and with no way to say so: the turn
+# tried, was refused, ended with nothing done, and drew a blank transcript
+# indistinguishable from a crash. Methodology is the difference between the
+# modes. Permission is not.
 #
-# (An earlier version of this comment said the default was "none". It is not,
-# and the difference matters: "none" is a decision, "host" is a promise to
-# answer that this driver does not keep. `build_command` now passes "none"
-# explicitly -- see PERMISSION_PROMPTS below.)
+# The guardrails that actually matter are kept, and kept where they apply to
+# every mode rather than to one: `git push` is denied outright in
+# permissions.json, and the permission chip still governs each session at run
+# time. What is gone is the idea that a mode is defined by what it cannot do.
 #
-# Mutating tools are deliberately NOT here. Bash, Edit and Write stay
-# governed by the permission mode, so nothing that changes your machine is
-# silently pre-approved to make the app feel like it works.
-_READ_TOOLS = "Read Grep Glob"
-_WEB_TOOLS = "WebSearch WebFetch"
+# **Why --allowedTools is needed at all.** `--permission-prompts` decides *who
+# answers* a permission request under `--print`. It defaults to "host" -- the
+# SDK host, or whatever `--permission-prompt-tool` names. That is now the
+# Noctis MCP server, so a request reaches the interface and a person answers.
+# Anything listed here skips the question entirely.
+ALL_TOOLS = (
+    "Read Grep Glob WebSearch WebFetch Edit Write Bash "
+    "NotebookEdit TodoWrite Task"
+)
 
 # What a session can be switched to, and what each is for. The mode's own
 # entry in MODE_MODELS is the default; this is the menu when you want
@@ -77,19 +78,12 @@ MODEL_CATALOG: list[dict[str, str]] = [
 ]
 
 MODE_TOOLS: dict[str, dict[str, str]] = {
-    "general": {"disallowed": "Edit Write",
-                "allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
-    # The build mode: its whole job is changing the repo, so its mutating
-    # tools stay under the permission mode rather than being listed here.
-    "faber": {"allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
-    "noctua": {"disallowed": "Edit Write Bash",
-               "allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
-    "vesper": {"disallowed": "Edit Write Bash",
-               "allowed": f"{_READ_TOOLS} {_WEB_TOOLS}"},
-    # No web: maintenance audits the vault, and nothing vault-touching
-    # routes outward (Decision Log:76).
-    "maintenance": {"disallowed": "Edit Write Bash",
-                    "allowed": _READ_TOOLS},
+    # The same entry for every mode, by construction rather than by five
+    # copies that could drift apart. The dict shape is kept because the
+    # panels router reports it to the interface, and because reintroducing a
+    # per-mode difference should have to be written on purpose rather than
+    # inherited from a default nobody revisited.
+    mode: {"allowed": ALL_TOOLS} for mode in MODE_MODELS
 }
 
 
@@ -142,12 +136,13 @@ def mcp_config() -> str:
 # (backend/launch_config/* is gitignored), so it would vanish on the next
 # bootstrap and drift between the five dirs in the meantime.
 #
-# **Bash only, deliberately.** Edit and Write stay governed by the permission
-# chip: acceptEdits covers them and manual is meant to refuse them, so listing
-# them here would make the chip meaningless in the other direction -- `manual`
-# would quietly permit edits. Bash is listed because no permission mode short
-# of `auto` covers it, and a build session that cannot run its own test suite
-# is not a build session.
+# **Bash is allowed whole, not command by command.** It used to be a curated
+# list -- make, pytest, npm, a dozen git subcommands -- which meant every
+# ordinary thing outside it (sed, find, mkdir, gh, curl) hit a prompt. The
+# list could only ever be as complete as the last time someone remembered to
+# extend it, and a session blocked on an unlisted command looks exactly like
+# a session that had nothing to say. Same failure, smaller blast radius, so
+# the same answer: a mode is not defined by what it cannot do.
 #
 # **git push is denied, not merely absent.** dev.md's "commits as work
 # progresses, Shayne pushes" was a rule in a markdown file that a session

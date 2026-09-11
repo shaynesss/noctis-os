@@ -253,11 +253,17 @@ def test_config_reports_what_the_orchestrator_will_really_run(client):
     assert "bypassPermissions" not in body["permission_cycle"]
 
 
-def test_maintenance_is_shown_as_unable_to_edit(client):
-    """The one policy that decides what a session can do to your files."""
+def test_every_mode_is_reported_with_the_same_capability(client):
+    """The interface should not imply a mode can do less than another one.
+
+    It used to: maintenance and the research modes were spawned with Edit,
+    Write and Bash disallowed, and a session handed work it could not perform
+    ended the turn with nothing done and no way to explain itself. What
+    separates the modes is the methodology each reads, not its tool surface.
+    """
     body = client.get("/v2/config", headers=AUTH).json()
-    maint = next(m for m in body["modes"] if m["mode"] == "maintenance")
-    assert "Edit" in maint["disallowed"] and "Write" in maint["disallowed"]
+    assert {tuple(m["disallowed"]) for m in body["modes"]} == {()}
+    assert len({tuple(sorted(m["allowed"])) for m in body["modes"]}) == 1
 
 
 def test_finished_jobs_are_not_inbox_items(monkeypatch):

@@ -73,17 +73,14 @@ def test_resume_passes_the_engine_session_id():
     assert cmd[cmd.index("--resume") + 1] == "abc-123"
 
 
-def test_maintenance_is_caged_not_merely_instructed():
-    """propose-never-apply failed a plainly-worded request in the regression
-    suite, so the tool policy enforces it rather than trusting the prompt."""
-    cmd = build_command(SessionSpec(mode="maintenance", prompt="x"))
-    disallowed = cmd[cmd.index("--disallowedTools") + 1]
-    assert "Edit" in disallowed and "Write" in disallowed
-
-
-def test_faber_keeps_the_full_tool_surface():
-    cmd = build_command(SessionSpec(mode="faber", prompt="x"))
-    assert "--disallowedTools" not in cmd
+def test_every_mode_keeps_the_full_tool_surface():
+    """No mode is spawned with a cage. Maintenance included: its
+    propose-never-apply rule now rests on its methodology and on the
+    permission chip, not on a tool list that also stopped it reading a repo
+    it was asked to audit."""
+    for mode in MODE_MODELS:
+        cmd = build_command(SessionSpec(mode=mode, prompt="x"))
+        assert "--disallowedTools" not in cmd
 
 
 def test_unknown_mode_is_rejected_at_construction():
@@ -259,18 +256,34 @@ def test_read_and_web_tools_are_pre_allowed():
     assert "WebSearch" in allowed and "Read" in allowed
 
 
-def test_mutating_tools_are_never_pre_allowed():
-    """Edit and Write stay governed by the permission mode. Listing them here
-    would silently pre-approve changes to the machine in order to make the app
-    feel like it works.
+def test_every_mode_gets_the_same_tools():
+    """Capability is not the axis the modes vary on -- methodology is.
 
-    Bash is also absent here, but is not ungoverned: named commands are
-    allowed by orchestrator/permissions.json, which is one tracked, reviewable
-    list rather than a per-mode blanket. See the tests below it."""
+    Each mode reads its own composed CLAUDE.md, and that is what makes Noctua
+    research and Faber build. Varying the tool surface on top of it produced a
+    mode handed a task it could not perform, with no way to say so: the turn
+    tried, was refused, ended with nothing done, and drew a blank transcript
+    that looked exactly like a crash.
+    """
+    surfaces = {mode: MODE_TOOLS[mode]["allowed"] for mode in MODE_MODELS}
+    assert len(set(surfaces.values())) == 1, f"modes differ in capability: {surfaces}"
+
+
+def test_no_mode_is_caged():
+    """--disallowedTools is gone. A guardrail that belongs to everyone lives
+    in permissions.json; one that belongs to a single mode was the bug."""
     for mode in MODE_MODELS:
-        allowed = MODE_TOOLS.get(mode, {}).get("allowed", "")
-        for tool in ("Bash", "Edit", "Write"):
-            assert tool not in allowed, f"{mode} pre-approves {tool}"
+        assert not MODE_TOOLS[mode].get("disallowed"), f"{mode} is still caged"
+        cmd = build_command(SessionSpec(mode=mode, prompt="x"))
+        assert "--disallowedTools" not in cmd
+
+
+def test_every_mode_can_actually_do_the_work():
+    """The tools a session needs to change anything, present for all five."""
+    for mode in MODE_MODELS:
+        allowed = MODE_TOOLS[mode]["allowed"]
+        for tool in ("Bash", "Edit", "Write", "Read", "WebSearch"):
+            assert tool in allowed, f"{mode} cannot use {tool}"
 
 
 # ------------------------------------------------- who answers a prompt
@@ -362,20 +375,14 @@ def test_shared_settings_deny_git_push():
     assert any("git push" in rule for rule in _shared_permissions()["deny"])
 
 
-def test_maintenance_gets_no_web_access():
-    """It audits the vault, and nothing vault-touching routes outward."""
-    allowed = MODE_TOOLS["maintenance"]["allowed"]
-    assert "WebSearch" not in allowed and "WebFetch" not in allowed
-
-
-def test_a_pre_allowed_tool_is_never_also_disallowed():
-    """The two lists must not contradict: a tool in both is a policy whose
-    outcome depends on which flag the CLI happens to weigh more."""
+def test_the_shared_allowlist_applies_to_every_mode():
+    """One tracked list, not five config dirs that drift. Whatever is granted
+    is granted identically everywhere -- which is the whole point of moving
+    the difference between modes into their methodology."""
+    from orchestrator.driver import SHARED_SETTINGS
     for mode in MODE_MODELS:
-        policy = MODE_TOOLS.get(mode, {})
-        allowed = set(policy.get("allowed", "").split())
-        disallowed = set(policy.get("disallowed", "").split())
-        assert not (allowed & disallowed), f"{mode}: {allowed & disallowed} in both lists"
+        cmd = build_command(SessionSpec(mode=mode, prompt="x"))
+        assert cmd[cmd.index("--settings") + 1] == str(SHARED_SETTINGS)
 
 
 def test_a_line_larger_than_asyncios_default_is_read(tmp_path):
