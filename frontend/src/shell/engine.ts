@@ -54,6 +54,11 @@ export interface LaunchRequest {
   images?: { media_type: string; data: string }[]
   /** Per-session model override; the mode's default when absent. */
   model?: string
+  /** How hard the engine thinks on this turn. What the composer's chip sets
+   *  now -- it cycled the permission mode until every mode came to spawn
+   *  with the same tools, which left that chip governing little anyone
+   *  would notice. */
+  effort?: string
   /** The server supplies the prompt: a mode session opened with nothing
    *  typed, so it runs its own session-start routine. */
   opener?: boolean

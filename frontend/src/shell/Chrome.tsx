@@ -3,8 +3,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import type { Attachment } from './engine'
 import { Logo } from './Logo'
 import {
-  CHARACTERS, MODE_ACCENT, MODE_LABEL, PERMISSION_LABEL, PERMISSION_TONE,
-  type Mode, type Permission, type Tab,
+  CHARACTERS, MODE_ACCENT, MODE_LABEL, EFFORT_LABEL, EFFORT_TONE,
+  type Effort, type Mode, type Tab,
 } from './domain'
 
 /* ------------------------------------------------------------------ rail */
@@ -250,9 +250,9 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
   /** A turn is in flight. Sending again would race it, not queue behind it. */
   busy?: boolean
   onStop: () => void
-  permission: Permission
-  onCyclePermission: () => void
-}>(function Composer({ mode, value, onChange, onSend, busy, onStop, attachments, onAttach, onRemoveAttachment, clipboardHasImage, commandMenu, permission, onCyclePermission }, forwarded) {
+  effort: Effort
+  onCycleEffort: () => void
+}>(function Composer({ mode, value, onChange, onSend, busy, onStop, attachments, onAttach, onRemoveAttachment, clipboardHasImage, commandMenu, effort, onCycleEffort }, forwarded) {
   const ref = useRef<HTMLTextAreaElement>(null)
   useImperativeHandle(forwarded, () => ref.current as HTMLTextAreaElement)
 
@@ -317,19 +317,23 @@ export const Composer = forwardRef<HTMLTextAreaElement, {
           {MODE_LABEL[mode]}
         </span>
 
-        {/* Sets --permission-mode on the next spawn. Unlike the CLI's own
-            shift-tab, this applies to the next turn rather than mid-turn --
-            each `claude -p` is a fresh process, so there is nothing running
-            to re-permission. */}
+        {/* Sets --effort on the next turn, which is the next thing that
+            happens: each `claude -p` is a fresh process resumed by session
+            id, so a level chosen now governs the very next reply.
+
+            This used to cycle the permission mode. That stopped being worth
+            a chip once every mode spawned with the same tools and one shared
+            allowlist -- it governed almost nothing a person would notice,
+            while this governs the answer. */}
         <button
           type="button"
-          onClick={onCyclePermission}
-          title={`Permission: ${PERMISSION_LABEL[permission]} — ⇧⇥ to cycle`}
+          onClick={onCycleEffort}
+          title={`Effort: ${EFFORT_LABEL[effort]} — ⇧⇥ to cycle. Applies to your next message.`}
           className="flex shrink-0 self-start items-center gap-[5px] rounded-[3px] border border-line px-[7px] py-[2px] font-mono text-[10.5px] leading-[1.5] hover:border-[#3a3a3a]"
-          style={{ color: PERMISSION_TONE[permission] }}
+          style={{ color: EFFORT_TONE[effort] }}
         >
           <span className="text-[8px]">▶▶</span>
-          {PERMISSION_LABEL[permission]}
+          {EFFORT_LABEL[effort]}
         </button>
 
         {/* A persistent prompt glyph rather than placeholder text. A
@@ -606,7 +610,7 @@ export function BottomBar({
           the narrow layout, so the permission hint vanished on a wide window
           -- the same "hidden rather than moved" mistake as before. */}
       <div className="flex w-[160px] shrink-0 items-center gap-[7px] border-r border-line px-[12px] font-mono text-[11px] text-ink-faint">
-        <Kbd>⇧⇥</Kbd> permission
+        <Kbd>⇧⇥</Kbd> effort
       </div>
 
       {/* Everything else lives inside the main pane's width, not the

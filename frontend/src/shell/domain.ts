@@ -148,6 +148,32 @@ export const PERMISSION_TONE: Record<Permission, string> = {
   auto: 'var(--color-faber)',
 }
 
+/* How hard the engine thinks. This is what the composer's chip cycles now.
+ *
+ * It replaced the permission chip, and the swap is not cosmetic: every mode
+ * spawns with the same tools and one shared allowlist, so the permission
+ * mode changes little anyone would notice, while effort changes the answer.
+ * `max` is a real level, left out of the cycle so it cannot be landed on by
+ * tapping a key -- the same treatment bypassPermissions gets. */
+export const EFFORT_CYCLE = ['low', 'medium', 'high', 'xhigh'] as const
+export type Effort = (typeof EFFORT_CYCLE)[number]
+
+export const EFFORT_LABEL: Record<Effort, string> = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'extra high',
+}
+
+/* Dim through the accent as the engine works harder. Deliberately the same
+ * shape of scale as PERMISSION_TONE: all four are valid, none is a warning. */
+export const EFFORT_TONE: Record<Effort, string> = {
+  low: 'var(--color-ink-faint)',
+  medium: 'var(--color-ink-dim)',
+  high: 'var(--color-noctua)',
+  xhigh: 'var(--color-faber)',
+}
+
 /* Which characters the strip shows, in order. Their *state* is not here:
  * it comes from the live sessions, because a hardcoded 'working' had Faber
  * lit with no Faber session running. */

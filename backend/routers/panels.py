@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field
 
 import vault_io
 from prompts.render import render
-from orchestrator.driver import MODEL_CATALOG, MODE_MODELS, MODE_TOOLS, PERMISSION_CYCLE
+from orchestrator.driver import (EFFORT_CYCLE, MODEL_CATALOG, MODE_MODELS, MODE_TOOLS,
+                                 PERMISSION_CYCLE)
 
 router = APIRouter(prefix="/v2", tags=["panels"])
 
@@ -281,6 +282,15 @@ def config() -> dict:
         # both read the same list the orchestrator validates against.
         "models": MODEL_CATALOG,
         "permission_cycle": list(PERMISSION_CYCLE),
+        # What the composer's chip cycles through now. It set the permission
+        # mode until every mode came to spawn with the same tools and one
+        # shared allowlist -- at which point that chip governed almost nothing
+        # a person would notice, while this governs the answer. dev.md has
+        # asked for the routing since it was written and nothing passed it.
+        "effort_cycle": list(EFFORT_CYCLE),
+        # Real and settable, deliberately not reachable by tapping a key --
+        # the same treatment bypassPermissions gets below.
+        "effort_excluded": ["max"],
         # True since the permission prompt tool landed: a request now reaches
         # a dialog in this window and waits for an answer, so "ask each time"
         # asks. It was False because --print has no interactive session, which

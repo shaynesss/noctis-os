@@ -27,7 +27,8 @@ import jobs
 import vault_io
 from permissions import registry as permission_registry
 from orchestrator.driver import (
-    MODE_MODELS, OPENING_PROMPT, PERMISSION_CYCLE, Image, SessionSpec, one_shot,
+    EFFORT_CYCLE, MODE_MODELS, OPENING_PROMPT, PERMISSION_CYCLE, Image, SessionSpec,
+    one_shot,
 )
 from orchestrator.events import EngineError
 from orchestrator.manager import SessionManager
@@ -104,6 +105,11 @@ class LaunchRequest(BaseModel):
     images: list[InlineImage] = Field(default_factory=list, max_length=8)
     # Overrides the mode's default model for this session only.
     model: str | None = None
+    # How hard the engine thinks on this turn. The chip that used to set the
+    # permission mode sets this instead: every mode now spawns with the same
+    # tools and one shared allowlist, so the permission mode changes little a
+    # person would notice, while effort changes the answer.
+    effort: str = "high"
 
 
 @router.post("")
@@ -116,6 +122,9 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
         # also refuses it over the wire rather than only in the UI. A guard
         # that exists only in the client is not a guard.
         raise HTTPException(status_code=400, detail=f"Invalid permission mode: {req.permission_mode}")
+    if req.effort not in EFFORT_CYCLE:
+        # Same reasoning as above: refused over the wire, not only in the UI.
+        raise HTTPException(status_code=400, detail=f"Invalid effort: {req.effort}")
 
     # The server supplies the opener, so the conversation can be titled for
     # what it is rather than with the opener's own text.
@@ -164,6 +173,7 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
             mode=req.mode,
             prompt=prompt,
             permission_mode=req.permission_mode,
+            effort=req.effort,
             resume_id=req.resume_id,
             cwd=cwd,
             images=[Image(media_type=i.media_type, data=i.data) for i in req.images],

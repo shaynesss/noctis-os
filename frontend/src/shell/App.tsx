@@ -34,8 +34,9 @@ import {
 } from './Panels'
 import { Transcript } from './Transcript'
 import {
-  EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL, PERMISSION_CYCLE,
-  type Mode, type Permission, type SessionState, type Tab,
+  EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL,
+  EFFORT_CYCLE,
+  type Effort, type Mode, type Permission, type SessionState, type Tab,
 } from './domain'
 import './tokens.css'
 
@@ -54,6 +55,9 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('t0')
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const [permission, setPermission] = useState<Permission>('manual')
+  /* What the composer's chip cycles. dev.md's default, finally applied:
+   * nothing passed --effort before, so every session ran at the CLI's. */
+  const [effort, setEffort] = useState<Effort>('high')
 
   // Tabs and sessions are state rather than the imported constants now that
   // mode entry can create them. The constants are the seed, not the store.
@@ -98,6 +102,7 @@ export default function App() {
   const handoffRef = useRef(() => {})
   const sessionsRef = useRef(sessions)
   const permissionRef = useRef(permission)
+  const effortRef = useRef(effort)
   // The tab the composer is bound to, which is what Escape should stop --
   // the same rule the composer itself follows, kept in one place.
   const composerTabRef = useRef('t0')
@@ -109,6 +114,7 @@ export default function App() {
   docRef.current = doc
   sessionsRef.current = sessions
   permissionRef.current = permission
+  effortRef.current = effort
 
   /* One abort per tab. Closing a tab or quitting has to actually stop the
    * stream: an orphaned reader keeps the connection open and the session
@@ -207,6 +213,9 @@ export default function App() {
           prompt,
           cwd: current.cwd,
           permission_mode: permissionRef.current,
+          // Read at send time, so the chip governs this turn rather than the
+          // one it was set during.
+          effort: effortRef.current,
           // Bytes, not a path: the picture is part of what was said.
           images: images.map(({ media_type, data }) => ({ media_type, data })),
           // The server owns the opener's text, so it can title the
@@ -540,13 +549,14 @@ export default function App() {
       // looking at would change something you cannot see.
       if (launcherRef.current || paletteRef.current || docRef.current || pickerRef.current) return
 
-      // Shift+Tab cycles permission, the affordance carried over from the
-      // CLI's TUI. Wrapping past the end returns to `plan`, so the cycle
-      // never strands you at the permissive end.
+      // Shift+Tab cycles effort, the affordance carried over from the CLI's
+      // TUI. It cycled the permission mode until every mode came to spawn
+      // with the same tools, at which point it changed almost nothing a
+      // person would notice. Wrapping past the end returns to `low`.
       if (e.key === 'Tab' && e.shiftKey && !e.metaKey) {
         e.preventDefault()
         e.stopPropagation()
-        setPermission((p) => PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(p) + 1) % PERMISSION_CYCLE.length])
+        setEffort((v) => EFFORT_CYCLE[(EFFORT_CYCLE.indexOf(v) + 1) % EFFORT_CYCLE.length])
         return
       }
       /* Arrows move the command menu's selection. Handled here rather than
@@ -975,9 +985,9 @@ export default function App() {
             }
             busy={sessions[composerTab].busy}
             onStop={() => stop(composerTab)}
-            permission={permission}
-            onCyclePermission={() =>
-              setPermission(PERMISSION_CYCLE[(PERMISSION_CYCLE.indexOf(permission) + 1) % PERMISSION_CYCLE.length])
+            effort={effort}
+            onCycleEffort={() =>
+              setEffort(EFFORT_CYCLE[(EFFORT_CYCLE.indexOf(effort) + 1) % EFFORT_CYCLE.length])
             }
         />
       </BottomBar>
