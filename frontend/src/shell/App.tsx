@@ -671,6 +671,47 @@ export default function App() {
       if (live && r?.recap) {
         setSessions((prev) => ({ ...prev, t0: { ...prev.t0, recap: r.recap } }))
       }
+
+      /* And the mode conversation beside it.
+       *
+       * General reopening while a Faber session vanished made the backend
+       * restarting -- which it does on its own -- feel like losing the
+       * thread: the work was still there, but the only way back to it was
+       * remembering a phrase from it and searching. A conversation you have
+       * to hunt for is one you stop returning to.
+       *
+       * Exactly one, which is the strip's own cap (General plus one), so
+       * this restores the arrangement you had rather than a list of
+       * everything you have ever opened -- the graveyard the four-tab
+       * version produced. */
+      const beside = listed.sessions.find((s) => s.mode !== 'general' && s.resumable)
+      if (!beside) return
+      const asideFull = await get<HistoryTranscript>(`/v2/sessions/history/${beside.id}`)
+      if (!live || !asideFull || asideFull.blocks.length === 0) return
+
+      const tabId = `h${beside.id}`
+      setTabs((ts) => (ts.length > 1 ? ts : [ts[0], {
+        id: tabId, mode: asideFull.mode,
+        label: `${MODE_LABEL[asideFull.mode]} · ${truncate(asideFull.title)}`,
+      }]))
+      setSessions((prev) => (prev[tabId] ? prev : {
+        ...prev,
+        [tabId]: {
+          mode: asideFull.mode,
+          blocks: asideFull.blocks,
+          draft: '',
+          cwd: asideFull.cwd ?? EMPTY_SESSION.cwd,
+          engineId: asideFull.engine_id ?? undefined,
+        },
+      }))
+      setDrafts((d) => (tabId in d ? d : { ...d, [tabId]: '' }))
+
+      const ar = await get<{ recap: string | null }>(`/v2/sessions/history/${beside.id}/recap`)
+      if (live && ar?.recap) {
+        setSessions((prev) => (prev[tabId]
+          ? { ...prev, [tabId]: { ...prev[tabId], recap: ar.recap } }
+          : prev))
+      }
     })()
     return () => {
       live = false
