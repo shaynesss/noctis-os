@@ -31,7 +31,9 @@ export function Palette({
   onClose: () => void
 }) {
   const [q, setQ] = useState('')
-  const [results, setResults] = useState<Results | null>(null)
+  // `false` is a search that could not run, which is not a search with no
+  // results -- see the setter below for why the difference matters.
+  const [results, setResults] = useState<Results | null | false>(null)
   const [busy, setBusy] = useState(false)
   const [cursor, setCursor] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -51,21 +53,41 @@ export function Palette({
       return
     }
     setBusy(true)
-    const timer = setTimeout(async () => {
+    let timer: ReturnType<typeof setTimeout>
+
+    const run = async () => {
       const data = await get<Results>(`/v2/search?q=${encodeURIComponent(term)}`)
       if (inputRef.current?.value.trim() !== term) return
-      setResults(data ?? { conversations: [], documents: [] })
+      // Keep trying while it cannot reach the backend. A restart takes a
+      // second or two, and the palette is usually opened *during* work --
+      // which is exactly when a restart is most likely -- so recovering on
+      // its own is the difference between a blip and a broken feature.
+      if (data === null) timer = setTimeout(run, 2000)
+      /* A failed search is not an empty one.
+       *
+       * This coerced an unreachable backend into `{conversations: [],
+       * documents: []}`, so search rendered "No matches." for a query it had
+       * never actually run -- which reads as ⌘K being broken, and worse, as
+       * the conversation you were looking for not existing. The backend
+       * restarts on its own, so this is a state the palette is genuinely in
+       * from time to time and has to be able to say. */
+      setResults(data ?? false)
       setCursor(0)
       setBusy(false)
-    }, 160)
+    }
+
+    timer = setTimeout(run, 160)
     return () => clearTimeout(timer)
   }, [q])
 
   // Deleted ids are hidden immediately rather than by re-running the query:
   // a row that stays until the next search reads as a delete that failed.
   const [removed, setRemoved] = useState<Set<number>>(new Set())
-  const sessions = (results?.conversations ?? []).filter((s) => !removed.has(s.session_id))
-  const docs = results?.documents ?? []
+  const failed = results === false
+  const sessions = (failed ? [] : results?.conversations ?? []).filter(
+    (s) => !removed.has(s.session_id),
+  )
+  const docs = failed ? [] : results?.documents ?? []
   const total = sessions.length + docs.length
 
   const activate = (i: number) => {
@@ -121,6 +143,11 @@ export function Palette({
             <Empty>Type at least two characters.</Empty>
           ) : busy && !results ? (
             <Empty>Searching…</Empty>
+          ) : failed ? (
+            <Empty>
+              Could not reach the backend, so this search did not run. Retrying —
+              or press esc and try again in a moment.
+            </Empty>
           ) : total === 0 ? (
             <Empty>No matches.</Empty>
           ) : (
