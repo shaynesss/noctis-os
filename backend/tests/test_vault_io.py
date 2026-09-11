@@ -102,9 +102,33 @@ def test_every_runtime_written_dir_is_excluded_from_reload():
     makefile = (repo / "Makefile").read_text()
     app_py = (repo / "desktop" / "app.py").read_text()
 
+    # Every *invocation*, not "somewhere in the file". The substring version
+    # of this passed while `make backend` -- a second target with its own copy
+    # of the flags -- was missing an exclude entirely, and that target is the
+    # one the app actually runs. A file-wide `in` check cannot tell two
+    # invocations apart, which is the same shape of mistake this test was
+    # rewritten once already to avoid.
+    for command in _uvicorn_commands(makefile):
+        for pattern in RELOAD_EXCLUDES:
+            assert pattern in command, (
+                f"a Makefile uvicorn invocation does not exclude {pattern}: {command}"
+            )
+
     for pattern in RELOAD_EXCLUDES:
-        assert pattern in makefile, f"Makefile does not exclude {pattern} from --reload"
         assert pattern in app_py, f"desktop/app.py does not exclude {pattern} from --reload"
+
+
+def _uvicorn_commands(makefile: str) -> list[str]:
+    """Each uvicorn invocation in the Makefile, with continuations folded in.
+
+    A recipe line ending in a backslash continues, so the flags for one
+    invocation are spread over several lines and cannot be matched one at a
+    time.
+    """
+    folded = makefile.replace("\\\n", " ")
+    found = [line for line in folded.splitlines() if "uvicorn main:app" in line]
+    assert found, "no uvicorn invocation found in the Makefile"
+    return found
 
 
 def test_the_store_writes_inside_a_declared_runtime_dir():

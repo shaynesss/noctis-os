@@ -54,7 +54,8 @@ doctor:
 # the common case, and restarting both costs you the frontend's state.
 backend:
 	cd backend && .venv/bin/uvicorn main:app --reload \
-		--reload-exclude 'runtime/*' --reload-exclude 'data/*' --port $${PORT:-8000}
+		--reload-exclude 'runtime/*' --reload-exclude 'data/*' \
+		--reload-exclude 'launch_config/*' --port $${PORT:-8000}
 
 app:
 	backend/.venv/bin/python desktop/app.py
