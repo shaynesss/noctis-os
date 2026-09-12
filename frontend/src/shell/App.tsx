@@ -35,7 +35,7 @@ import {
 import { Transcript } from './Transcript'
 import {
   EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL,
-  EFFORT_CYCLE,
+  DEFAULT_EFFORT, EFFORT_CYCLE,
   type Effort, type Mode, type Permission, type SessionState, type Tab,
 } from './domain'
 import './tokens.css'
@@ -55,9 +55,19 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('t0')
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const [permission, setPermission] = useState<Permission>('manual')
-  /* What the composer's chip cycles. dev.md's default, finally applied:
-   * nothing passed --effort before, so every session ran at the CLI's. */
-  const [effort, setEffort] = useState<Effort>('high')
+  /* What the composer's chip cycles, per tab. dev.md's default, finally
+   * applied: nothing passed --effort before, so every session ran at the
+   * CLI's.
+   *
+   * Keyed by tab, like `drafts` and unlike the single value this used to be.
+   * One global dial was wrong in a way that was invisible: the chip sits in
+   * the composer, which is per-tab furniture, so everything about its
+   * placement says "this session's effort" -- while moving it on any tab
+   * silently moved it on all of them. That pinned a research session to
+   * whatever the last General question happened to want, which is the
+   * opposite of the per-mode effort routing dev.md asks for. */
+  const [efforts, setEfforts] = useState<Record<string, Effort>>({})
+  const effortOf = (id: string): Effort => efforts[id] ?? DEFAULT_EFFORT
 
   // Tabs and sessions are state rather than the imported constants now that
   // mode entry can create them. The constants are the seed, not the store.
@@ -102,7 +112,7 @@ export default function App() {
   const handoffRef = useRef(() => {})
   const sessionsRef = useRef(sessions)
   const permissionRef = useRef(permission)
-  const effortRef = useRef(effort)
+  const effortsRef = useRef(efforts)
   // The tab the composer is bound to, which is what Escape should stop --
   // the same rule the composer itself follows, kept in one place.
   const composerTabRef = useRef('t0')
@@ -114,7 +124,7 @@ export default function App() {
   docRef.current = doc
   sessionsRef.current = sessions
   permissionRef.current = permission
-  effortRef.current = effort
+  effortsRef.current = efforts
 
   /* One abort per tab. Closing a tab or quitting has to actually stop the
    * stream: an orphaned reader keeps the connection open and the session
@@ -213,9 +223,10 @@ export default function App() {
           prompt,
           cwd: current.cwd,
           permission_mode: permissionRef.current,
-          // Read at send time, so the chip governs this turn rather than the
-          // one it was set during.
-          effort: effortRef.current,
+          // Read at send time and keyed by the tab that is sending, so the
+          // chip governs this turn on this session -- not whatever another
+          // tab's chip was last set to.
+          effort: effortsRef.current[tabId] ?? DEFAULT_EFFORT,
           // Bytes, not a path: the picture is part of what was said.
           images: images.map(({ media_type, data }) => ({ media_type, data })),
           // The server owns the opener's text, so it can title the
@@ -556,7 +567,14 @@ export default function App() {
       if (e.key === 'Tab' && e.shiftKey && !e.metaKey) {
         e.preventDefault()
         e.stopPropagation()
-        setEffort((v) => EFFORT_CYCLE[(EFFORT_CYCLE.indexOf(v) + 1) % EFFORT_CYCLE.length])
+        // The composer's tab, not the active one: they differ when the
+        // composer is bound to General from another view, and the chip you
+        // can see is the one this should move.
+        const id = composerTabRef.current
+        setEfforts((m) => {
+          const now = m[id] ?? DEFAULT_EFFORT
+          return { ...m, [id]: EFFORT_CYCLE[(EFFORT_CYCLE.indexOf(now) + 1) % EFFORT_CYCLE.length] }
+        })
         return
       }
       /* Arrows move the command menu's selection. Handled here rather than
@@ -985,9 +1003,15 @@ export default function App() {
             }
             busy={sessions[composerTab].busy}
             onStop={() => stop(composerTab)}
-            effort={effort}
+            effort={effortOf(composerTab)}
             onCycleEffort={() =>
-              setEffort(EFFORT_CYCLE[(EFFORT_CYCLE.indexOf(effort) + 1) % EFFORT_CYCLE.length])
+              setEfforts((m) => {
+                const now = m[composerTab] ?? DEFAULT_EFFORT
+                return {
+                  ...m,
+                  [composerTab]: EFFORT_CYCLE[(EFFORT_CYCLE.indexOf(now) + 1) % EFFORT_CYCLE.length],
+                }
+              })
             }
         />
       </BottomBar>

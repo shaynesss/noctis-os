@@ -6,7 +6,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { emptyFold, fold, get, readSSE, type WireEvent } from './engine'
-import type { Block } from './domain'
+import { DEFAULT_EFFORT, EFFORT_CYCLE } from './domain'
+import type { Block, Effort } from './domain'
 
 const run = (events: WireEvent[]) => events.reduce(fold, emptyFold())
 
@@ -350,5 +351,38 @@ describe('get', () => {
       () => get('/v2/brief'),
     )
     expect(seen?.signal).toBeInstanceOf(AbortSignal)
+  })
+})
+
+describe('effort defaults', () => {
+  it('falls back to the documented default for a tab nobody has touched', () => {
+    // The chip is per-tab, so most tabs have no entry at all. The fallback is
+    // what they run at, and dev.md asks for `high` -- a default that quietly
+    // costs less is the kind of thing nobody notices is wrong.
+    const efforts: Record<string, Effort> = { t1: 'low' }
+    const effortOf = (id: string): Effort => efforts[id] ?? DEFAULT_EFFORT
+    expect(effortOf('t1')).toBe('low')
+    expect(effortOf('untouched')).toBe('high')
+    expect(DEFAULT_EFFORT).toBe('high')
+  })
+
+  it('cycles one tab without moving another', () => {
+    // The bug the per-tab map exists for: one global dial meant moving the
+    // chip on any tab silently moved it on all of them, pinning a research
+    // session to whatever the last General question happened to want.
+    let efforts: Record<string, Effort> = { a: 'low', b: 'xhigh' }
+    const cycle = (id: string) => {
+      const now = efforts[id] ?? DEFAULT_EFFORT
+      efforts = {
+        ...efforts,
+        [id]: EFFORT_CYCLE[(EFFORT_CYCLE.indexOf(now) + 1) % EFFORT_CYCLE.length],
+      }
+    }
+    cycle('a')
+    expect(efforts.a).toBe('medium')
+    expect(efforts.b).toBe('xhigh')
+    cycle('b')
+    expect(efforts.b).toBe('low')      // wraps past the end
+    expect(efforts.a).toBe('medium')
   })
 })

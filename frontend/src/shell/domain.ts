@@ -164,6 +164,12 @@ export const PERMISSION_TONE: Record<Permission, string> = {
 export const EFFORT_CYCLE = ['low', 'medium', 'high', 'xhigh'] as const
 export type Effort = (typeof EFFORT_CYCLE)[number]
 
+/* What a tab runs at before anyone touches the chip. `high` because that is
+ * what dev.md asks for -- "default high; medium/low for mechanical or
+ * repetitive work" -- and because a default that quietly costs less is the
+ * kind of thing nobody notices is wrong. */
+export const DEFAULT_EFFORT: Effort = 'high'
+
 export const EFFORT_LABEL: Record<Effort, string> = {
   low: 'low',
   medium: 'medium',
