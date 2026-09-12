@@ -136,13 +136,28 @@ describe('activity grid', () => {
   })
 
   it('leaves future days empty and marked', () => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    /* A fixed Wednesday, not `new Date()`. The grid is 53 weeks from
+     * `today - 364 - today.getDay()`, so it ends on the last day of the
+     * current week and there are `6 - getDay()` future cells -- which is
+     * zero on a Saturday. This assertion therefore failed one day in seven,
+     * and did, on 2026-09-12. The grid is right; the test was reading the
+     * clock. */
+    const today = new Date(2026, 8, 9)     // Wed 2026-09-09
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
     const weeks = buildGrid(today, new Map([[iso(tomorrow), 99]]))
     expect(weeks.flat().reduce((n, c) => n + c.count, 0)).toBe(0)
     expect(weeks.flat().some((c) => c.future)).toBe(true)
+  })
+
+  it('has no future cells when today is the last day of the week', () => {
+    /* The Saturday case the test above used to hit by accident. Not a bug:
+     * the week is complete, so there is nothing ahead of today to mark. */
+    const saturday = new Date(2026, 8, 12)
+    expect(saturday.getDay()).toBe(6)
+    const weeks = buildGrid(saturday, new Map())
+    expect(weeks.flat().some((c) => c.future)).toBe(false)
+    expect(weeks.flat().at(-1)!.date.getDate()).toBe(12)
   })
 })
 
