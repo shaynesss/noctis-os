@@ -697,10 +697,17 @@ export default function App() {
   const rememberedAtBoot = useRef<RememberedTab[] | null>(null)
   if (rememberedAtBoot.current === null) rememberedAtBoot.current = recallOpenTabs()
 
-  /* Set once the restore has run, whatever it found. Until then the writer
-   * stays quiet: a slow transcript fetch must not be overtaken by a write
-   * describing the half-built arrangement it is still assembling. */
-  const restored = useRef(false)
+  /* Open once the *arrangement* is settled -- not once the whole restore
+   * has finished. Until then the writer stays quiet, so a slow transcript
+   * fetch is not overtaken by a write describing the half-built arrangement
+   * it is still assembling.
+   *
+   * State rather than a ref, and in the writer's dependencies, for two
+   * reasons. A ref cannot wake the writer, so an arrangement that stopped
+   * changing before the gate opened would never be recorded at all. And
+   * flipping state flushes once immediately, which is what makes the tabs
+   * you opened *during* the restore survive rather than being skipped. */
+  const [restored, setRestored] = useState(false)
 
   /* Remember which tabs are open, so a reload brings them all back.
    *
@@ -709,7 +716,7 @@ export default function App() {
    * where losing the arrangement hurts. By the time anything goes wrong the
    * record is already on disk. */
   useEffect(() => {
-    if (!restored.current) return
+    if (!restored) return
     rememberOpenTabs(
       tabs
         .filter((t) => !t.pinned)
@@ -719,7 +726,7 @@ export default function App() {
           engineId: sessions[t.id]?.engineId,
         })),
     )
-  }, [tabs, sessions])
+  }, [tabs, sessions, restored])
 
   /* Resume the General session on launch.
    *
@@ -806,6 +813,17 @@ export default function App() {
         setDrafts((d) => (tabId in d ? d : { ...d, [tabId]: '' }))
       }
 
+      /* The arrangement is settled here, so recording starts here.
+       *
+       * Not in the `finally` below, which was the bug: that runs after one
+       * recap engine call per restored tab, each taking seconds. For that
+       * whole window -- tens of seconds, or forever if a recap hangs -- every
+       * write was skipped, so tabs opened while the app was warming up were
+       * never recorded and a reload brought back nothing. Recaps only patch
+       * a line of text onto a tab that already exists; they cannot change
+       * which tabs there are. */
+      setRestored(true)
+
       /* Recaps last, and one request per restored tab.
        *
        * After the transcripts rather than interleaved with them: a recap
@@ -829,7 +847,7 @@ export default function App() {
          * those launches -- and the arrangement would stop being recorded
          * from then on, which is the failure this whole mechanism exists to
          * prevent, arrived at from the other side. */
-        restored.current = true
+        setRestored(true)
       }
     })()
     return () => {
