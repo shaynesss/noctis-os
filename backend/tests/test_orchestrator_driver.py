@@ -628,3 +628,55 @@ def test_whitespace_only_text_still_counts_as_a_reply():
         TextDelta(" "), _turn_end(),
     ))))
     assert not events[-1].silent
+
+
+def test_a_turn_that_narrates_then_stops_on_a_tool_is_still_unfinished():
+    """The shape the first version of this missed, and the common one.
+
+    Counting text across the whole turn made any mid-turn narration mark the
+    turn as fine. But whether it spoke earlier says nothing about whether it
+    finished: run six tools with commentary, run a seventh, stop, and what is
+    on screen is "Ran 1 shell command" with no word about what it found.
+    Observed live on 2026-09-12, a day after the narrow fix shipped.
+    """
+    events = asyncio.run(_collect(with_turn_totals(_stream(
+        TextDelta("Now verifying — the original repro and both suites:"),
+        ToolCall(id="1", name="Bash", args={"command": "make test"}),
+        TextDelta("0/24 failures. Now the end-to-end HTTP test:"),
+        ToolCall(id="2", name="Bash", args={"command": "curl ..."}),
+        _turn_end(),
+    ))))
+    end = events[-1]
+    assert not end.silent, "it spoke, so the narrow check cannot catch this"
+    assert end.unclosed, "and it still ended without saying what happened"
+    assert end.text_after_last_tool == 0
+
+
+def test_a_turn_closed_after_its_last_tool_is_finished():
+    events = asyncio.run(_collect(with_turn_totals(_stream(
+        ToolCall(id="1", name="Bash", args={"command": "make test"}),
+        TextDelta("All green: 426 backend, 79 frontend."),
+        _turn_end(),
+    ))))
+    assert not events[-1].unclosed
+
+
+def test_a_turn_with_no_tools_is_never_unclosed():
+    """Plain conversation closes itself. Only a trailing tool call leaves
+    something dangling."""
+    events = asyncio.run(_collect(with_turn_totals(_stream(
+        TextDelta("here you go"), _turn_end(),
+    ))))
+    assert not events[-1].unclosed
+
+
+def test_the_trailing_counter_resets_between_turns():
+    events = asyncio.run(_collect(with_turn_totals(_stream(
+        ToolCall(id="1", name="Bash", args={}), TextDelta("closed properly"),
+        _turn_end(),
+        ToolCall(id="2", name="Bash", args={}),
+        _turn_end(),
+    ))))
+    first, second = [e for e in events if isinstance(e, TurnEnd)]
+    assert not first.unclosed
+    assert second.unclosed

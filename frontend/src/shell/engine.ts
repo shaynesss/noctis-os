@@ -34,6 +34,10 @@ export type WireEvent =
       // A silent turn that was *refused* its tools. Different message, and
       // unlike plain silence it names something you can fix.
       blocked?: boolean; terminal_reason?: string
+      // Ended on a tool call with nothing said about it. Fires far more
+      // often than `silent`, and is what leaves a reader staring at
+      // "Ran 1 shell command" with no conclusion.
+      unclosed?: boolean; text_after_last_tool?: number
       denials?: { tool: string; target: string }[]
       usage: { input: number; output: number; cached: number; model: string
                aux_input: number; aux_output: number
@@ -264,10 +268,16 @@ export function fold(state: Fold, e: WireEvent): Fold {
        * counts it; asking the model to always write something was tried
        * three times and cannot work -- there is no reply to attach a rule
        * to on a turn that has none. */
-      const blocks: Block[] = e.silent
+      /* Two shapes, both worth showing. `silent` is a turn that said
+       * nothing at all; `unclosed` is one that ended on a tool call without
+       * saying what came of it -- which is the common one, and which the
+       * first version of this missed by counting text across the whole turn
+       * rather than after the last tool. */
+      const blocks: Block[] = (e.silent || e.unclosed)
         ? [...state.blocks, {
             kind: 'silent',
             tools: e.tool_calls ?? 0,
+            spoke: !e.silent,
             /* Denials turn "it said nothing" into "it was not allowed to do
              * anything" -- the engine reported these all along. */
             denials: e.denials ?? [],
@@ -319,6 +329,34 @@ export interface Stats {
  * backend being down is the ordinary case during development, and the whole
  * window going white because Stats could not fetch would be a worse failure
  * than an empty panel. */
+/** Why a GET produced no data. `offline` is nothing on the socket; `error` is
+ *  a backend that answered, and said no. */
+export type GetFailure = { ok: false; kind: 'offline' | 'error'; status?: number }
+export type GetResult<T> = { ok: true; data: T } | GetFailure
+
+/** GET a route, distinguishing "could not reach it" from "it returned an error".
+ *
+ * Collapsing the two is how a crashing route came to be reported as an
+ * unreachable backend: ⌘K told you the socket was dead while /v2/search was
+ * up and returning 500 on every concurrent request, which sent the search for
+ * the cause in exactly the wrong direction. Anything that renders a cause to
+ * a person should use this rather than `get`.
+ */
+export async function getResult<T>(path: string): Promise<GetResult<T>> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      headers: { Authorization: `Bearer ${API_TOKEN}` },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!res.ok) return { ok: false, kind: 'error', status: res.status }
+    return { ok: true, data: (await res.json()) as T }
+  } catch {
+    // fetch only throws for a transport failure or the timeout above, so
+    // there is genuinely nothing answering at the other end.
+    return { ok: false, kind: 'offline' }
+  }
+}
+
 export async function get<T>(path: string): Promise<T | null> {
   try {
     const res = await fetch(`${API_BASE}${path}`, {

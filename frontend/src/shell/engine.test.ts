@@ -120,11 +120,29 @@ describe('fold', () => {
     expect(last).toMatchObject({ tools: 3 })
   })
 
+  it('marks a turn that narrated and then stopped on a tool call', () => {
+    // The live 2026-09-12 case: the narrow check counted text across the
+    // whole turn, so mid-turn commentary hid an unexplained trailing tool
+    // call. Whether it spoke earlier says nothing about whether it finished.
+    const s = run([
+      { t: 'text', text: 'Now verifying — the repro and both suites:' },
+      { t: 'tool_call', id: '1', name: 'Bash', summary: 'make test' },
+      { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
+        silent: false, unclosed: true, text_chars: 41, tool_calls: 2,
+        text_after_last_tool: 0,
+        usage: { input: 1, output: 1, cached: 0, model: 'm', aux_input: 0,
+                 aux_output: 0, context_window: 1000 } },
+    ])
+    const last = s.blocks[s.blocks.length - 1]
+    expect(last.kind).toBe('silent')
+    expect(last).toMatchObject({ spoke: true, tools: 2 })
+  })
+
   it('adds nothing when the turn actually replied', () => {
     const s = run([
       { t: 'text', text: 'here you go' },
       { t: 'turn_end', session_id: 'a', duration_ms: 1, stop_reason: null,
-        silent: false, text_chars: 11, tool_calls: 0,
+        silent: false, unclosed: false, text_chars: 11, tool_calls: 0,
         usage: { input: 1, output: 1, cached: 0, model: 'm', aux_input: 0,
                  aux_output: 0, context_window: 1000 } },
     ])

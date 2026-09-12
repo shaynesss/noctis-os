@@ -200,6 +200,12 @@ class TurnEnd:
     stop_reason: str | None = None
     text_chars: int = 0
     tool_calls: int = 0
+    # Text emitted *after the last tool call*, which is a different question
+    # from `text_chars` and the one that actually matters. A turn can narrate
+    # its way through six tools, run a seventh, and stop -- text_chars is
+    # large, the turn read as fine, and what you are left looking at is
+    # "Ran 1 shell command" with no word about what it found.
+    text_after_last_tool: int = 0
     # Why the engine stopped, in its own words -- "completed" on a normal
     # turn, something else when it did not get there.
     terminal_reason: str = ""
@@ -209,8 +215,20 @@ class TurnEnd:
 
     @property
     def silent(self) -> bool:
-        """Ended without saying anything. Worth rendering explicitly."""
+        """Ended without saying anything at all."""
         return self.text_chars == 0
+
+    @property
+    def unclosed(self) -> bool:
+        """Ended on a tool call, with nothing said about it.
+
+        The common shape, and the one the first version of this missed by
+        counting text across the whole turn: narration mid-turn made
+        `silent` false while the reader was still left with an unexplained
+        tool call as the last thing on screen. Whether the turn spoke
+        earlier is irrelevant to whether it finished.
+        """
+        return self.tool_calls > 0 and self.text_after_last_tool == 0
 
     @property
     def blocked(self) -> bool:

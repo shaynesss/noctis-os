@@ -363,9 +363,14 @@ function renderBlock(
               >
                 <div className="flex items-center gap-[7px] px-[11px] py-[7px] text-ink-faint">
                   <span className="h-[5px] w-[5px] rounded-full bg-ink-faint" />
-                  {denied.length > 0 ? 'turn ended blocked' : 'turn ended with no reply'}
+                  {denied.length > 0
+                    ? 'turn ended blocked'
+                    : b.spoke
+                      ? 'turn ended mid-work'
+                      : 'turn ended with no reply'}
                   <span className="text-ink-dim">
-                    · {b.tools} tool {b.tools === 1 ? 'call' : 'calls'}, no text
+                    · {b.tools} tool {b.tools === 1 ? 'call' : 'calls'},{' '}
+                    {b.spoke ? 'nothing said after the last one' : 'no text'}
                   </span>
                 </div>
                 {denied.length > 0 && (

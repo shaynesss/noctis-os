@@ -78,6 +78,12 @@ def to_dict(e: Event) -> dict[str, Any]:
                 # indistinguishable from a crash, a pause, or being done.
                 "text_chars": e.text_chars, "tool_calls": e.tool_calls,
                 "silent": e.silent,
+                # The one that fires most often. A turn can narrate through
+                # six tools, run a seventh and stop: `silent` is false, and
+                # the reader is still left with an unexplained tool call as
+                # the last thing on screen.
+                "unclosed": e.unclosed,
+                "text_after_last_tool": e.text_after_last_tool,
                 # `blocked` is the one that names a cause. A silent turn with
                 # denials on it was not a session declining to answer -- it
                 # was one refused the tools it needed, which is a fixable

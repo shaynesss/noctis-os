@@ -478,14 +478,19 @@ async def with_turn_totals(events: AsyncIterator[Event]) -> AsyncIterator[Event]
     """
     text_chars = 0
     tool_calls = 0
+    since_tool = 0        # text since the most recent tool call
     async for event in events:
         if isinstance(event, TextDelta):
             text_chars += len(event.text)
+            since_tool += len(event.text)
         elif isinstance(event, ToolCall):
             tool_calls += 1
+            since_tool = 0        # anything said before this does not close it
         elif isinstance(event, TurnEnd):
-            event = replace(event, text_chars=text_chars, tool_calls=tool_calls)
-            text_chars = tool_calls = 0   # a run may carry more than one turn
+            event = replace(event, text_chars=text_chars, tool_calls=tool_calls,
+                            text_after_last_tool=since_tool)
+            # A run may carry more than one turn.
+            text_chars = tool_calls = since_tool = 0
         yield event
 
 
