@@ -390,8 +390,60 @@ def test_history_marks_what_cannot_be_resumed(client):
             assert s["resumable"] is False
 
 
+def test_history_can_be_narrowed_before_the_limit_applies(client):
+    """The shell asks for the newest resumable General conversation. Asking
+    for a page and searching it client-side answers a different question: a
+    run of newer rows of another shape hides a session that is still there --
+    which is exactly what test debris in the live database did."""
+    from routers import sessions_v2 as sv2
+
+    wanted = sv2._store.open_session("general", cwd="/tmp", title="the real one")
+    sv2._store.record(wanted, "general", SessionStart(session_id="eng-g", model="m", cwd="/tmp"))
+    for _ in range(30):
+        sv2._store.open_session("general", cwd="/tmp", title="debris")   # no engine id
+
+    body = client.get(
+        "/v2/sessions/history?mode=general&resumable=true&limit=1", headers=AUTH
+    ).json()
+    assert [s["id"] for s in body["sessions"]] == [wanted]
+
+
+def test_history_unfiltered_is_unchanged(client):
+    """The filters are opt-in; the plain call still returns everything."""
+    from routers import sessions_v2 as sv2
+
+    sv2._store.open_session("faber", cwd="/tmp", title="no engine id")
+    body = client.get("/v2/sessions/history?limit=5", headers=AUTH).json()
+    assert any(not s["resumable"] for s in body["sessions"])
+
+
 def test_transcript_404s_for_an_unknown_session(client):
     assert client.get("/v2/sessions/history/999999", headers=AUTH).status_code == 404
+
+
+def test_a_conversation_can_be_found_by_its_engine_id(client):
+    """The shell remembers its tabs by engine id, and matching them against
+    the recent-history page silently dropped any tab whose conversation had
+    fallen off it -- a reload lost the session with no error anywhere."""
+    from routers import sessions_v2 as sv2
+
+    sid = sv2._store.open_session("faber", cwd="/tmp", title="the one")
+    sv2._store.record(sid, "faber", SessionStart(session_id="eng-42", model="m", cwd="/tmp"))
+
+    body = client.get("/v2/sessions/history/by-engine/eng-42", headers=AUTH).json()
+    assert body["id"] == sid
+    assert body["title"] == "the one"
+
+
+def test_an_unknown_engine_id_is_a_404_not_a_422(client):
+    """`/history/{session_id}` takes an int, so a by-engine path reaching it
+    first would answer 422 -- an unhelpful shape for 'no such session'."""
+    r = client.get("/v2/sessions/history/by-engine/nope", headers=AUTH)
+    assert r.status_code == 404
+
+
+def test_history_by_engine_requires_auth(client):
+    assert client.get("/v2/sessions/history/by-engine/eng-42").status_code == 401
 
 
 def test_history_requires_auth(client):

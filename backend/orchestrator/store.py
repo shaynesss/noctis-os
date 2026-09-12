@@ -285,9 +285,34 @@ class ConversationStore:
             "SELECT role, content, meta, created_at FROM messages"
             " WHERE session_id=? ORDER BY id", (session_id,)).fetchall()
 
-    def recent_sessions(self, limit: int = 20) -> list[sqlite3.Row]:
-        return self.db.execute(
-            "SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?", (limit,)).fetchall()
+    def recent_sessions(
+        self, limit: int = 20, mode: str | None = None, resumable_only: bool = False
+    ) -> list[sqlite3.Row]:
+        """The newest conversations, optionally only one mode's and only the
+        ones that can be continued.
+
+        Filtered in SQL rather than by the caller, because the limit applies
+        *before* any filtering a caller could do: the shell asked for twenty
+        rows and looked through them for the newest resumable General
+        session, so a run of twenty newer rows of any other shape hid a
+        session that was there the whole time.
+
+        `resumable_only` matches the flag the route publishes -- an engine id
+        we know, and not a failed spawn -- rather than `resumable()` below,
+        which additionally requires state='done' and so would exclude a
+        conversation cut short by a closed window.
+        """
+        sql = "SELECT * FROM sessions"
+        where, args = [], []
+        if mode:
+            where.append("mode=?")
+            args.append(mode)
+        if resumable_only:
+            where.append("engine_session_id IS NOT NULL AND state != 'failed'")
+        if where:
+            sql += " WHERE " + " AND ".join(where)
+        args.append(limit)
+        return self.db.execute(sql + " ORDER BY started_at DESC LIMIT ?", args).fetchall()
 
     def resumable(self, mode: str | None = None) -> list[sqlite3.Row]:
         sql = ("SELECT * FROM sessions WHERE engine_session_id IS NOT NULL"

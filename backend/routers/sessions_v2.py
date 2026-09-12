@@ -340,13 +340,18 @@ def stats() -> dict:
 
 
 @router.get("/history")
-def history(limit: int = 25) -> dict:
+def history(limit: int = 25, mode: str | None = None, resumable: bool = False) -> dict:
     """Past conversations, newest first.
 
     The shell reads this on launch, so closing the window stops losing work.
     Sessions the engine can still resume are marked: a conversation whose
     engine id we never learned (it died on spawn) is history you can read but
     not continue, and the two must not look alike.
+
+    `mode` and `resumable` narrow it before the limit applies, which is the
+    only way to ask "the newest General conversation I can continue" and get
+    an answer. Filtering the page client-side cannot: the limit has already
+    chosen the rows.
     """
     return {
         "sessions": [
@@ -361,9 +366,28 @@ def history(limit: int = 25) -> dict:
                 "started_at": r["started_at"],
                 "ended_at": r["ended_at"],
             }
-            for r in _store.recent_sessions(limit=limit)
+            for r in _store.recent_sessions(limit=limit, mode=mode, resumable_only=resumable)
         ]
     }
+
+
+@router.get("/history/by-engine/{engine_id}")
+def transcript_by_engine(engine_id: str) -> dict:
+    """The same conversation, found by the id the *engine* knows it as.
+
+    The shell remembers an arrangement of tabs by engine id, because that is
+    the id it holds for a live session and the one `--resume` takes. Turning
+    that back into a conversation used to mean scanning the recent-history
+    page and matching -- so a tab opened before the last 25 rows was simply
+    not found, and a reload quietly dropped it. A lookup has no window.
+
+    Declared above the `{session_id}` route: that one takes an int, and
+    `by-engine` reaching it first would be a 422 rather than this.
+    """
+    row_id = _store.find_by_engine_id(engine_id)
+    if row_id is None:
+        raise HTTPException(status_code=404, detail=f"No session for engine id {engine_id}")
+    return transcript(row_id)
 
 
 @router.get("/history/{session_id}")

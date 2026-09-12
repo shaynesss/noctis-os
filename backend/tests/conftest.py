@@ -91,3 +91,38 @@ def client(vault):
 @pytest.fixture
 def auth_headers():
     return {"Authorization": f"Bearer {TEST_TOKEN}"}
+
+
+@pytest.fixture(autouse=True)
+def _isolated_history_db(tmp_path_factory, monkeypatch):
+    """Keep the suite out of the real `backend/data/history.db`.
+
+    `routers/sessions_v2.py` builds its `ConversationStore` at import time
+    against the live database, so every test that POSTs `/v2/sessions` opened
+    a real conversation row in the history the app reads. Found 2026-09-12:
+    134 of the 158 `general` rows on this machine were test launches --
+    "what is this?", one message, no engine id -- and because they were the
+    newest rows, the shell's restore looked for the most recent *resumable*
+    General session, found only test debris in the window it reads, and gave
+    up before restoring any tab at all. A reload brought back nothing, and
+    the cause was not in the restore code.
+
+    Same shape as the busy-marker fixture above, and for the same reason:
+    autouse, so isolation is the default rather than something each test
+    author has to remember. Tests that build their own store still do.
+
+    Its own directory rather than `tmp_path`, because an autouse fixture
+    shares that directory with the test using it -- and a database dropped
+    there is a file the test did not put there. `test_log_action_no_mode_is_noop`
+    asserts `tmp_path` is empty, and duly failed on the WAL files.
+    """
+    data = tmp_path_factory.mktemp("history")
+    from orchestrator import store as store_mod
+    from routers import search as search_mod
+    from routers import sessions_v2 as sv2
+
+    # For the routers that construct a store per call (panels, brief).
+    monkeypatch.setattr(store_mod, "DATA_DIR", data / "data")
+    # And for the two that built theirs at import, against the live file.
+    monkeypatch.setattr(sv2, "_store", store_mod.ConversationStore(data / "history.db"))
+    monkeypatch.setattr(search_mod, "_store", store_mod.ConversationStore(data / "history.db"))

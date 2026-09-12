@@ -728,7 +728,7 @@ export default function App() {
     )
   }, [tabs, sessions, restored])
 
-  /* Resume the General session on launch.
+  /* Reopen what was open: the General session, and every other tab.
    *
    * One long-running General session that carries many tasks, not a tab per
    * conversation. Restoring four made the strip a graveyard of every prompt
@@ -736,36 +736,57 @@ export default function App() {
    *
    * So General is continuous: it reopens the most recent General
    * conversation and keeps going, which is what makes it the front door
-   * rather than a scratch pad that resets. Everything else stays in history,
-   * reachable by search.
+   * rather than a scratch pad that resets. Everything else comes back from
+   * the remembered arrangement -- the tabs you actually had -- and anything
+   * else stays in history, reachable by search.
    */
   useEffect(() => {
     let live = true
     void (async () => {
       try {
-      const listed = await get<{ sessions: HistorySession[] }>('/v2/sessions/history?limit=20')
-      if (!live || !listed) return
-      const latest = listed.sessions.find((s) => s.mode === 'general' && s.resumable)
-      if (!latest) return
-      const full = await get<HistoryTranscript>(`/v2/sessions/history/${latest.id}`)
-      if (!live || !full || full.blocks.length === 0) return
-      setSessions((prev) => ({
-        ...prev,
-        t0: {
-          ...prev.t0,
-          blocks: full.blocks,
-          cwd: latest.cwd ?? prev.t0.cwd,
-          engineId: latest.engine_id ?? undefined,
-        },
-      }))
+      /* Asked for by mode and resumability rather than filtered here.
+       *
+       * A page of the twenty newest rows, searched afterwards for the newest
+       * resumable General session, answers the wrong question: the limit has
+       * already chosen the rows, so twenty newer rows of another shape hide
+       * a session that is still there. On this machine they were exactly
+       * that -- unresumable `general` rows the test suite had written into
+       * the live database -- and General came back empty with nothing
+       * anywhere saying why. */
+      const general = await get<{ sessions: HistorySession[] }>(
+        '/v2/sessions/history?mode=general&resumable=true&limit=1',
+      )
+      if (!live) return
 
-      /* Fetched after the transcript, not with it. Generating a recap costs
-       * an engine call and takes seconds; blocking the restored conversation
-       * on it would trade the thing you came back for against the sentence
-       * describing it. */
-      const r = await get<{ recap: string | null }>(`/v2/sessions/history/${latest.id}/recap`)
-      if (live && r?.recap) {
-        setSessions((prev) => ({ ...prev, t0: { ...prev.t0, recap: r.recap } }))
+      /* General first, and in its own block.
+       *
+       * Its own block because it used to be the same one: three `return`s
+       * covering "no resumable General session" and "its transcript is
+       * empty" sat above the loop that restores every other tab, so a
+       * machine whose General history was missing or unreadable came back
+       * with *nothing* -- not General-minus-one, no tabs at all. The thing
+       * that actually made it happen was debris: the backend test suite ran
+       * against the live history database and filled the recent rows with
+       * unresumable `general` launches, so the search above found none, and
+       * five real sessions went with it. The debris is fixed where it was
+       * made; this is the coupling that turned it into total loss, and it is
+       * wrong whatever puts General out of reach.
+       */
+      const latest = general?.sessions[0]
+      if (latest) {
+        const full = await get<HistoryTranscript>(`/v2/sessions/history/${latest.id}`)
+        if (!live) return
+        if (full && full.blocks.length > 0) {
+          setSessions((prev) => ({
+            ...prev,
+            t0: {
+              ...prev.t0,
+              blocks: full.blocks,
+              cwd: latest.cwd ?? prev.t0.cwd,
+              engineId: latest.engine_id ?? undefined,
+            },
+          }))
+        }
       }
 
       /* And every other tab that was open, not just one.
@@ -781,21 +802,37 @@ export default function App() {
        * the failure the single-tab version was itself a reaction to. A
        * machine with nothing remembered still gets the old behaviour, one
        * conversation beside General, so a fresh install is unchanged.
+       *
+       * Looked up by engine id rather than matched against the history page
+       * fetched above. Matching meant a tab whose conversation had fallen
+       * past the twentieth most recent row could not be found at all, and
+       * was dropped silently -- the window is a display limit and had no
+       * business deciding what comes back.
        */
       const remembered = rememberedAtBoot.current ?? []
-      const byEngine = new Map(
-        listed.sessions.filter((h) => h.engine_id).map((h) => [h.engine_id, h]),
+      let paths: string[] = remembered.map(
+        (t) => `/v2/sessions/history/by-engine/${t.engineId}`,
       )
-      const wanted = remembered.length
-        ? remembered.map((t) => byEngine.get(t.engineId!)).filter(Boolean)
-        : [listed.sessions.find((h) => h.mode !== 'general' && h.resumable)].filter(Boolean)
-
-      for (const beside of wanted as HistorySession[]) {
+      if (!remembered.length) {
+        // Nothing remembered: a fresh install, or a window that has never
+        // been reloaded. The old behaviour, one conversation beside General.
+        const recent = await get<{ sessions: HistorySession[] }>(
+          '/v2/sessions/history?resumable=true&limit=20',
+        )
         if (!live) return
-        const asideFull = await get<HistoryTranscript>(`/v2/sessions/history/${beside.id}`)
-        if (!live || !asideFull || asideFull.blocks.length === 0) continue
+        const fallback = recent?.sessions.find((h) => h.mode !== 'general')
+        paths = fallback ? [`/v2/sessions/history/${fallback.id}`] : []
+      }
 
-        const tabId = `h${beside.id}`
+      const restoredIds: number[] = []
+      for (const path of paths) {
+        if (!live) return
+        const asideFull = await get<HistoryTranscript>(path)
+        if (!live) return
+        if (!asideFull || asideFull.blocks.length === 0) continue
+
+        const tabId = `h${asideFull.id}`
+        restoredIds.push(asideFull.id)
         setTabs((ts) => (ts.some((t) => t.id === tabId) ? ts : [...ts, {
           id: tabId, mode: asideFull.mode,
           label: `${MODE_LABEL[asideFull.mode]} · ${truncate(asideFull.title)}`,
@@ -824,16 +861,19 @@ export default function App() {
        * which tabs there are. */
       setRestored(true)
 
-      /* Recaps last, and one request per restored tab.
+      /* Recaps last, one request per restored tab, General included.
        *
        * After the transcripts rather than interleaved with them: a recap
        * costs an engine call and takes seconds, and blocking the thing you
-       * came back for on the sentence describing it is the wrong trade --
-       * the same reason General's recap is fetched after its transcript. */
-      for (const beside of wanted as HistorySession[]) {
+       * came back for on the sentence describing it is the wrong trade.
+       * General's used to be fetched between its own transcript and the
+       * other tabs', which put exactly that wait in front of every other
+       * conversation you had open. */
+      const recaps: [string, number][] = latest ? [['t0', latest.id]] : []
+      for (const id of restoredIds) recaps.push([`h${id}`, id])
+      for (const [tabId, id] of recaps) {
         if (!live) return
-        const tabId = `h${beside.id}`
-        const ar = await get<{ recap: string | null }>(`/v2/sessions/history/${beside.id}/recap`)
+        const ar = await get<{ recap: string | null }>(`/v2/sessions/history/${id}/recap`)
         if (live && ar?.recap) {
           setSessions((prev) => patchEntry(prev, tabId, (p) => ({ ...p, recap: ar.recap })))
         }
@@ -841,11 +881,11 @@ export default function App() {
       } finally {
         /* On every path, including the early returns above.
          *
-         * This body returns early for a backend that is down, a history with
-         * nothing resumable, and an empty transcript. If the flag only set on
-         * the happy path, the writer would stay silent forever on exactly
-         * those launches -- and the arrangement would stop being recorded
-         * from then on, which is the failure this whole mechanism exists to
+         * This body returns early for a backend that is down and for a
+         * window that closed mid-restore. If the flag only set on the happy
+         * path, the writer would stay silent forever on exactly those
+         * launches -- and the arrangement would stop being recorded from
+         * then on, which is the failure this whole mechanism exists to
          * prevent, arrived at from the other side. */
         setRestored(true)
       }
