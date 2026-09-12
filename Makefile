@@ -18,13 +18,18 @@ bootstrap:
 #
 # `tsc -b --watch` closes that: the error appears in this terminal the moment
 # it is written, named and located, whether or not an editor is open on the
-# file. Prefixed so three interleaved streams stay readable. It never blocks
-# anything -- it only reports.
+# file. It never blocks anything -- it only reports.
+#
+# Prefixed through `awk` with an explicit `fflush()`, not `sed`. sed writing
+# to anything but a terminal is fully buffered, so its output sits in a 4KB
+# block until the process exits -- fine when you run `make dev` yourself and
+# invisible everywhere else, which is how this shipped silent and looked like
+# a watcher that was not running. It was running and saying nothing.
 dev:
 	@trap 'kill 0' EXIT; \
 	(cd backend && .venv/bin/uvicorn main:app --reload --reload-exclude 'runtime/*' --reload-exclude 'data/*' --port $${PORT:-8000}) & \
 	(cd frontend && npm run dev) & \
-	(cd frontend && npx tsc -b --watch --preserveWatchOutput 2>&1 | sed 's/^/[tsc] /') & \
+	(cd frontend && npx tsc -b --watch --preserveWatchOutput 2>&1 | awk '{print "[tsc] " $$0; fflush()}') & \
 	wait
 
 # The suite has always been run by typing the venv's interpreter path out in
