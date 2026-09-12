@@ -1,16 +1,12 @@
-<p align="center">
-  <img src="assets/readme/realhero.jpg" alt="Noctis OS world screen — five pixel-art characters (Faber/Dev, Noctua/Learn, Vesper/Research, Custos/Settings, Echo/Nightshift) standing on a cloud-bed backdrop at dusk, each labeled with its name and mode" width="100%" />
-</p>
-
 <h1 align="center">Noctis OS</h1>
 
 <p align="center">
-  A harness that shapes how Claude works for me — five modes, one compounding knowledge graph.
+  A desktop client for Claude Code, shaped around five modes and one compounding vault.
 </p>
 
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />
-  <img alt="status" src="https://img.shields.io/badge/status-v1.5%20shipped-brightgreen.svg" />
+  <img alt="status" src="https://img.shields.io/badge/v2-mid--build-orange.svg" />
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS-black.svg" />
 </p>
 
@@ -18,90 +14,129 @@
 
 ## What this is
 
-Noctis OS is a harness that shapes how Claude works for me: five modes — build, learn, research, maintain, and an overnight auditor — that all read and write into one compounding knowledge graph, instead of five disconnected chats that each start from zero. It's loosely inspired by Andrej Karpathy's pattern of an LLM-maintained wiki: a durable, structured store that sessions read from and write back into, rather than context that evaporates when the chat closes.
+Noctis OS **hosts** Claude Code sessions rather than launching them somewhere else. It drives the CLI as a subprocess, streams its output into its own transcript, and gives each session a **mode** — a methodology, a job context, and a set of subagents, all read from and written back to one markdown vault.
 
-It's deliberately never a finished system. The mode boundary is there so new modes, tools, and models can keep getting absorbed as the space moves, without the whole thing needing a rewrite each time something changes — the same reason it's a harness and not a fixed app.
+Five modes, and they differ by *method*, never by capability:
 
-Concretely: a persistent pixel-art "world" with five characters idling on a dusk backdrop (the screenshot above is the real thing, not a mockup). Each character is a mode with its own methodology, working context, and subagents, all reading and writing the same vault. Click one, see its live state (what's in flight, what's overdue, what's staged for review), and hit launch — that spins up a real Claude Code session in the right surface (VS Code for building, a color-tinted Terminal window for everything else) with that mode's methodology, lessons, and current job context already loaded.
-
-| Character | Mode | What it's for |
+| Mode | For | Model |
 |---|---|---|
-| <img src="assets/characters/faber.png" width="40"> **Faber** | Dev — *build* | Spec → build → ship, the full process gate (plan, implement, review, deploy) |
-| <img src="assets/characters/noctua.png" width="40"> **Noctua** | Learn | Structured study sessions with spaced review |
-| <img src="assets/characters/vesper.png" width="40"> **Vesper** | Research | Sourcing, credibility-checking, and synthesizing findings into durable notes |
-| <img src="assets/characters/custos.png" width="40"> **Custos** | Settings — *maintain* | Health checks, drift audits, and staged methodology changes for the other four modes |
-| <img src="assets/characters/echo.png" width="40"> **Echo** | Nightshift — *auditor* | Scheduled, propose-only overnight runs — reviewed and accepted/rejected by hand the next morning |
+| **General** | Questions, comparisons, anything unscoped | Opus 5 |
+| **Faber** | Build: spec, implement, ship | Opus 5 |
+| **Noctua** | Learn: read closely, explain, retain | Opus 5 |
+| **Vesper** | Research: gather, weigh, return a verdict | Opus 5 |
+| **Maintenance** | Audit the vault and propose repairs | Haiku 4.5 |
 
-I use it daily. It's a single-user, single-machine tool — there's no deployment story here by design (see [Architecture](#architecture)). I built it because I was running enough different kinds of Claude Code sessions that "which context do I need to load this time" had become its own daily chore, and wanted mode-switching to be a click instead of a memory exercise. It improves itself over time through proposals I review — never silent changes (see [Two-tier self-improvement](#highlights) below).
+It runs on an existing Claude subscription with no API billing — a constraint that shapes the whole architecture. Single-user, single-machine, public as a working example of the architecture rather than as something to deploy.
 
-## Where this came from
+## Why it exists
 
-Before Noctis OS, I had one universal `CLAUDE.md` — a single build process file (internally called the "build-spine") that every Claude Code session read, regardless of whether I was actually building software, reading a paper, or triaging settings. It worked fine for dev work and was actively wrong for everything else: a research session would load an entire spec/plan/ship pipeline it had no use for.
+Before this, a single universal `CLAUDE.md` — a build process — was read by every session, whether the work was building software, reading a paper, or triaging notes. Correct for dev, actively wrong for everything else: a research session loaded an entire spec-and-ship pipeline it had no use for.
 
-The migration was to generalize that one file into five: `build-spine.md` became `modes/dev/dev.md`, and four siblings (`learn.md`, `research.md`, `settings.md`, `nightshift.md`) were written alongside it, each its own methodology rather than a cut-down copy of the dev process. The mechanism that makes this stick per-session is `--append-system-prompt`: every launch passes its own mode's methodology as text. It used to be `CLAUDE_CONFIG_DIR`, pointing the non-dev modes at a private config root — which kept Dev's methodology out but took the plugins, skills, subagents, MCP servers and accumulated permissions with it, since all of those live in the config root too. The global `CLAUDE.md` is the universal prompt now rather than Dev's, so isolation costs nothing and every session gets the full toolkit. One process file turned into five, each addressable independently, without touching how the others load.
+**v1** solved that by generalising one process file into five and launching each mode into a separate surface — VS Code for dev, a colour-tinted Terminal window for the rest — then reading state back from the vault. Fire-and-forget: the interface could start a session and watch its telemetry, but never see the conversation.
 
-## Highlights
+**v2 is the consequence.** Launching *into* other applications meant Claude Desktop stayed the real entry point, and three things were impossible by construction: live session monitoring, cross-mode search, and durable conversation history. So the app hosts sessions itself.
 
-- **Per-mode methodology injection.** Every launch assembles that mode's process file + its accumulating lessons file + the specific job's working context into one preloaded session — the orchestration layer that makes each character behave differently. Passed in the argv (`--append-system-prompt`), never inherited from a config file, so identity is a property of the launch rather than of the machine.
-- **Every session gets the full toolkit.** Sessions run against the real `~/.claude`, so they inherit installed plugins, skills, subagents, MCP servers, accumulated permissions and memory. Modes differ by methodology, never by capability: a mode handed work it cannot perform ends its turn with nothing done and no way to say so.
-- **A capability contract.** Each mode declares what its methodology assumes it can reach; the harness reports what it actually has; `make doctor` prints the gap. Built because `dev.md` mandated seven tools no session could reach — for months, silently.
-- **Refusals and silence are visible events.** A turn that ends with tool calls and no text renders as *"turn ended with no reply"*, and one that was refused its tools renders as *"turn ended blocked"* with the refusals named. A blank transcript used to be indistinguishable from a crash.
-- **A markdown vault as the only database.** No Postgres, no ORM, no migrations. The backend reads and writes frontmatter'd markdown files directly; state is always inspectable and versionable with plain git.
-- **Two-tier self-improvement.** Sessions freely append to a mode's lessons file with no gate (the automatic, low-stakes tier). Periodically, Custos digests those lessons and drafts a *proposed* diff to a mode's actual methodology file, staged for manual accept/reject — no mode ever silently rewrites its own process.
-- **Fire-and-forget session telemetry.** A Claude Code hook appends one line per tool call to a per-job log; the interface polls it and shows a live "what's it doing right now" strip under each in-flight job — without the interface ever trying to control or interrupt a running session.
-- **A propose-only overnight worker.** Nightshift runs on a schedule, drafts into a staging inbox, and never commits anything itself — every proposal gets reviewed and explicitly accepted or rejected.
-- **Design Lodge.** A vault-native, browsable/editable catalog of design assets (components, layouts, palettes, typography, icons, animation patterns) — cross-project, seeded from what's already shipped, checked before Faber reaches for anything new during Plan or Build. A quick-capture inbox (paste a link + a note) gets opportunistically sorted the next time a dev session starts, no context-switch required to file something properly.
-- **The hero image above is a real screenshot**, not a mockup or a composite — that's the actual world screen, live backend state and all.
-
-## Architecture
-
-Two local processes and a filesystem — nothing deployed, nothing multi-tenant:
+## How it works
 
 ```mermaid
 flowchart LR
-    subgraph Browser
-        UI[React / Vite<br/>world + profile overlay]
+    subgraph Shell[Tauri shell · React]
+        UI[Transcript · tabs · palette]
     end
 
-    subgraph Backend[FastAPI backend]
-        API[REST API<br/>bearer-token + Origin auth]
-        Launcher[Session launcher]
-        Hooks[Telemetry hook receiver]
+    subgraph Backend[FastAPI]
+        Orch[Orchestrator<br/>spawn · stream · resume]
+        MCP[Noctis MCP server]
+        Store[(SQLite FTS5<br/>history + index)]
     end
 
     Vault[(Vault<br/>markdown + frontmatter)]
-    Nightshift[Nightshift<br/>launchd, nightly]
+    CC[claude -p<br/>stream-json]
 
-    UI <-->|poll mode/job state| API
-    API <--> Vault
-    UI -->|launch| Launcher
-    Launcher -->|VS Code| Dev[Dev session]
-    Launcher -->|tinted Terminal.app| Other[Learn / Research /<br/>Settings / Nightshift session]
-    Dev -->|PostToolUse hook| Hooks
-    Other -->|PostToolUse hook| Hooks
-    Hooks --> Vault
-    Nightshift -->|propose only| Vault
+    UI <-->|SSE on POST| Orch
+    Orch -->|argv: methodology, agents,<br/>effort, permissions| CC
+    CC -->|events| Orch
+    CC <-->|tools + prompts| MCP
+    MCP <--> Vault
+    Orch <--> Store
+    Store -.->|promote| Vault
 ```
 
-- **Backend** — FastAPI, fully stateless. No ORM, no migrations; every endpoint reads or writes vault files on disk and returns state. Auth is bearer-token + Origin checking on every route except `/health`.
-- **Frontend** — React + Vite + TypeScript + Tailwind. Polls mode/job state every 15s and renders it as ambient badges — no invented UI-only state, everything shown is a rendering of something the vault already tracks.
-- **Vault** — a folder of markdown files with YAML frontmatter, one folder per mode (`modes/<name>/{<name>.md, lessons.md, state.md, jobs/, agents/}`). This is the single source of truth; the backend never holds state the vault doesn't also have. No database also means no migration story to worry about: moving to a new machine is clone the repo, point `VAULT_PATH` at the vault, `make setup` — not a project.
-- **Session launcher** — Dev opens VS Code; the other four open a character-tinted `Terminal.app` window. Neither redirects the config root: each passes its own methodology and subagents as flags, so every session inherits the real `~/.claude` and the tools installed there.
-- **Telemetry** — a Claude Code `PostToolUse` hook appends one line per tool call to a per-job runtime log (not the vault — high-churn, ephemeral, gitignored). The interface tails that log for the live action strip.
-- **Nightshift** — a `launchd`-scheduled job that proposes work into a staging inbox only. Nothing it produces is committed without a human explicitly accepting it in Echo's profile overlay.
-- **Desktop wrapper** — `desktop/NoctisOS.app` is a real double-clickable macOS app (`pywebview`), but a thin window around the same live source — a code change just needs the app's own Refresh command, never a rebuild.
+**The orchestrator** spawns `claude -p --output-format stream-json`, parses the stream into a normalised event union, and streams that to the shell. Two concurrent sessions, queued rather than refused — the cap is a budget on the 5-hour window, not a resource limit. Sessions resume by engine session id, so a follow-up turn continues the same conversation and closing the window loses nothing.
+
+**A mode is passed in, never inherited.** Its methodology travels in the argv via `--append-system-prompt`, its subagents via `--agents`, its permissions and telemetry hooks via `--settings`. Nothing per-mode is written to disk, so two sessions of one mode cannot race on a config file — and an edited methodology reaches a session that is already running.
+
+**Sessions run against the real `~/.claude`.** They inherit every installed plugin, skill, subagent, MCP server, accumulated permission and memory — the same surface an ordinary Claude Code session has. This was not true until September 2026, and the difference was large: see [What changed](#what-changed).
+
+**The Noctis MCP server** serves both MCP primitives. `tools/*` gives retrieval — `vault_search`, `history_search`, `job_context`, `worklist`, `propose` — over BM25 via SQLite FTS5, measured at 80% recall@20. `prompts/*` gives *identity*: `enter_faber` and its siblings load a mode's methodology and job context. Dependency-free stdio JSON-RPC, so any MCP client can speak to it.
+
+**The vault is the only database** for anything durable — a folder of markdown files with YAML frontmatter, one directory per mode. No ORM, no migrations; moving machines is clone, point `VAULT_PATH`, `make setup`. SQLite holds conversation history and the search index: machine state, deliberately not vault state, with an explicit `promote()` for anything that earns a place in the vault.
+
+## What v2 does that v1 could not
+
+- **Live transcripts.** Every turn renders as it streams — text, tool calls with their targets, thinking-token counts during a pause, real usage against the subscription window.
+- **Durable history.** Conversations restore on launch. `⌘K` searches across every mode's history.
+- **Mode entry and handoff.** `⌘T` opens a session in any mode; `⌘⇧H` hands the current one over, carrying a summary rather than the transcript — the new session gets what it needs, not everything that came before.
+- **Effort as a control.** The composer chip cycles `low`/`medium`/`high`/`xhigh`, applied to the next turn — which is immediate, since every turn is its own spawn.
+- **Permission requests you can answer.** A request surfaces as a dialog in the app and waits for a decision.
+- **Silence and refusal are visible.** A turn ending with tool calls and no text renders as *"turn ended with no reply"*; one refused its tools renders as *"turn ended blocked"*, with the refusals named. A blank transcript used to be indistinguishable from a crash.
+- **A capability contract.** Each mode declares what its methodology assumes it can reach, the harness reports what it actually has, and `make doctor` prints the gap.
+
+## What carries over from v1
+
+Still running, unchanged in intent:
+
+- **Two-tier self-improvement.** Sessions append freely to a mode's `lessons.md`, no gate. Periodically, maintenance digests those lessons and drafts a *proposed* diff to the methodology itself, staged for manual accept or reject. No mode silently rewrites its own process.
+- **A propose-only overnight worker.** Runs on `launchd`, drafts into a staging inbox, commits nothing. Every proposal is accepted or rejected by hand.
+- **Design Lodge.** A vault-native catalog of design assets — components, palettes, typography, motion — checked before Faber reaches for anything new, with a quick-capture inbox sorted opportunistically at the start of a dev session.
+- **Telemetry hooks.** One line per tool call to a per-job runtime log (gitignored, not vault content), plus a session-end hook that clears the busy flag.
+
+<p align="center">
+  <img src="assets/readme/realhero.jpg" alt="Noctis OS v1 world screen — five pixel-art characters on a dusk backdrop, each labeled with its name and mode" width="100%" />
+  <br/>
+  <em>v1's world screen — a real screenshot, and now the launcher rather than the app. v2's shell is a transcript; a screenshot of it is owed.</em>
+</p>
+
+## What changed
+
+The architecture through mid-2026 differed from what is here now. If you are reading older commits or docs, this is the delta:
+
+| Was | Is |
+|---|---|
+| Sessions launched into VS Code and Terminal.app, state read back from the vault | The app hosts sessions and streams them into its own transcript |
+| Each mode had its own `CLAUDE_CONFIG_DIR` under `backend/launch_config/` | No redirect anywhere. Sessions use the real `~/.claude`, inheriting plugins, skills, subagents, MCP servers, permissions and memory |
+| A mode's methodology was written into that dir's `CLAUDE.md` on every launch | Passed per launch via `--append-system-prompt`. Nothing per-mode on disk, so concurrent sessions cannot race |
+| `~/.claude/CLAUDE.md` symlinked to `modes/dev/dev.md` | Symlinks to `prompts/system.md`. The config root is infrastructure, never an identity — the old symlink made the machine itself Faber and leaked the build process into every other mode |
+| Per-mode tool cages (`--disallowedTools`) restricted research and maintenance | Every mode gets the same tools. `git push` stays denied for all of them |
+| Permission prompts were emitted with nothing attached to answer them | Answered by the Noctis MCP server, surfaced as a dialog |
+| The composer chip cycled the permission mode | It cycles effort, which `dev.md` had specified since it was written while no code passed `--effort` |
+| The MCP server was built but never attached to a spawn | Attached to every spawn; `vault_search` and the `enter_<mode>` prompts are reachable |
+| Five characters, Custos and Echo among them | Settings and Nightshift collapsed into root-level `maintenance/` — infrastructure rather than a mode — and General was added |
+| `make test` ran backend tests only | Runs backend, frontend typecheck and frontend tests. `make doctor` reports what is up, what is down, and any capability gaps |
+
+Reasoning for each is in [`CHANGELOG.md`](CHANGELOG.md) and the commit messages.
+
+## Portability
+
+"Workflow agnostic" here means something specific: **not that everything survives a move to another harness, but that a move states what it costs.**
+
+- **Portable because it is text** — the methodology, mode overlays, agent definitions, the vault.
+- **Portable because MCP is the standard** — retrieval *and* mode-loading both travel over `tools/*` and `prompts/*`. Any MCP client gets them.
+- **Not portable** — permissions, hooks, spawn flags, event-stream shape. Confined to three files under the `orchestrator/events.py` seam.
+
+`python -m capabilities --migrate` emits a brief describing that third tier as *intent* rather than as settings, for an agent in another harness to act on. A multi-harness adapter is deliberately deferred: there is one harness, and an abstraction with a single implementation encodes guesses about the second rather than knowledge of it. See the *Harness portability* section of [`SPEC.md`](SPEC.md).
 
 ## Tech stack
 
 | Layer | Choice |
 |---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS 4 |
+| Shell | Tauri 2, React 19, TypeScript, Vite, Tailwind CSS 4 |
 | Backend | FastAPI, Python 3.11, `python-frontmatter` |
-| Storage | Flat markdown + YAML frontmatter (no database) |
-| Desktop shell | `pywebview` |
+| Session runtime | [Claude Code](https://claude.com/claude-code) CLI, driven as a subprocess |
+| Durable state | Flat markdown + YAML frontmatter (the vault) |
+| History + search | SQLite FTS5 (BM25), no added dependencies |
 | Scheduling | macOS `launchd` |
-| Session runtime | [Claude Code](https://claude.com/claude-code) (CLI), driven via its hooks and per-session config |
-| Testing | `pytest` (backend, 37+ tests covering auth, vault I/O, and every router) |
+| Testing | `pytest` + `vitest` + `tsc -b`, all via `make test` |
 
 ## Running it locally
 
@@ -110,95 +145,54 @@ Requires macOS, Python 3.11+, Node 18+, and the [Claude Code CLI](https://claude
 ```bash
 git clone https://github.com/shaynesss/noctis-os.git
 cd noctis-os
-make setup     # installs backend + frontend deps, copies .env.example -> .env
+make setup     # backend + frontend deps, .env.example -> .env
 ```
 
-Fill in `.env` — `VAULT_PATH` (absolute path to a vault folder on your machine) and `NOCTIS_API_TOKEN` (any local secret string; it just has to match between backend and frontend).
+Fill in `.env` — `VAULT_PATH` (absolute path to your vault) and `NOCTIS_API_TOKEN` (any local secret; it only has to match between backend and frontend).
 
 ```bash
-make dev       # backend (FastAPI, :8000) + frontend (Vite, :5180, pinned), browser tab
-make open-app  # same thing, opened as a native macOS window instead
+make dev       # backend :8000 + frontend :5180
+make doctor    # what is up, what is down, and any capability gaps
+make test      # pytest + tsc -b + vitest
 ```
 
-See [`SETUP.md`](SETUP.md) for the one-time machine checklist (Claude Code login, the nightshift `launchd` job, and a VS Code setting the Dev launch surface needs).
+See [`SETUP.md`](SETUP.md) for the one-time machine checklist.
 
-> **Heads up:** this is a genuinely single-user tool — the vault path, launch surfaces, and mode folders all assume it's pointed at *your* Claude Code setup on *your* machine. It's public as a working example of the architecture, not as something meant to run multi-tenant or be deployed anywhere.
+> **Heads up:** genuinely single-user. The vault path and mode folders assume they point at *your* Claude Code setup on *your* machine.
 
 ## Project layout
 
 ```
 noctis-os/
-├── backend/          FastAPI app — routers, auth, vault I/O, hooks, tests
-├── frontend/          React/Vite app — world screen, profile overlays
-├── desktop/           pywebview native-window wrapper
-├── assets/            Character sprites + world backdrop (source of truth for both apps)
-├── launchd/            Nightshift's scheduled-job plist
-├── scripts/            setup.sh, nightshift_run.sh
-├── SPEC.md            Full spec: Definition / PRD / Technical Design / Design Brief
-├── STATUS.md          Live build state — what's shipped, what's smoke-tested
-└── SETUP.md           One-time machine setup checklist
+├── backend/
+│   ├── orchestrator/    Spawn, stream, parse, resume — driver, events, parser, store
+│   ├── mcp/             Noctis MCP server (stdio JSON-RPC, dependency-free)
+│   ├── retrieval/       BM25 index over the vault, measured
+│   ├── routers/         REST + SSE endpoints
+│   ├── prompts/         Composes system.md + mode overlay + job context
+│   ├── capabilities.py  What each mode needs vs. what the harness has
+│   └── jobs.py          Mode → vault paths, job lookup
+├── frontend/src/shell/  The v2 client — transcript, tabs, palette, panels
+├── frontend/src-tauri/  Native shell
+├── assets/              Character sprites (source of truth for both apps)
+├── SPEC.md              Definition / PRD / Technical Design / Design Brief
+├── STATUS.md            Live build state, non-aspirational
+└── CHANGELOG.md         What changed when, and why
 ```
 
 ## Status
 
-**v1.5.2 is shipped and is the working system. v2 is mid-build.**
+**v1.5.2 is shipped and still the working system. v2 is mid-build.**
 
-v1.5 wired all five modes to real vault reads/writes, launched sessions into
-VS Code and tinted Terminal windows, streamed live telemetry into the
-interface, and added **Design Lodge** — a vault-native catalog of design
-assets, cross-project and seeded from what has already shipped.
+Stage 1 complete. Stage 2: items 1–5 and 7 done and verified live; item 6 done except its `launchd`-on-wake scheduler; item 8 needs a definition before it can be built; item 9 (maintenance migration) is unblocked and not started.
 
-**v2 replaces Claude Desktop as the entry point.** Rather than launching
-sessions into other applications and reading state back, the app hosts them:
-it drives Claude Code as a subprocess and streams its output into its own
-transcript. That is what makes live session monitoring, cross-mode search and
-durable conversation history possible at all — three things v1's
-fire-and-forget model could not do. It runs on the existing Claude
-subscription with no API billing, which is the constraint the whole
-architecture is shaped around.
+Working end to end today: the orchestrator, the MCP server, and a shell with chat, mode entry, handoff, search, live monitoring and real usage stats.
 
-Working end to end today: the orchestrator (spawn, stream, resume, stop, two
-concurrent), the Noctis MCP server, and a Tauri shell with chat, mode entry,
-handoff, search and real usage stats. The morning brief, worklist and
-scheduler are next.
+**The two versions coexist on purpose.** `frontend/src/shell/` is what runs; v1's `World.tsx`, `ProfileOverlay.tsx` and the VS Code / Terminal launch routes are still in the tree, unreferenced, and go at the Stage 2 cutover together with the state that still lives at their paths. Removing them before then would take working v1 behaviour offline to tidy a directory.
 
-**Superseded in September 2026, and worth knowing if you read the older
-commits or docs:**
+[`docs/noctis-documentation.md`](docs/noctis-documentation.md) is the short read. [`STATUS.md`](STATUS.md) is the detailed, non-aspirational build log.
 
-| Was | Is |
-|---|---|
-| Each mode had its own `CLAUDE_CONFIG_DIR` under `backend/launch_config/` | No redirect anywhere. Sessions use the real `~/.claude`, so plugins, skills, subagents, MCP servers, permissions and memory are all inherited |
-| A mode's methodology was written into that dir's `CLAUDE.md` on every launch | Passed per launch via `--append-system-prompt`; nothing per-mode is written to disk, so concurrent sessions cannot race |
-| `~/.claude/CLAUDE.md` symlinked to `modes/dev/dev.md` | Symlinks to `prompts/system.md`. The config root is infrastructure, never an identity — the old symlink made the machine itself Faber and leaked the build process into every other mode |
-| Per-mode tool cages (`--disallowedTools`) restricted research and maintenance modes | Every mode gets the same tools. `git push` stays denied for all of them |
-| Permission prompts were emitted with nothing attached to answer them | Answered by the Noctis MCP server, surfaced as a dialog in the app |
-| The composer chip cycled the permission mode | It cycles **effort** (`low`/`medium`/`high`/`xhigh`, default high), which `dev.md` had asked for since it was written while no code passed `--effort` |
-| The MCP server was built but never attached to a spawn | Attached to every spawn; `vault_search` and the `enter_<mode>` MCP prompts are reachable |
-| `make test` ran backend tests only | Runs backend, frontend typecheck and frontend tests. `make doctor` reports what is up, what is down, and any capability gaps |
-
-Full reasoning for each is in [`CHANGELOG.md`](CHANGELOG.md) and the commit
-messages; the portability decisions are in the *Harness portability* section
-of [`SPEC.md`](SPEC.md).
-
-**[`docs/noctis-documentation.md`](docs/noctis-documentation.md)** is the short read: what
-the pieces are and how they fit, in one sitting. See
-[`STATUS.md`](STATUS.md) for the detailed, non-aspirational build log and
-[`CHANGELOG.md`](CHANGELOG.md) for what changed when.
-
-**Deliberately out of scope:** multi-user support or auth beyond a single
-bearer token, any hosted deployment, idle character animation/roaming, and a
-full expression-swap library beyond the current busy/idle pair per character.
-
-**Deferred rather than excluded:** a multi-harness adapter. Noctis drives
-Claude Code, and the coupling is confined to three files under the
-`orchestrator/events.py` seam. An abstraction with one implementation would
-encode guesses about the second harness rather than knowledge of it, so the
-seam stays and the adapter waits for a real second harness to be built
-against. `python -m capabilities --migrate` emits a brief describing
-everything that would not port — as intent rather than as settings — for an
-agent in another harness to act on. See
-[`wiki/Harness Portability.md`](https://github.com/shaynesss/noctis-os) in the
-vault and the *Harness portability* section of [`SPEC.md`](SPEC.md).
+**Deliberately out of scope:** multi-user support or auth beyond a single bearer token, any hosted deployment, idle character animation, and a full expression-swap library beyond the current busy/idle pair.
 
 ## License
 

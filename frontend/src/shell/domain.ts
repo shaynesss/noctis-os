@@ -49,8 +49,13 @@ export const MODE_INFO: Record<Mode, { blurb: string; model: string; policy?: st
   vesper: { blurb: 'Research: gather, weigh, return a verdict', model: 'opus-5' },
   maintenance: {
     blurb: 'Audit the vault and propose repairs',
-    model: 'opus-5',
-    policy: 'proposes only — cannot edit',
+    model: 'haiku-4.5',
+    /* "cannot edit" until 2026-09-12, when it could not: Edit and Write were
+     * refused at spawn. The cage also stopped it reading a repo it was asked
+     * to audit, so it went -- propose-only is its methodology now, not a
+     * tool list, and the copy should not claim a guarantee the code no
+     * longer makes. */
+    policy: 'proposes only, by methodology',
   },
 }
 
