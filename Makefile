@@ -10,7 +10,7 @@ bootstrap:
 
 dev:
 	@trap 'kill 0' EXIT; \
-	(cd backend && .venv/bin/uvicorn main:app --reload --reload-exclude 'runtime/*' --reload-exclude 'data/*' --reload-exclude 'launch_config/*' --port $${PORT:-8000}) & \
+	(cd backend && .venv/bin/uvicorn main:app --reload --reload-exclude 'runtime/*' --reload-exclude 'data/*' --port $${PORT:-8000}) & \
 	(cd frontend && npm run dev) & \
 	wait
 
@@ -59,7 +59,7 @@ doctor:
 backend:
 	cd backend && .venv/bin/uvicorn main:app --reload \
 		--reload-exclude 'runtime/*' --reload-exclude 'data/*' \
-		--reload-exclude 'launch_config/*' --port $${PORT:-8000}
+		--port $${PORT:-8000}
 
 app:
 	backend/.venv/bin/python desktop/app.py

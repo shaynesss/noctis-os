@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 import vault_io
@@ -109,13 +110,39 @@ def test_every_runtime_written_dir_is_excluded_from_reload():
     # invocations apart, which is the same shape of mistake this test was
     # rewritten once already to avoid.
     for command in _uvicorn_commands(makefile):
+        if "--reload" not in command:
+            continue                      # nothing to exclude from
         for pattern in RELOAD_EXCLUDES:
             assert pattern in command, (
                 f"a Makefile uvicorn invocation does not exclude {pattern}: {command}"
             )
+        # Both directions. A pattern left behind after its directory was
+        # deleted is dead config that reads as protection -- `launch_config/*`
+        # survived the 2026-09-12 cutover in two invocations and one comment.
+        for flag in re.findall(r"--reload-exclude '([^']+)'", command):
+            assert flag in RELOAD_EXCLUDES, (
+                f"the Makefile excludes {flag}, which is not a runtime-written "
+                f"directory any more -- remove it or add it to RUNTIME_WRITE_DIRS"
+            )
 
-    for pattern in RELOAD_EXCLUDES:
-        assert pattern in app_py, f"desktop/app.py does not exclude {pattern} from --reload"
+
+def test_the_desktop_app_does_not_reload():
+    """It is the daily driver, and Noctis's own primary job is editing this
+    repository. With --reload on, a Faber session touching any backend/*.py
+    restarts the backend hosting it -- killing its own in-flight stream and
+    every other live session's, which presents as the model going silent
+    mid-turn.
+
+    `make dev` keeps --reload: that is the loop where a backend edit should
+    take effect at once and no session is being hosted.
+    """
+    repo = Path(__file__).resolve().parents[2]
+    app_py = (repo / "desktop" / "app.py").read_text()
+    invocation = app_py[app_py.index('"main:app"'):app_py.index('"8000"')]
+    assert "--reload" not in invocation, (
+        "desktop/app.py runs uvicorn with --reload; a session editing the "
+        "backend would restart its own host mid-turn"
+    )
 
 
 def _uvicorn_commands(makefile: str) -> list[str]:

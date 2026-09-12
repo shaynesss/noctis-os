@@ -172,28 +172,30 @@ def main() -> None:
     atexit.register(_cleanup)
     signal.signal(signal.SIGTERM, lambda *_: (_cleanup(), sys.exit(0)))
 
-    # --reload-exclude on runtime/*: the PostToolUse/Stop hooks write into
-    # backend/runtime/ (action-feed logs, busy markers) on every tool call
-    # of every live session, and that directory sits inside the cwd uvicorn
-    # --reload watches by default -- so ordinary hook activity was
-    # restarting this backend mid-request, dropping any in-flight
-    # accept/reject fetch (WKWebView surfaces this as "Load failed", the
-    # desktop window's engine; Chromium says "Failed to fetch" for the same
-    # thing, which is why a browser-tab repro didn't catch it).
+    # **No --reload.** This is the daily driver, not a dev loop, and the
+    # difference matters more here than in most apps: Noctis's own primary
+    # job is editing this repository. A Faber session that touches any
+    # backend/*.py would restart the very backend hosting it, killing its own
+    # in-flight stream and every other live session's along with it. The bug
+    # would look like the model going silent mid-turn, which is the failure
+    # this codebase has spent two days learning to tell apart from a crash.
+    #
+    # `make dev` keeps --reload, because that is the loop where a backend
+    # edit *should* take effect immediately and no session is being hosted.
+    # Here, a backend change needs the app restarted -- the same contract any
+    # application has. (The frontend is unaffected: it is served live and the
+    # app's own Refresh command reloads it.)
+    #
+    # Kept for the record, since it is why the excludes below existed: the
+    # hooks write into backend/runtime/ on every tool call of every live
+    # session, and with --reload on, ordinary hook activity was restarting
+    # the backend mid-request and dropping in-flight fetches. WKWebView
+    # surfaces that as "Load failed", which is why a browser-tab repro missed
+    # it. With reload off the whole class is gone rather than excluded.
     _start(
         [
             str(BACKEND_DIR / ".venv" / "bin" / "uvicorn"),
             "main:app",
-            "--reload",
-            # Every directory the backend writes to at runtime; the list is
-            # backend/paths.py's RUNTIME_WRITE_DIRS, and a test checks this
-            # stays in step with it.
-            "--reload-exclude",
-            "runtime/*",
-            "--reload-exclude",
-            "data/*",
-            "--reload-exclude",
-            "launch_config/*",
             "--port",
             "8000",
         ],
