@@ -49,6 +49,10 @@ doctor:
 	@cd backend && .venv/bin/python -c 'import main' >/dev/null 2>&1 \
 		&& echo 'ok    (if backend is DOWN it is absent, not broken)' \
 		|| echo 'FAIL  -> cd backend && .venv/bin/python -c "import main"'
+	@echo
+	@echo 'capabilities  (what each mode needs vs what this harness has)'
+	@cd backend && .venv/bin/python -m capabilities 2>/dev/null | sed 's/^/  /' \
+		|| echo '  could not probe -- is the venv built?'
 
 # The backend alone, for when vite is already up and only uvicorn died --
 # the common case, and restarting both costs you the frontend's state.

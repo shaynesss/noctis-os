@@ -233,6 +233,24 @@ Claude Code CLI, the Claude Code VS Code extension, PIL, a Python frontmatter/YA
 
 ---
 
+## Harness portability — locked 2026-09-12
+
+Full reasoning: `second-brain/wiki/Harness Portability.md`. Summary of what is binding.
+
+**The goal, stated precisely.** "Workflow agnostic" does not mean everything keeps working on another harness — permissions, hooks, spawn flags and event streams are harness-specific by nature. It means a move **states what it costs, before it costs it**.
+
+**Three tiers.**
+
+- **Portable because it is text** — `prompts/system.md`, the mode overlays, `modes/*/[mode].md`, agent definitions, the vault.
+- **Portable because MCP is the standard** — `backend/mcp/server.py` serves `tools/*` (retrieval) *and* `prompts/*` (`enter_faber` and siblings, which load a mode's methodology and job context). Identity travels over MCP, not just tools. This is what stops an MCP server being a brain wired to an interface with no capabilities.
+- **Not portable** — `permissions.json`, hooks, `--effort`/`--agents`/`--allowedTools`, `parser.py`'s dependence on `stream-json`. Confined to three files by design: `orchestrator/driver.py`, `orchestrator/parser.py`, `orchestrator/permissions.json`, all sitting under the `events.py` seam.
+
+**Capability contract — built.** `backend/capabilities.py` declares what each mode's methodology assumes it can reach, probes what the harness actually has, and reports the gap. Surfaced in `make doctor`; `python -m capabilities` exits non-zero on a gap. Requirements live in code, not the vault: they are claims about infrastructure, not method, and a harness requirement in a mode file would make the methodology depend on which machine reads it. This exists because `dev.md` mandated seven unreachable tools for months and nothing noticed.
+
+**Multi-harness adapter — deliberately not built.** YAGNI: one harness, and an abstraction with one implementation encodes guesses about the second rather than knowledge of it. The seam exists, the coupling is three files, and the capability contract already answers what the adapter would answer. Build it against a real second harness.
+
+**Bring-your-own-subscription — already in place for Anthropic.** Sessions spawn `claude -p` on the Max subscription; `Usage.list_cost_usd` is notional and `Limits` reports subscription windows. The metered-API objection was about direct API calls with a key and does not apply. Extending to other providers is the same mechanism N times (each ships a subscription-authenticated CLI); the blocker is N× driver and parser, not licensing. Unresolved: provider terms differ on scale, sharing and resale — personal single-seat use is the intended path, anything beyond needs the actual terms read.
+
 ## Design Brief — locked 2026-07-20
 
 **World backdrop, character art, interface chrome:** all locked, full detail in `wiki/Noctis OS/Interface.md` and `Modes.md`, palette/coordinates in `assets/world/README.md` and `assets/characters/README.md`.
