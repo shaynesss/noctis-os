@@ -25,6 +25,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -112,11 +113,102 @@ def _start(cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> subp
     return proc
 
 
+# ---------------------------------------------------------------- watchdog
+#
+# How anything stays up: something outside the process is responsible for
+# noticing it died and starting it again. `launchd` does this for system
+# daemons (KeepAlive), systemd does it on Linux (Restart=always), a container
+# runtime does it for pods. Noctis had none of it -- `_start` spawned uvicorn
+# and never looked at it again, so a backend that died stayed dead and the
+# window just stopped answering.
+#
+# Three things a supervisor needs, and the second is the one people skip:
+#
+#   1. Notice. Poll the child, and poll a health endpoint -- a process can be
+#      alive and wedged, and "running" is not "working".
+#   2. Back off. Restarting instantly forever turns one fault into a storm
+#      that hides the cause. Delay grows, and after enough failures it stops
+#      and says so rather than thrashing quietly.
+#   3. Be safe to kill. The state has to live outside the process, so a
+#      restart costs nothing -- which is already true here: the vault is
+#      files and the history is SQLite.
+
+WATCHDOG_POLL_S = 3.0
+WATCHDOG_BACKOFF_S = (1, 2, 5, 10, 30)      # then give up and report
+_watchdog_stop = threading.Event()
+
+
+def _is_backend(proc: subprocess.Popen) -> bool:
+    """The uvicorn child, told apart from the frontend one by its argv."""
+    return any("uvicorn" in str(a) for a in (proc.args or []))
+
+
+def _healthy(port: int = 8000, timeout: float = 2.0) -> bool:
+    """Answering, not merely running. A wedged process passes `poll()`."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=timeout):
+            return True
+    except Exception:                       # noqa: BLE001 - any failure is unhealthy
+        return False
+
+
+def _supervise(spawn, *, port: int = 8000) -> None:
+    """Restart the backend when it stops answering, with backoff.
+
+    `spawn` returns a fresh Popen. Kept as a callable rather than a command
+    list so the caller owns how the backend is started and this owns only
+    when.
+    """
+    failures = 0
+    while not _watchdog_stop.wait(WATCHDOG_POLL_S):
+        if _healthy(port):
+            failures = 0
+            continue
+        if failures >= len(WATCHDOG_BACKOFF_S):
+            print("[watchdog] backend will not stay up; giving up. "
+                  "Run `make doctor` — if imports FAIL the fault is in the code, "
+                  "not the supervisor.", flush=True)
+            return
+        delay = WATCHDOG_BACKOFF_S[failures]
+        failures += 1
+        print(f"[watchdog] backend not answering; restart {failures} in {delay}s",
+              flush=True)
+        if _watchdog_stop.wait(delay):
+            return
+
+        # Reap before respawning. The probe is a *health* check, so it fires
+        # for a process that is alive and wedged as well as for one that is
+        # gone -- and spawning beside a wedged instance leaves it holding the
+        # port, so the replacement dies on "Address already in use" and the
+        # supervisor exhausts its attempts without ever having had a chance.
+        # Found by killing a real process under the watchdog and watching
+        # four restarts fail to bind.
+        for proc in list(_procs):
+            if proc.poll() is None and _is_backend(proc):
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    proc.wait(timeout=5)
+                except (ProcessLookupError, subprocess.TimeoutExpired):
+                    pass
+            if proc.poll() is not None:
+                try:
+                    _procs.remove(proc)
+                except ValueError:
+                    pass
+        try:
+            spawn()
+        except Exception as e:              # noqa: BLE001
+            print(f"[watchdog] restart failed: {type(e).__name__}: {e}", flush=True)
+
+
 def _cleanup() -> None:
     global _cleaned_up
     if _cleaned_up:
         return
     _cleaned_up = True
+    # Before killing anything, or the watchdog sees its own teardown as a
+    # crash and races to restart what is being shut down.
+    _watchdog_stop.set()
     for proc in _procs:
         if proc.poll() is not None:
             continue
@@ -192,15 +284,18 @@ def main() -> None:
     # the backend mid-request and dropping in-flight fetches. WKWebView
     # surfaces that as "Load failed", which is why a browser-tab repro missed
     # it. With reload off the whole class is gone rather than excluded.
-    _start(
-        [
-            str(BACKEND_DIR / ".venv" / "bin" / "uvicorn"),
-            "main:app",
-            "--port",
-            "8000",
-        ],
-        BACKEND_DIR,
-    )
+    def _spawn_backend() -> subprocess.Popen:
+        return _start(
+            [
+                str(BACKEND_DIR / ".venv" / "bin" / "uvicorn"),
+                "main:app",
+                "--port",
+                "8000",
+            ],
+            BACKEND_DIR,
+        )
+
+    _spawn_backend()
     _start([NPM_BIN, "run", "dev"], FRONTEND_DIR, env=_npm_env())
 
     if not _wait_for(BACKEND_URL):
@@ -211,6 +306,12 @@ def main() -> None:
         print("desktop/app.py: frontend never became ready, exiting", file=sys.stderr)
         _cleanup()
         return
+
+    # Only once both are up, so a slow first start is not mistaken for a
+    # crash and restarted underneath itself. Daemon, so it never holds the
+    # process open on quit.
+    threading.Thread(target=_supervise, args=(_spawn_backend,), daemon=True,
+                     name="backend-watchdog").start()
 
     window = webview.create_window(
         "Noctis OS",
