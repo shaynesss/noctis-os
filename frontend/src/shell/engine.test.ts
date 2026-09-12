@@ -511,3 +511,30 @@ describe('remembering which tabs were open', () => {
     expect(recallOpenTabs()).toEqual([])
   })
 })
+
+describe('retry backoff', () => {
+  // Mirrors useFetched's schedule. Kept as a test because the shape is the
+  // point: fast enough that a restart heals before you reach for the window,
+  // slow enough that a backend which is genuinely down is not polled every
+  // three seconds forever.
+  const RETRY_MS = [1000, 2000, 4000, 8000, 15000]
+  const backoff = (n: number) => RETRY_MS[Math.min(n, RETRY_MS.length - 1)]
+
+  it('starts fast, because most outages are a restart', () => {
+    expect(backoff(0)).toBe(1000)
+  })
+
+  it('grows, and then holds rather than growing forever', () => {
+    const first = [0, 1, 2, 3, 4].map(backoff)
+    expect(first).toEqual([...first].sort((a, b) => a - b))
+    expect(backoff(9)).toBe(15000)
+    expect(backoff(99)).toBe(15000)
+  })
+
+  it('never reaches zero or an unbounded wait', () => {
+    for (const n of [0, 1, 5, 50]) {
+      expect(backoff(n)).toBeGreaterThan(0)
+      expect(backoff(n)).toBeLessThanOrEqual(15000)
+    }
+  })
+})
