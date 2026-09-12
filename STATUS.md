@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 ## Current state
 
@@ -9,9 +9,18 @@ complete, Stage 2 items 1-5 and 7 complete and verified live, and item 6 done
 except its scheduler. The remaining work is the launchd-on-wake trigger, then
 items 8 and 9.**
 
-Verified 2026-09-11: working tree clean, 383 backend tests, 76 frontend,
-`tsc -b` clean. 113 commits unpushed on `main` — the manual-push rule working
-as designed, not drift.
+Verified 2026-09-12: working tree clean, 426 backend tests, 79 frontend,
+`tsc -b` clean, `make doctor` reporting no capability gaps. 130 commits
+unpushed on `main` — the manual-push rule working as designed, not drift.
+
+**2026-09-11/12 was not a numbered item.** It was infrastructure debt that
+had been silently costing every session, found by asking why Claude behaved
+worse inside Noctis than outside it. One cause, five symptoms: sessions were
+pointed at private `CLAUDE_CONFIG_DIR`s, and a config root is not a settings
+file — it is where plugins, skills, subagents, MCP servers, permissions and
+memory all live. Faber had been reading a methodology that names seven tools
+its own process could not reach. Fixed; see "Done this pass" below. Nothing
+in the numbered plan moved, and the plan was not the thing that was broken.
 
 v2's premise: the app drives Claude Code as a subprocess rather than calling
 the API, so it runs on the existing subscription at no marginal cost. The
@@ -19,6 +28,54 @@ interface is the deliverable — v2 exists to stop Claude Desktop being the
 entry point.
 
 Spec: `second-brain/wiki/Noctis OS/noctis-v2-SPEC.md`.
+
+## Done this pass — the harness itself (2026-09-11/12)
+
+Not a numbered item. Debt that was capping the ceiling on every one of them.
+
+- **Sessions run against the real `~/.claude`** (`6bbd801`, `5d6b861`). No
+  `CLAUDE_CONFIG_DIR` redirect in either launcher. Plugins, skills,
+  subagents, MCP servers, the 152-rule allowlist and memory are all
+  inherited. A mode's methodology travels in the argv via
+  `--append-system-prompt`, so nothing per-mode is written to disk and
+  concurrent sessions cannot race on it. Snapshotting is off as a
+  consequence, so an edited methodology now reaches a *resumed* session.
+- **`~/.claude/CLAUDE.md` repointed** from `modes/dev/dev.md` to
+  `prompts/system.md`. The old symlink made the machine itself Faber; every
+  mode inherited the build process the moment the redirect went. Verified
+  live across all four non-dev modes.
+- **Per-mode tool cages removed** (`bbb8488`). Capability is not the axis
+  modes vary on. `git push` stays denied for all of them. Maintenance's
+  propose-never-apply now rests on methodology and the permission chip
+  rather than a cage that also stopped it reading a repo it was auditing —
+  flagged as a deliberate trade, not an oversight.
+- **Permission requests get answered** (`896fa9e`, `913a2f6`). The MCP server
+  is the `--permission-prompt-tool`; wiring it revealed the server had never
+  been attached to any spawn since Stage 2 item 2, so `vault_search` existed
+  and nothing could call it. `permission_denials` / `terminal_reason` are read
+  at last — the engine had always sent them and nothing looked.
+- **Silence and refusal are visible** (`8f16a1a`, `913a2f6`). A turn that ends
+  with tool calls and no text renders as such; one refused its tools renders
+  as blocked, with the refusals named.
+- **Effort is real** (`f08199c`). The composer chip cycles
+  `low`/`medium`/`high`/`xhigh`, default high. `dev.md` had asked for effort
+  routing since it was written and no code passed `--effort`.
+- **The Critic is registered** — and Noctua's and Vesper's rosters with it.
+  Vault `agents/*.md` reach sessions via `--agents` for the first time.
+- **Capability contract** (`bb882d9`). `backend/capabilities.py`; `make doctor`
+  prints per-mode gaps, `python -m capabilities` exits non-zero on one, and
+  `--migrate` emits a harness-migration brief describing everything that would
+  not port.
+- **The suite looks at the frontend** (`6bc8226`). `make test` runs pytest,
+  `tsc -b` and vitest. `tsc --noEmit -p tsconfig.json` checks *zero* files
+  against this repo's solution-style config and exits 0 — it reported a clean
+  typecheck on a broken tree, which is why the `typecheck` script exists.
+- **`make doctor` / `make backend`** (`0f3d69f`). The backend dying leaves vite
+  serving a UI pointed at a closed port, so "broken" is usually "absent".
+
+Verified by spawning real sessions through the production driver, not by
+reading argv: Faber reached its plugins, its Critic and `dev.md`; all four
+non-dev modes came back clean of it.
 
 ## What works, end to end
 

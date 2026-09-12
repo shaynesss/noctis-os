@@ -27,7 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from jobs import MODE_VAULT_DIR  # noqa: E402
+from jobs import MODE_VAULT_DIR, methodology_path  # noqa: E402
 from retrieval.index import TOP_K, VaultIndex  # noqa: E402
 
 # Versions this server actually implements, newest first. The spec's
@@ -345,9 +345,9 @@ PROMPTS = [
 
 def prompt_text(name: str) -> str:
     mode = name.removeprefix("enter_")
-    method = {"faber": "modes/dev/dev.md", "noctua": "modes/learn/learn.md",
-              "vesper": "modes/research/research.md",
-              "maintenance": "maintenance/audit.md"}.get(mode)
+    # Was a fourth hardcoded copy of this map, and one that happened to be
+    # right while another was wrong. jobs.py owns it now.
+    method = methodology_path(mode)
     body = (VAULT / method).read_text()[:6000] if method and (VAULT / method).exists() else ""
     return (f"You are operating in Noctis's {mode} mode. Its methodology follows. "
             f"Call worklist to see what is in flight, and job_context for any active job.\n\n{body}")

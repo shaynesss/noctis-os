@@ -199,3 +199,35 @@ def test_launch_outside_any_project_sends_no_job_context(vault, tmp_path, monkey
         json={"mode": "faber", "prompt": "go", "cwd": str(elsewhere)},
     )
     assert "job_context" in seen and seen["job_context"] is None
+
+
+def test_every_mode_methodology_path_resolves():
+    """One mapping, and it points at files that exist.
+
+    There were three copies of this -- jobs.py, orchestrator/modes.py and
+    mcp/server.py -- and two disagreed about maintenance before anything
+    called them. Maintenance is the case worth pinning: its methodology moved
+    to maintenance/audit.md in 2026-09 while its state stayed at
+    modes/settings/, so the two paths genuinely differ and a single map
+    covering both would be wrong.
+    """
+    from pathlib import Path
+    real = Path("/Users/shayneyong/Developer/second-brain")
+    if not real.is_dir():
+        import pytest
+        pytest.skip("real vault not present")
+    for mode in jobs.MODE_VAULT_DIR:
+        path = jobs.methodology_path(mode)
+        assert path, mode
+        assert (real / path).is_file(), f"{mode} -> {path}"
+
+
+def test_general_has_no_methodology_just_as_it_has_no_jobs():
+    assert jobs.methodology_path("general") is None
+    assert jobs.jobs_dir("general") is None
+
+
+def test_state_and_methodology_are_allowed_to_diverge():
+    """Maintenance is the live example and the reason this is two functions."""
+    assert jobs.jobs_dir("maintenance") == "modes/settings/jobs"
+    assert jobs.methodology_path("maintenance") == "maintenance/audit.md"

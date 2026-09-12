@@ -8,6 +8,67 @@ a subprocess, so it runs on the existing subscription with no API billing.**
 Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5
 and 7 are complete and verified live. Item 6 is done except its scheduler.
 
+### The harness itself (2026-09-11/12)
+
+Not a numbered item — infrastructure debt that had been capping every one of
+them. One cause, five symptoms, found by asking why Claude behaved worse
+inside Noctis than outside it.
+
+- **Sessions run against the real `~/.claude`.** `CLAUDE_CONFIG_DIR` pointed
+  each mode at a private config root, and a config root is not a settings
+  file: it is where plugins, skills, subagents, slash commands, MCP servers,
+  accumulated permissions and memory all live. Redirecting it replaced the
+  whole surface with an empty one, so Faber was reading a methodology naming
+  Impeccable, the code-review plugin, a Critic subagent, Playwright,
+  shadcn/Magic MCP and CodeRabbit — none of which it could reach. Neither
+  launcher redirects now; a mode's methodology travels in the argv via
+  `--append-system-prompt`, which also retires the only real argument for the
+  split dirs (two sessions racing on a rewritten file) and turns off
+  system-prompt snapshotting, so an edited methodology reaches a resumed
+  session.
+- **`~/.claude/CLAUDE.md` points at `prompts/system.md`, not `dev.md`.** The
+  old symlink made the machine itself Faber. Harmless while every surface
+  redirected away from it; a live leak into every mode the moment they
+  stopped. The config root is infrastructure, never an identity.
+- **Every mode gets the same tools.** `--disallowedTools` is gone. Capability
+  was the wrong axis to vary on: a mode handed work it cannot perform ends
+  its turn with nothing done and no way to say so. `git push` stays denied for
+  all modes. Maintenance's propose-never-apply now rests on its methodology
+  and the permission chip rather than a cage that also stopped it reading a
+  repo it was asked to audit — a deliberate trade, recorded as one.
+- **Permission requests are answered.** `--permission-prompts` took its `host`
+  default with no host attached, so every request died unanswered and the
+  chip's labels were fiction. The Noctis MCP server is the prompt tool now.
+  Wiring it surfaced that the server had never been attached to any spawn
+  since it was built — `vault_search` existed and nothing could call it.
+- **Refusals and silence are events.** `permission_denials`, `terminal_reason`
+  and `num_turns` had been sent on every result event and read by nothing. A
+  turn ending with tool calls and no text renders as *"turn ended with no
+  reply"*; one refused its tools renders as *"turn ended blocked"* with the
+  refusals named. This is why `system.md`'s "never end a turn without
+  user-visible text" kept failing: the rule was not ignored, it was
+  unsatisfiable.
+- **The composer chip sets effort, not permission.** `low`/`medium`/`high`/
+  `xhigh`, default high. `dev.md` had specified effort routing since it was
+  written while no code passed `--effort`.
+- **Vault subagents are registered.** The Critic, and Noctua's and Vesper's
+  rosters, reach sessions via `--agents` for the first time.
+- **The vault's absolute path is stated in the prompt.** `system.md` gives a
+  relative `second-brain/`, which resolves against the project; a live session
+  reported the vault unreadable while reading it through MCP.
+- **Capability contract.** `backend/capabilities.py` — each mode declares what
+  its methodology assumes, the harness reports what it has, `make doctor`
+  prints the gap. `--migrate` emits a harness-migration brief covering
+  everything that would not port, as intent rather than settings.
+- **One mode→path mapping.** Three copies existed across `jobs.py`,
+  `orchestrator/modes.py` and `mcp/server.py`, and two disagreed about
+  maintenance. `jobs.py` owns both `jobs_dir()` and `methodology_path()`, which
+  genuinely differ for maintenance and now say so.
+- **`make test` covers the frontend**, and `make doctor` / `make backend`
+  exist. `tsc --noEmit -p tsconfig.json` checks zero files against this repo's
+  solution-style tsconfig and exits 0 — it reported a clean typecheck on a
+  broken tree.
+
 ### Session orchestrator
 - `orchestrator/` drives `claude -p --output-format stream-json --verbose` and
   normalizes the CLI's events into a stable union the frontend renders. Two

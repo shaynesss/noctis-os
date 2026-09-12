@@ -42,7 +42,10 @@ The migration was to generalize that one file into five: `build-spine.md` became
 
 ## Highlights
 
-- **Per-mode methodology injection.** Every launch assembles that mode's process file + its accumulating lessons file + the specific job's working context into one preloaded session — the orchestration layer that makes each character behave differently.
+- **Per-mode methodology injection.** Every launch assembles that mode's process file + its accumulating lessons file + the specific job's working context into one preloaded session — the orchestration layer that makes each character behave differently. Passed in the argv (`--append-system-prompt`), never inherited from a config file, so identity is a property of the launch rather than of the machine.
+- **Every session gets the full toolkit.** Sessions run against the real `~/.claude`, so they inherit installed plugins, skills, subagents, MCP servers, accumulated permissions and memory. Modes differ by methodology, never by capability: a mode handed work it cannot perform ends its turn with nothing done and no way to say so.
+- **A capability contract.** Each mode declares what its methodology assumes it can reach; the harness reports what it actually has; `make doctor` prints the gap. Built because `dev.md` mandated seven tools no session could reach — for months, silently.
+- **Refusals and silence are visible events.** A turn that ends with tool calls and no text renders as *"turn ended with no reply"*, and one that was refused its tools renders as *"turn ended blocked"* with the refusals named. A blank transcript used to be indistinguishable from a crash.
 - **A markdown vault as the only database.** No Postgres, no ORM, no migrations. The backend reads and writes frontmatter'd markdown files directly; state is always inspectable and versionable with plain git.
 - **Two-tier self-improvement.** Sessions freely append to a mode's lessons file with no gate (the automatic, low-stakes tier). Periodically, Custos digests those lessons and drafts a *proposed* diff to a mode's actual methodology file, staged for manual accept/reject — no mode ever silently rewrites its own process.
 - **Fire-and-forget session telemetry.** A Claude Code hook appends one line per tool call to a per-job log; the interface polls it and shows a live "what's it doing right now" strip under each in-flight job — without the interface ever trying to control or interrupt a running session.
@@ -159,15 +162,43 @@ concurrent), the Noctis MCP server, and a Tauri shell with chat, mode entry,
 handoff, search and real usage stats. The morning brief, worklist and
 scheduler are next.
 
+**Superseded in September 2026, and worth knowing if you read the older
+commits or docs:**
+
+| Was | Is |
+|---|---|
+| Each mode had its own `CLAUDE_CONFIG_DIR` under `backend/launch_config/` | No redirect anywhere. Sessions use the real `~/.claude`, so plugins, skills, subagents, MCP servers, permissions and memory are all inherited |
+| A mode's methodology was written into that dir's `CLAUDE.md` on every launch | Passed per launch via `--append-system-prompt`; nothing per-mode is written to disk, so concurrent sessions cannot race |
+| `~/.claude/CLAUDE.md` symlinked to `modes/dev/dev.md` | Symlinks to `prompts/system.md`. The config root is infrastructure, never an identity — the old symlink made the machine itself Faber and leaked the build process into every other mode |
+| Per-mode tool cages (`--disallowedTools`) restricted research and maintenance modes | Every mode gets the same tools. `git push` stays denied for all of them |
+| Permission prompts were emitted with nothing attached to answer them | Answered by the Noctis MCP server, surfaced as a dialog in the app |
+| The composer chip cycled the permission mode | It cycles **effort** (`low`/`medium`/`high`/`xhigh`, default high), which `dev.md` had asked for since it was written while no code passed `--effort` |
+| The MCP server was built but never attached to a spawn | Attached to every spawn; `vault_search` and the `enter_<mode>` MCP prompts are reachable |
+| `make test` ran backend tests only | Runs backend, frontend typecheck and frontend tests. `make doctor` reports what is up, what is down, and any capability gaps |
+
+Full reasoning for each is in [`CHANGELOG.md`](CHANGELOG.md) and the commit
+messages; the portability decisions are in the *Harness portability* section
+of [`SPEC.md`](SPEC.md).
+
 **[`docs/noctis-documentation.md`](docs/noctis-documentation.md)** is the short read: what
 the pieces are and how they fit, in one sitting. See
 [`STATUS.md`](STATUS.md) for the detailed, non-aspirational build log and
 [`CHANGELOG.md`](CHANGELOG.md) for what changed when.
 
 **Deliberately out of scope:** multi-user support or auth beyond a single
-bearer token, any hosted deployment, cross-vendor model routing (Claude-only),
-idle character animation/roaming, and a full expression-swap library beyond
-the current busy/idle pair per character.
+bearer token, any hosted deployment, idle character animation/roaming, and a
+full expression-swap library beyond the current busy/idle pair per character.
+
+**Deferred rather than excluded:** a multi-harness adapter. Noctis drives
+Claude Code, and the coupling is confined to three files under the
+`orchestrator/events.py` seam. An abstraction with one implementation would
+encode guesses about the second harness rather than knowledge of it, so the
+seam stays and the adapter waits for a real second harness to be built
+against. `python -m capabilities --migrate` emits a brief describing
+everything that would not port — as intent rather than as settings — for an
+agent in another harness to act on. See
+[`wiki/Harness Portability.md`](https://github.com/shaynesss/noctis-os) in the
+vault and the *Harness portability* section of [`SPEC.md`](SPEC.md).
 
 ## License
 

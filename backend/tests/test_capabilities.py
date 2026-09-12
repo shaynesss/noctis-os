@@ -84,3 +84,28 @@ def test_render_states_the_gap_rather_than_a_count(monkeypatch):
     monkeypatch.setattr(capabilities, "_plugins", lambda root: set())
     out = capabilities.render()
     assert "GAP" in out and "skill:impeccable" in out
+
+
+def test_the_migration_brief_describes_the_live_config(real_vault):
+    """Generated, not hand-written, so it cannot drift from what it describes
+    -- which is the failure this whole module exists to prevent."""
+    from orchestrator.driver import EFFORT_CYCLE
+
+    brief = capabilities.migration_brief()
+    assert "maintenance/audit.md" in brief, "the mode->methodology map"
+    assert "enter_faber" in brief, "MCP prompts are how identity ports"
+    assert "git push" in brief, "the one denial worth carrying over"
+    for level in EFFORT_CYCLE:
+        assert f"`{level}`" in brief
+    for section in ("## 1.", "## 5.", "## 9."):
+        assert section in brief
+
+
+def test_the_brief_carries_the_lessons_not_just_the_settings(real_vault):
+    """A settings dump in one harness's schema is worthless to another. What
+    ports is why each setting exists -- so the reader can find the nearest
+    equivalent rather than the identical flag."""
+    brief = capabilities.migration_brief()
+    assert "Someone must answer" in brief, "unanswered prompts deny silently"
+    assert "absolute" in brief, "a relative vault path resolves to the project"
+    assert "refused tools" in brief, "silent turn vs caged turn"

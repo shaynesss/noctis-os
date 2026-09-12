@@ -41,10 +41,37 @@ MODE_VAULT_DIR = {
 BRIEF_MAX_CHARS = 2600
 
 
+# Where a mode's *methodology* lives, which is not always beside its state.
+#
+# Ordinarily `modes/<dir>/<dir>.md`. Maintenance is the exception and a real
+# one, not drift: `modes/settings/settings.md` moved to `maintenance/audit.md`
+# on 2026-09-07 when settings and nightshift collapsed into root-level
+# `maintenance/` as infrastructure rather than a mode -- while its state
+# (`state.md`, `lessons.md`, `jobs/`) deliberately stayed at
+# `modes/settings/` because v1 still reads those paths. See that directory's
+# own MOVED.md.
+#
+# Stated once, here, because it had been restated three times -- jobs.py,
+# orchestrator/modes.py and mcp/server.py each carried a copy, and two of
+# them disagreed about maintenance before anything called them.
+METHODOLOGY_OVERRIDE = {"maintenance": "maintenance/audit.md"}
+
+
 def jobs_dir(mode: str) -> str | None:
     """Vault-relative jobs directory for a mode, or None if it has no jobs."""
     vault_dir = MODE_VAULT_DIR.get(mode)
     return f"modes/{vault_dir}/jobs" if vault_dir else None
+
+
+def methodology_path(mode: str) -> str | None:
+    """Vault-relative path to a mode's methodology, or None if it has none.
+
+    `general` has none by design: it is the mode without a method.
+    """
+    if override := METHODOLOGY_OVERRIDE.get(mode):
+        return override
+    vault_dir = MODE_VAULT_DIR.get(mode)
+    return f"modes/{vault_dir}/{vault_dir}.md" if vault_dir else None
 
 
 def find_job_for_cwd(mode: str, cwd: str | Path) -> str | None:
