@@ -126,6 +126,8 @@ Reasoning for each is in [`CHANGELOG.md`](CHANGELOG.md) and the commit messages.
 
 `python -m capabilities --migrate` emits a brief describing that third tier as *intent* rather than as settings, for an agent in another harness to act on. A multi-harness adapter is deliberately deferred: there is one harness, and an abstraction with a single implementation encodes guesses about the second rather than knowledge of it. See the *Harness portability* section of [`SPEC.md`](SPEC.md).
 
+**On subscriptions.** Noctis is already bring-your-own-subscription — it drives the vendor's own CLI rather than calling an API with a key, so `Usage.list_cost_usd` is notional and `Limits` reports the 5-hour and 7-day windows rather than dollars. The metered-API objection was about the API path and does not carry over. Extending the same mechanism to other providers is not blocked by licensing: each ships a CLI that authenticates against its own subscription. It is blocked by N× driver and parser, each drifting independently — the same integration surface that makes the adapter premature. Provider terms differ on scale, sharing and resale; personal single-seat use is the intended path and anything past it needs the actual terms read.
+
 ## Tech stack
 
 | Layer | Choice |
