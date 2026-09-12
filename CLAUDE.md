@@ -1,6 +1,8 @@
 # CLAUDE.md — Noctis OS project overrides
 
-Universal process is already active globally via `~/.claude/CLAUDE.md` → `second-brain/modes/dev/dev.md` (Faber, moved from `build-spine.md` 2026-07-20 as part of this project's own mode-folder build-out). This file adds only what's specific to *this* project.
+Faber's process lives in `second-brain/modes/dev/dev.md` (moved from `build-spine.md` 2026-07-20 as part of this project's own mode-folder build-out). This file adds only what's specific to *this* project.
+
+**It no longer arrives via `~/.claude/CLAUDE.md` (changed 2026-09-11).** That symlink pointed at `dev.md`, which made the machine itself Faber — every session reading the default config root inherited the build process, including Noctua and Vesper sessions that should never see it. It points at `prompts/system.md`, the universal prompt, and each launch passes its own mode's methodology via `--append-system-prompt`. So a session working in this directory is *not* necessarily Faber: read this file for the project's constraints, not as a statement of who you are.
 
 Full spec, with reasoning: `noctis-os/SPEC.md`. If anything here and `SPEC.md` disagree, `SPEC.md` wins. **If a decision gets made about this project anywhere other than in a file both of these read, it doesn't count — write it here or in SPEC.md immediately, not after the fact.** As of 2026-07-20, this includes checking the *wiki* too — several locked decisions sat in the vault for a day without ever reaching `SPEC.md`. Both directions need checking, not just chat-vs-file.
 
