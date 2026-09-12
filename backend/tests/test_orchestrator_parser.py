@@ -366,3 +366,42 @@ def test_running_out_of_room_is_not_the_same_as_finishing():
     assert end("max_tokens").truncated
     assert not end("end_turn").truncated
     assert not end(None).truncated
+
+
+def _result(**extra):
+    base = {"type": "result", "subtype": "success", "session_id": "s",
+            "duration_ms": 1, "usage": {}, "modelUsage": {}}
+    return parse_line(json.dumps({**base, **extra}))
+
+
+def test_an_api_failure_is_reported_even_without_is_error():
+    """`api_error_status` and `is_error` are independent fields.
+
+    Assuming the second always accompanies the first would report a turn that
+    died on a 429 as a plain empty turn -- which sends you looking in the
+    harness for a fault that happened upstream.
+    """
+    events = _result(is_error=False, api_error_status=429)
+    errors = [e for e in events if isinstance(e, EngineError)]
+    assert len(errors) == 1
+    assert "429" in errors[0].message and errors[0].fatal
+
+
+def test_an_api_status_is_named_alongside_a_harness_error():
+    events = _result(is_error=True, result="something broke", api_error_status=529)
+    errors = [e for e in events if isinstance(e, EngineError)]
+    assert len(errors) == 1
+    assert "something broke" in errors[0].message and "529" in errors[0].message
+
+
+def test_a_clean_turn_reports_no_error():
+    """`api_error_status` is present and null on every successful result."""
+    assert not [e for e in _result(is_error=False, api_error_status=None)
+                if isinstance(e, EngineError)]
+
+
+def test_the_turn_totals_survive_an_api_error():
+    """The usage rode on the same event and must not be lost with it."""
+    events = _result(is_error=False, api_error_status=503,
+                     usage={"input_tokens": 11})
+    assert events[0].usage.input_tokens == 11

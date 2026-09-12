@@ -209,8 +209,24 @@ def parse_line(line: str) -> list[Event]:
         )]
         # `is_error` rides on the same event as the turn's totals, so the
         # failure is reported without losing the usage that led to it.
+        # `api_error_status` carries the upstream HTTP status when the turn
+        # died at the provider rather than in the harness -- a 429, a 529, an
+        # overload. Read separately from `is_error` rather than assumed to
+        # accompany it: the two are independent fields, and a turn that ends
+        # on a rate limit with is_error unset would otherwise be reported as
+        # a plain empty turn, which sends you looking in exactly the wrong
+        # place. Named in the message because "overloaded, try again" and
+        # "you have a bug" are different days.
+        api_error = d.get("api_error_status")
         if d.get("is_error"):
-            ev.append(EngineError(str(d.get("result", "engine reported an error")), fatal=True))
+            detail = str(d.get("result") or "engine reported an error")
+            if api_error:
+                detail = f"{detail} (API status {api_error})"
+            ev.append(EngineError(detail, fatal=True))
+        elif api_error:
+            ev.append(EngineError(
+                f"the API returned status {api_error} and the turn ended there",
+                fatal=True))
         return ev
 
     return []

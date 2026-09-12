@@ -504,11 +504,9 @@ make test        # pytest + tsc -b + vitest
 - The `launchd`-on-wake scheduler. `brief/generate.py` writes the brief; nothing fires it.
 - Stage 2 item 8, "tiered loading policy" — appears in the build-order table and nowhere else. Needs a definition or removal.
 - Item 9, maintenance migration — unblocked, not started.
-- The v2 checkpoint — *"do I still open Desktop?"* — passed in practice, never formally recorded.
 
 **Known and accepted:**
 - `--effort` and `--agents` reach in-app sessions only, not the Terminal or VS Code surfaces.
-- `api_error_status` on the result event is not parsed.
 - Whitespace-only text counts as speech — judging quality would be the guesswork §7 replaced.
 - `seven_day_opus` is in the CLI binary and absent from an observed Haiku run. Unverified.
 - `--input-format stream-json` as a persistent bidirectional session is untested; it would address ~1.9s spawn-per-turn latency.

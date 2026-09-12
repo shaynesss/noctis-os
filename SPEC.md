@@ -253,7 +253,7 @@ Genuinely unresolved. Not gaps to silently fill.
 
 1. **Interface sub-name** — Deck / Bridge / Console / none.
 2. **Stage 2 item 8, "tiered loading policy"** — appears in the build-order table and nowhere else. No description, no acceptance condition. Needs a definition or removal.
-3. **The v2 checkpoint** — *"do I still open Desktop?"* Passed in practice since 2026-09-08, never formally recorded. Worth closing now that the answer is no longer contaminated by Faber being unable to do build work.
+3. ~~**The v2 checkpoint** — *"do I still open Desktop?"*~~ **Closed 2026-09-12: passed.** The shell has been the daily driver since 2026-09-08. Recorded late deliberately — until 09-11 the answer was contaminated, because Faber inside Noctis could not do build work and the fallback to Desktop was therefore forced rather than chosen. With that fixed the question could be asked cleanly, and the answer held.
 4. **`seven_day_opus` window** — present in the CLI binary and the statusline schema, absent from an observed Haiku run. Unverified.
 5. **`--input-format stream-json` as a persistent bidirectional session** — untested. Would address spawn-per-turn latency (~1.9s).
 

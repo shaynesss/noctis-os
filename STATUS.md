@@ -29,6 +29,21 @@ entry point.
 
 Spec: `second-brain/wiki/Noctis OS/noctis-v2-SPEC.md`.
 
+## Checkpoint — CLOSED 2026-09-12, passed
+
+The v2 build order's checkpoint asks one question: *do I still open Desktop?*
+No. The shell has been the daily driver since 2026-09-08.
+
+Recorded four days late, and deliberately: until 2026-09-11 the answer was
+contaminated. Faber inside Noctis could not run Bash, Edit or Write — every
+permission request died unanswered — so any fallback to Desktop for build
+work was forced rather than chosen, and a checkpoint that measures preference
+cannot be passed on a session that had none. With that fixed the question
+could be asked cleanly. It was, and the answer held.
+
+Criteria 1, 2, 6 and 7 met. Criterion 3 (the vault service running against a
+client Noctis did not write) remains demonstrable but undemonstrated.
+
 ## Done this pass — the harness itself (2026-09-11/12)
 
 Not a numbered item. Debt that was capping the ceiling on every one of them.
