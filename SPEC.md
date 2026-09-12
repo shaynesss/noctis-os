@@ -134,6 +134,54 @@ Five session configurations. They differ by **methodology and model, never by ca
 
 **Engine seam — demoted deliberately.** Kept: `Event` normalization, which the frontend needs anyway. Dropped: the multi-adapter abstraction. Adaptability lives at the MCP layer.
 
+### Desktop shell and supervision
+
+**Tauri.** A Rust shell around the OS's WebView, which is the same
+architecture VS Code uses — Electron is Chromium plus Node — minus the
+bundled Chromium. Global hotkey summon (Opt+Space), tray, launch-at-login,
+notifications; the window hides rather than quits, because an always-there
+app that exits on the close button is not always there.
+
+This overrides v1's rejection of Tauri on 2026-07-21, and the reason the
+earlier decision was right for v1 is the same reason it is wrong for v2: v1
+was a *launcher*, so native OS integration bought nothing. v2 is the front
+door, which makes summon and tray load-bearing rather than polish.
+
+> **Amended 2026-09-12.** `make app` ran `desktop/app.py`, v1's pywebview
+> shell, for five days after Tauri shipped — a third v1/v2 straddle alongside
+> the two specs and `modes/settings`, and the one that mattered most because
+> it is the path a person actually opens. pywebview is deleted; `make app` is
+> the Tauri shell, and `desktop/NoctisOS.app` wraps that.
+
+**Two run paths, and only two.**
+
+| | `make dev` | `make app` |
+|---|---|---|
+| Window | browser tab at `:5180` | native Tauri window |
+| Backend | `uvicorn --reload` | under `backend/supervise.py` |
+| Typecheck | `[tsc]` stream | `[tsc]` stream |
+
+`make dev` is for building Noctis; `make app` is for using it. **Both carry
+the same product capabilities** — everything else is backend or frontend code
+and identical in either.
+
+**The backend is supervised, not merely started.** `backend/supervise.py`
+polls `/health` rather than the process table, because a process can be alive
+and wedged; backs off 1s→30s and then gives up with a reason, because a
+supervisor that never quits turns a permanent fault into invisible thrash;
+and reaps before respawning, because the probe fires for a wedged process too
+and spawning beside one leaves it holding the port.
+
+**The supervisor and `--reload` are mutually exclusive**, not layered: a
+reload is indistinguishable from a death to a health probe, so the supervisor
+would reap the process the reloader had just started. That is why `dev` has
+the reloader and no supervisor, and `app` has the supervisor and no reloader.
+
+**What supervision does not buy.** Sessions are subprocesses of uvicorn, so a
+backend restart still kills any turn in flight. This shortens how long you are
+down; it does not stop work being lost. That needs sessions to outlive the
+request, with the orphan questions recorded under Open questions.
+
 ### Permissions and turn integrity
 
 **Every mode gets the same tool surface.** No mode is spawned with `--disallowedTools`. (The recap summariser uses it — it is handed text and a summariser that can read the filesystem is a larger thing than the job needs. A cage on a helper, not on a mode.) Capability was the wrong axis to vary on: a mode handed work it cannot perform ends its turn with nothing done and no way to say so. Maintenance's propose-never-apply now rests on its methodology and the permission chip rather than a tool cage — a deliberate trade, recorded as one.
@@ -257,6 +305,7 @@ Genuinely unresolved. Not gaps to silently fill.
 3. ~~**The v2 checkpoint** — *"do I still open Desktop?"*~~ **Closed 2026-09-12: passed.** The shell has been the daily driver since 2026-09-08. Recorded late deliberately — until 09-11 the answer was contaminated, because Faber inside Noctis could not do build work and the fallback to Desktop was therefore forced rather than chosen. With that fixed the question could be asked cleanly, and the answer held.
 4. **`seven_day_opus` window** — present in the CLI binary and the statusline schema, absent from an observed Haiku run. Unverified.
 5. **`--input-format stream-json` as a persistent bidirectional session** — untested. Would address spawn-per-turn latency (~1.9s).
+6. **Should a session outlive its window?** VS Code's model: the pty host owns long-running work, so a window reload reattaches rather than losing it. Noctis binds a session's lifetime to the HTTP request, so closing a tab kills the turn. Detaching would fix that and creates eight problems worth naming before it is built — unwatched budget burn, no stop control once the window is gone, orphans counting invisibly against the cap, who owns the stream on reattach, an unbounded or lossy replay buffer, nothing ending an abandoned session, **unwatched writes with no reachable permission dialog**, and the fact that sessions are subprocesses of uvicorn so it would not survive a backend restart anyway.
 
 ---
 

@@ -25,4 +25,4 @@ Nothing else. Repo scaffolding, dependency installs, and env file creation are a
 
 ## Native desktop window (optional, replaces the browser-tab workflow)
 
-`make app` opens Noctis OS as a frameless native window (pywebview, not Tauri — see `desktop/README.md` for why) instead of a browser tab or VS Code's Integrated Browser. `pywebview` is already in `backend/requirements.txt`, so `make setup` covers the dependency — nothing extra to install. Quit with Cmd+Q (no visible close button, by design). No custom app icon yet — that needs a bundler pass (`py2app`/`PyInstaller`), a deliberate follow-up, not done yet.
+`make app` opens Noctis OS in its Tauri shell — a native window with global hotkey summon (Opt+Space), tray and launch-at-login — and runs the backend under `backend/supervise.py`, which restarts it if it stops answering. Closing the window hides it rather than quitting; the tray and the hotkey are the ways back. Needs Rust: `cargo` is installed by `bootstrap/`, and the Makefile adds `~/.cargo/bin` to PATH so a non-login shell still finds it. *(Until 2026-09-12 this ran `desktop/app.py`, a pywebview window — v1's shell, now deleted.)*

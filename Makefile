@@ -85,8 +85,31 @@ backend:
 		--reload-exclude 'runtime/*' --reload-exclude 'data/*' \
 		--port $${PORT:-8000}
 
+# The product. Tauri shell, per SPEC's EDD -- a Rust window around the OS's
+# WebView, which is the same architecture VS Code uses (Electron) minus the
+# bundled Chromium.
+#
+# Three processes, same as `dev`, and the differences are deliberate:
+#
+#   * The window is native rather than a browser tab. This is the thing you
+#     use; `make dev` is the thing you build in.
+#   * The backend runs under `supervise.py`, which restarts it when it stops
+#     answering. `dev` cannot have that, because its reloader and a health
+#     probe would fight -- a reload looks exactly like a death.
+#   * The typecheck stream is here too. Testing the real app is how real bugs
+#     get found, and a type error should be a named line in this terminal in
+#     either path rather than a React stack in a window.
+#
+# `tauri dev` runs `npm run dev` itself via beforeDevCommand, so Vite is not
+# started here. cargo is added to PATH because Tauri needs it and a login
+# shell is not guaranteed -- the same class of problem as launchd's bare PATH.
 app:
-	backend/.venv/bin/python desktop/app.py
+	@trap 'kill 0' EXIT; \
+	PATH="$$HOME/.cargo/bin:$$PATH"; \
+	(cd backend && .venv/bin/python supervise.py) & \
+	(cd frontend && ./node_modules/.bin/tsc -b --watch --preserveWatchOutput 2>&1 | awk '{print "[tsc] " $$0; fflush()}') & \
+	(cd frontend && PATH="$$HOME/.cargo/bin:$$PATH" npm run app) & \
+	wait
 
 # desktop/NoctisOS.app is a thin double-click wrapper around `make app`
 # (real Dock/Finder icon, no terminal needed) -- always runs the live

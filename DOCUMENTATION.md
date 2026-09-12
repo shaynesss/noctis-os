@@ -21,7 +21,7 @@ Two halves that age differently.
 
 **The body** — whatever runs sessions. Today: a Tauri shell and a FastAPI backend driving the Claude Code CLI as a subprocess.
 
-The body is replaceable and built to be. The brain is meant to outlive it. Everything below is organised around that split — §2–§7 are the body, §8–§11 the brain, §12–§18 the surfaces and cross-cutting concerns, and §19–§22 are for operating it.
+The body is replaceable and built to be. The brain is meant to outlive it. Everything below is organised around that split — §2–§7 are the body, §8–§11 the brain, §12–§19 the surfaces and cross-cutting concerns, and §20–§23 are for operating it.
 
 ---
 
@@ -397,9 +397,48 @@ A **quick-capture inbox** takes a link plus a note; the next dev session sorts i
 
 ---
 
-## 16. What v1 left behind
+## 16. Running it: two paths
 
-Removed at the 2026-09-12 cutover: `World.tsx`, `ProfileOverlay.tsx`,
+| | `make dev` | `make app` |
+|---|---|---|
+| Window | browser tab at `:5180` | native Tauri window |
+| Backend | `uvicorn --reload` | supervised by `backend/supervise.py` |
+| Typecheck | `[tsc]` stream | `[tsc]` stream |
+| Vite | started directly | started by `tauri dev` |
+
+`make dev` is for building Noctis; `make app` is for using it. **Product
+capabilities are identical** — everything else is backend or frontend code.
+`make open-app` is a double-clickable bundle around `make app`.
+
+**Why the shell is Tauri.** A Rust window around the OS's WebView. VS Code
+uses the same architecture — Electron is Chromium plus Node — and Tauri is
+that minus the bundled Chromium. It buys global hotkey summon, tray and
+launch-at-login, which are load-bearing for an app whose whole premise is
+being one keystroke away. Closing hides rather than quits.
+
+**Supervision.** `backend/supervise.py` polls `/health` rather than the
+process table, because a process can be alive and wedged. It backs off 1s→30s
+and then gives up with a reason, because a supervisor that never quits makes a
+permanent fault invisible. It reaps before respawning, because the probe fires
+for a wedged process too and spawning beside one leaves it holding the port.
+
+**The supervisor and `--reload` cannot coexist**, which is why each path has
+exactly one: a reload is indistinguishable from a death to a health probe, so
+the supervisor would reap the process the reloader just started. Observed
+live — writing `supervise.py` triggered a reload and a probe failed during
+the window.
+
+**What it does not buy.** Sessions are subprocesses of uvicorn, so a backend
+restart still kills a turn in flight. Supervision shortens downtime; it does
+not prevent loss. See §18.
+
+---
+
+## 17. What v1 left behind
+
+Removed at the 2026-09-12 cutover: `desktop/app.py` (the pywebview shell,
+which `make app` still pointed at for five days after Tauri shipped),
+`World.tsx`, `ProfileOverlay.tsx`,
 `DesignLodge.tsx`, `modes.ts`, `api.ts`, v1's `index.css` and `App.tsx`; the
 `mode`, `session`, `nightshift` and `design_lodge` routers; `launch_surfaces.py`
 and every mode config directory. The VS Code and Terminal.app launch paths
@@ -411,7 +450,7 @@ router), `assets/characters/`, and the vault itself. `assets/world/` retired
 with the pixel scene; the sprites keep sole-source-of-truth status, because
 with the world gone they are the only carrier of Noctis's visual identity.
 
-## 17. Capability contract
+## 18. Capability contract
 
 `backend/capabilities.py`. Each mode declares what its methodology assumes it can reach; the harness reports what it has; the gap is printed.
 
@@ -427,7 +466,7 @@ Requirements live in code, not the vault: they are claims about *infrastructure*
 
 ---
 
-## 18. Portability
+## 19. Portability
 
 **"Workflow agnostic" means a move states what it costs, not that everything survives it.**
 
@@ -449,7 +488,7 @@ Tier 3 is confined to three files under the `events.py` seam: `driver.py` (argv)
 
 ---
 
-## 19. Configuration
+## 20. Configuration
 
 Two variables are required. Everything else has a working default.
 
@@ -475,7 +514,7 @@ Two variables are required. Everything else has a working default.
 
 ---
 
-## 20. Troubleshooting
+## 21. Troubleshooting
 
 Start with `make doctor`. It answers most of this in three lines.
 
@@ -495,7 +534,7 @@ Start with `make doctor`. It answers most of this in three lines.
 
 ---
 
-## 21. Testing
+## 22. Testing
 
 ```bash
 make test        # pytest + tsc -b + vitest
@@ -512,7 +551,7 @@ make test        # pytest + tsc -b + vitest
 
 ---
 
-## 22. Known gaps
+## 23. Known gaps
 
 **Outstanding:**
 - The `launchd`-on-wake scheduler — the only feature left in the build order. `brief/generate.py` writes the brief; nothing fires it, and the vault auto-commit/push job does not exist.

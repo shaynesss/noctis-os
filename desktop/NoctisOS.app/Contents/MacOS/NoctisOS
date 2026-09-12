@@ -1,7 +1,9 @@
 #!/bin/bash
 # Thin wrapper, not a py2app/PyInstaller freeze -- this bundle only exists
 # to be double-clickable (Dock/Applications icon, no more `make app` in a
-# terminal). It always runs desktop/app.py straight from the live repo, so
+# terminal). It runs `make app` straight from the live repo -- which is the
+# Tauri shell plus the backend supervisor since 2026-09-12; it used to run
+# desktop/app.py, v1's pywebview shell, which is now deleted. So
 # a code change just needs the app's own Refresh command (Cmd+R or the
 # Noctis OS > Refresh menu item), never a rebuild of this bundle.
 #
@@ -13,4 +15,4 @@ DIR="$(cd "$(dirname "$0")/../../../.." && pwd)"
 LOG="$DIR/backend/runtime/desktop.log"
 mkdir -p "$(dirname "$LOG")"
 
-exec "$DIR/backend/.venv/bin/python" "$DIR/desktop/app.py" >>"$LOG" 2>&1
+exec /usr/bin/make -C "$DIR" app >>"$LOG" 2>&1

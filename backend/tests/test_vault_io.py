@@ -92,23 +92,16 @@ def test_every_runtime_written_dir_is_excluded_from_reload():
     running restarts it and drops the in-flight request. In WKWebView that
     surfaces as "Load failed", which looks like a network fault and is not.
 
-    Driven by paths.RUNTIME_WRITE_DIRS rather than a hardcoded string. The
-    previous version of this test asserted "runtime/*" literally, so when the
-    conversation store started writing data/ on every message it caught
-    nothing -- the same bug, a second time, past a test written for it.
+    Driven by paths.RUNTIME_WRITE_DIRS rather than a hardcoded string. An
+    earlier version asserted "runtime/*" literally, so when the conversation
+    store started writing data/ on every message it caught nothing -- the same
+    bug, a second time, past a test written for it.
     """
     from paths import RELOAD_EXCLUDES
 
     repo = Path(__file__).resolve().parents[2]
     makefile = (repo / "Makefile").read_text()
-    app_py = (repo / "desktop" / "app.py").read_text()
 
-    # Every *invocation*, not "somewhere in the file". The substring version
-    # of this passed while `make backend` -- a second target with its own copy
-    # of the flags -- was missing an exclude entirely, and that target is the
-    # one the app actually runs. A file-wide `in` check cannot tell two
-    # invocations apart, which is the same shape of mistake this test was
-    # rewritten once already to avoid.
     for command in _uvicorn_commands(makefile):
         if "--reload" not in command:
             continue                      # nothing to exclude from
@@ -126,23 +119,34 @@ def test_every_runtime_written_dir_is_excluded_from_reload():
             )
 
 
-def test_the_desktop_app_does_not_reload():
-    """It is the daily driver, and Noctis's own primary job is editing this
-    repository. With --reload on, a Faber session touching any backend/*.py
-    restarts the backend hosting it -- killing its own in-flight stream and
-    every other live session's, which presents as the model going silent
-    mid-turn.
+def test_the_supervised_backend_does_not_reload():
+    """A supervisor and a file-watching reloader cannot both own the process.
 
-    `make dev` keeps --reload: that is the loop where a backend edit should
-    take effect at once and no session is being hosted.
+    A reload is indistinguishable from a death to a health probe, so the
+    supervisor would reap what the reloader had just started and the two would
+    fight over the port. They are alternatives, not layers: `make dev` has the
+    reloader and no supervisor, `make app` has the supervisor and no reloader.
+
+    Noctis's own primary job is editing this repository, which is what makes
+    the pairing dangerous rather than merely redundant -- with --reload on, a
+    Faber session touching any backend/*.py restarts the backend hosting it
+    and kills its own in-flight stream.
     """
-    repo = Path(__file__).resolve().parents[2]
-    app_py = (repo / "desktop" / "app.py").read_text()
-    invocation = app_py[app_py.index('"main:app"'):app_py.index('"8000"')]
-    assert "--reload" not in invocation, (
-        "desktop/app.py runs uvicorn with --reload; a session editing the "
-        "backend would restart its own host mid-turn"
+    from supervise import uvicorn_command
+
+    # The argv, not the file text: the docstring names `--reload` to explain
+    # why it is absent, and a test that greps the source cannot tell a reason
+    # from a flag.
+    assert "--reload" not in uvicorn_command(), (
+        "supervise.py starts uvicorn with --reload; the reloader and the "
+        "health probe would fight over the same process"
     )
+
+    repo = Path(__file__).resolve().parents[2]
+    makefile = (repo / "Makefile").read_text()
+    app_target = makefile[makefile.index("\napp:"):makefile.index("\nopen-app:")]
+    assert "--reload" not in app_target, "`make app` must not run a reloader"
+    assert "supervise.py" in app_target, "`make app` must run the backend supervised"
 
 
 def _uvicorn_commands(makefile: str) -> list[str]:
