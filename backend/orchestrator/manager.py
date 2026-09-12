@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import logging
 import os
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -40,22 +41,54 @@ from .events import (EngineError, Event, Limits, SessionStart, TextDelta,
 # Settable, because the right value depends on the plan rather than on the
 # code: a heavy day measured 3% of the 5-hour window, so 2 was leaving most
 # of the budget unspent.
+log = logging.getLogger(__name__)
+
 DEFAULT_MAX_CONCURRENT = 4
+
+# An upper bound on the setting, not on the machine. Nine because there is no
+# present reason to run more, and an unbounded env var is how a typo becomes
+# a quota incident -- `NOCTIS_MAX_CONCURRENT=40` would be accepted silently
+# and spend the 5-hour window in an afternoon.
+#
+# **If you ever need more than nine, this constant is the only thing in the
+# way.** Raise it here. A value above it is clamped and says so rather than
+# being honoured or refused, because refusing to start would be worse than
+# starting with fewer.
+MAX_CONCURRENT_CEILING = 9
 
 
 def max_concurrent_setting() -> int:
     """Read at construction, not at import.
 
     A module-level constant would bind into `__init__`'s default the moment
-    this file is imported, which is before `.env` is necessarily loaded --
-    so the setting would work or not depending on import order, which is the
+    this file is imported, which is before `.env` is necessarily loaded -- so
+    the setting would work or not depending on import order, which is the
     worst way for a setting to behave.
     """
-    try:
-        value = int(os.environ.get("NOCTIS_MAX_CONCURRENT", DEFAULT_MAX_CONCURRENT))
-    except ValueError:
+    raw = os.environ.get("NOCTIS_MAX_CONCURRENT")
+    if raw is None:
         return DEFAULT_MAX_CONCURRENT
-    return max(1, value)
+    try:
+        value = int(raw)
+    except ValueError:
+        log.warning(
+            "NOCTIS_MAX_CONCURRENT=%r is not a number; using %d",
+            raw, DEFAULT_MAX_CONCURRENT,
+        )
+        return DEFAULT_MAX_CONCURRENT
+    if value > MAX_CONCURRENT_CEILING:
+        log.warning(
+            "NOCTIS_MAX_CONCURRENT=%d is above the ceiling of %d; using %d. "
+            "The ceiling is MAX_CONCURRENT_CEILING in orchestrator/manager.py "
+            "-- raise it there if you genuinely need more.",
+            value, MAX_CONCURRENT_CEILING, MAX_CONCURRENT_CEILING,
+        )
+        return MAX_CONCURRENT_CEILING
+    if value < 1:
+        log.warning("NOCTIS_MAX_CONCURRENT=%d would run nothing; using 1", value)
+        return 1
+    return value
+
 
 _counter = itertools.count(1)
 

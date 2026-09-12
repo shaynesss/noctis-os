@@ -460,7 +460,7 @@ Two variables are required. Everything else has a working default.
 | `VITE_API_TOKEN` | **yes** | — | The same token, for the shell. Vite inlines it into the bundle — acceptable only because this is a local single-user app on localhost. |
 | `VITE_API_BASE` | no | `http://localhost:8000` | Where the shell reaches the backend. |
 | `PORT` | no | `8000` | Backend listen port. Change `VITE_API_BASE` and `NOCTIS_BACKEND` to match. |
-| `NOCTIS_MAX_CONCURRENT` | no | `4` | Sessions that may run at once. A budget on the 5-hour window, not a machine limit. |
+| `NOCTIS_MAX_CONCURRENT` | no | `4`, max `9` | Sessions that may run at once. A budget on the 5-hour window, not a machine limit. Above 9 is clamped, with a log line naming `MAX_CONCURRENT_CEILING` — raise it there if you need more. |
 | `NOCTIS_CLAUDE_BIN` | no | PATH, then common install paths | Absolute path to `claude`. Needed for a non-standard install, or to pin a build. |
 | `NOCTIS_DATA_DIR` | no | `backend/data/` | SQLite history and the search index. |
 | `NOCTIS_HISTORY_DB` | no | derived | Explicit DB path for the MCP server, which runs as its own process. |

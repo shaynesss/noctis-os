@@ -872,6 +872,25 @@ def test_the_concurrency_cap_is_a_budget_not_a_constant(monkeypatch):
     assert SessionManager().max_concurrent == 1, "a cap of zero would run nothing"
 
 
+def test_the_setting_has_a_ceiling_and_says_when_it_bites(monkeypatch, caplog):
+    """An unbounded env var is how a typo becomes a quota incident: `=40`
+    would be honoured silently and spend the 5-hour window in an afternoon.
+
+    Clamped rather than refused -- starting with fewer beats not starting --
+    and the warning names the constant to change, because the capability is
+    only useful if you can find it a month later.
+    """
+    from orchestrator.manager import MAX_CONCURRENT_CEILING
+
+    monkeypatch.setenv("NOCTIS_MAX_CONCURRENT", str(MAX_CONCURRENT_CEILING))
+    assert SessionManager().max_concurrent == MAX_CONCURRENT_CEILING, "the ceiling itself is fine"
+
+    monkeypatch.setenv("NOCTIS_MAX_CONCURRENT", "40")
+    with caplog.at_level("WARNING"):
+        assert SessionManager().max_concurrent == MAX_CONCURRENT_CEILING
+    assert "MAX_CONCURRENT_CEILING" in caplog.text, "the warning must name what to change"
+
+
 def test_two_sessions_of_one_mode_run_together():
     """Same-mode concurrency, which the per-mode config dirs made unsafe and
     their removal made ordinary. Two Faber tabs on two repositories is the
