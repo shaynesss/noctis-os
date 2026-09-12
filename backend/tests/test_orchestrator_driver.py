@@ -116,7 +116,7 @@ def test_the_mode_travels_in_the_argv_not_in_a_file(monkeypatch):
     shadowed by the prompt it was born with.
     """
     import orchestrator.driver as driver
-    monkeypatch.setattr(driver, "mode_methodology", lambda mode: f"# {mode} method")
+    monkeypatch.setattr(driver, "mode_methodology", lambda mode, job=None: f"# {mode} method")
     cmd = build_command(SessionSpec(mode="faber", prompt="x"))
     assert cmd[cmd.index("--append-system-prompt") + 1] == "# faber method"
 
@@ -139,7 +139,7 @@ def test_an_unreadable_vault_costs_the_overlay_not_the_session(monkeypatch):
     third and worst option -- the CLI taking an empty override seriously.
     """
     import orchestrator.driver as driver
-    monkeypatch.setattr(driver, "mode_methodology", lambda mode: "")
+    monkeypatch.setattr(driver, "mode_methodology", lambda mode, job=None: "")
     monkeypatch.setattr(driver, "mode_agents", lambda mode: "")
     cmd = build_command(SessionSpec(mode="faber", prompt="x"))
     assert "--append-system-prompt" not in cmd and "--agents" not in cmd

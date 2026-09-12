@@ -91,3 +91,14 @@ def test_the_methodology_states_where_the_vault_actually_is(tmp_path, monkeypatc
     text = modes.mode_methodology("faber")
     assert str(tmp_path) in text, "the absolute vault root must be stated"
     assert "universal" in text and "faber overlay" in text
+
+
+def test_an_unreadable_overlay_does_not_discard_the_job_context(tmp_path, monkeypatch):
+    """They come from different files. Losing the context because the overlay
+    was missing discards something already in hand — and a session that knows
+    which job it is in beats one that knows neither."""
+    monkeypatch.setattr("prompts.render.VAULT", tmp_path)
+    monkeypatch.setattr("prompts.render.PROMPTS", tmp_path / "nope")
+    text = modes.mode_methodology("faber", job_context="**proj** stage: Ship")
+    assert "stage: Ship" in text
+    assert modes.mode_methodology("faber") == "", "no overlay and no job is still nothing"

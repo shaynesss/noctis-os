@@ -41,8 +41,9 @@ def vault_folder(mode: str) -> str | None:
 MODE_OF_FOLDER = {folder: mode for mode, folder in MODE_VAULT_DIR.items()}
 
 
-def mode_methodology(mode: str) -> str:
-    """The mode's composed prompt: universal system prompt plus its overlay.
+def mode_methodology(mode: str, job_context: str | None = None) -> str:
+    """The mode's composed prompt: universal prompt, overlay, and this
+    launch's job context.
 
     Imported from `prompts.render` rather than reimplemented, so there stays
     exactly one definition of what a mode's prompt is. A failure here is
@@ -50,11 +51,19 @@ def mode_methodology(mode: str) -> str:
     overlay is a worse session, but a session that fails to spawn is no
     session at all, and the old code made the same call for the same reason.
     """
+    from prompts.render import VAULT
     try:
-        from prompts.render import VAULT, compose
-        text = compose(mode)
+        from prompts.render import compose
+        text = compose(mode, job_context=job_context)
     except Exception:       # noqa: BLE001 - see docstring
-        return ""
+        # The overlay is unreadable. The job context is not -- it came from a
+        # different file and was already resolved -- so losing it here would
+        # discard something we have because something else was missing. A
+        # session that knows which job it is in and nothing else is still a
+        # better session than one that knows neither.
+        if not job_context:
+            return ""
+        text = f"## This session's job\n\n{job_context}"
     # Where the vault actually is, absolutely.
     #
     # system.md says 'Vault root: `second-brain/`', which is a *relative*

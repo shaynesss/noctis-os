@@ -27,7 +27,6 @@ from .events import (EngineError, Event, SessionStart, TextDelta,
 from .parser import parse_line
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_ROOT = REPO_ROOT / "backend" / "launch_config"
 
 MODE_MODELS = {
     "general": "claude-opus-5",
@@ -283,6 +282,11 @@ class SessionSpec:
     # continuation is a turn, so without a way to tell them apart it would
     # qualify for its own continuation and never terminate.
     continuation: bool = False
+    # This launch's job context, spliced into the composed prompt under
+    # "This session's job". Resolved by the caller from the working
+    # directory, because the job whose project_path is this directory is the
+    # job the session is about to work on.
+    job_context: str | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in MODE_MODELS:
@@ -332,7 +336,7 @@ def build_command(spec: SessionSpec) -> list[str]:
     # switches system-prompt snapshotting off -- so an edit to a mode's
     # methodology reaches a *resumed* session, which under the recorded
     # snapshot it never did.
-    if methodology := mode_methodology(spec.mode):
+    if methodology := mode_methodology(spec.mode, spec.job_context):
         cmd += ["--append-system-prompt", methodology]
     if agents := mode_agents(spec.mode):
         cmd += ["--agents", agents]
@@ -500,13 +504,15 @@ async def with_turn_totals(events: AsyncIterator[Event]) -> AsyncIterator[Event]
 
 
 async def run_session(spec: SessionSpec, timeout: float | None = 600) -> AsyncIterator[Event]:
-    """Production entry point: spec → spawned session → Events."""
-    config_dir = CONFIG_ROOT / spec.mode
-    if not config_dir.is_dir():
-        yield EngineError(
-            f"config dir missing for '{spec.mode}' — run ./bootstrap/bootstrap.sh", fatal=True
-        )
-        return
+    """Production entry point: spec → spawned session → Events.
+
+    No preflight on a per-mode config directory. There was one, and the
+    2026-09-12 cutover deleted the directories it guarded while leaving the
+    guard behind -- so every spawn failed with "config dir missing, run
+    bootstrap.sh", pointing at a fix that would have recreated something
+    nothing reads. Sessions use the real ~/.claude now and there is nothing
+    per-mode on disk to check for.
+    """
     async for event in with_turn_totals(launch(
         build_command(spec), env=build_env(spec), cwd=spec.cwd, timeout=timeout,
         stdin_data=build_stdin(spec),

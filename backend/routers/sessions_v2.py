@@ -34,7 +34,6 @@ from orchestrator.events import EngineError
 from orchestrator.manager import SessionManager
 from orchestrator.store import ConversationStore
 from orchestrator.wire import blocks_from_messages, to_sse
-from prompts.render import render
 
 log = logging.getLogger(__name__)
 
@@ -132,41 +131,18 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
         raise HTTPException(status_code=422, detail="A prompt is required")
     prompt = OPENING_PROMPT if req.opener else req.prompt
 
-    # The mode's CLAUDE.md, rebuilt from prompts/system.md + its overlay
-    # before the spawn reads it.
+    # The job whose `project_path` is this directory is the job this session
+    # is about to work on. Resolved here rather than sent as a request field:
+    # no new parameter to keep in sync, and the mapping is the one already
+    # made by opening that directory.
     #
-    # render()'s own docstring has always said "the orchestrator calls
-    # render() on every launch", and its banner says "Rewritten on every
-    # launch". Neither was true: the only caller was the Prompts panel's
-    # Save button. So an edit to system.md reached a session only if it
-    # happened to be saved through that one UI, which made a preference
-    # meant to be universal behave as though it were per-interface.
-    #
-    # Cheap to do here: render() compares the composed text against what is
-    # on disk (ignoring the banner's timestamp) and returns without writing
-    # when they match, so an ordinary launch is a read, not a write.
-    #
-    # The job context goes in with it. `compose()` has always accepted a
-    # `job_context` argument and spliced it in under "This session's job",
-    # and no caller has ever passed one — so the block existed, was
-    # correct, and never rendered. Resolved from the working directory
-    # rather than a new request field: the job whose `project_path` is this
-    # directory is the job this session is about to work on.
-    #
-    # Known limit, documented rather than engineered around: a config dir
-    # is per-mode, not per-session, so two concurrent sessions of the same
-    # mode in *different* projects share one CLAUDE.md and the second
-    # launch rewrites it. The window is narrow — the file is read once at
-    # spawn, not continuously — and the session can call `job_context` for
-    # the authoritative record either way.
+    # It travels in the spawn's argv, not through a file. `render()` used to
+    # write the composed prompt into a per-mode config dir and was called
+    # here for exactly that; those dirs are gone, and for a few hours after
+    # the cutover this still resolved the job context correctly and then
+    # composed it into a directory nothing read.
     cwd = _safe_cwd(req.cwd)
-    try:
-        render(req.mode, job_context=jobs.job_brief(req.mode, cwd))
-    except Exception as exc:  # noqa: BLE001 - never fatal, see below
-        # A stale prompt makes a worse session; a raised exception here
-        # makes no session at all. Logged rather than swallowed, because
-        # silently continuing is the exact failure that produced this bug.
-        log.warning("prompt render failed for mode %r: %s", req.mode, exc)
+    job_context = jobs.job_brief(req.mode, cwd)
 
     try:
         spec = SessionSpec(
@@ -174,6 +150,7 @@ async def launch(req: LaunchRequest) -> StreamingResponse:
             prompt=prompt,
             permission_mode=req.permission_mode,
             effort=req.effort,
+            job_context=job_context,
             resume_id=req.resume_id,
             cwd=cwd,
             images=[Image(media_type=i.media_type, data=i.data) for i in req.images],
