@@ -38,6 +38,8 @@ export type WireEvent =
       // often than `silent`, and is what leaves a reader staring at
       // "Ran 1 shell command" with no conclusion.
       unclosed?: boolean; text_after_last_tool?: number
+      // Hit the output ceiling rather than finishing the thought.
+      truncated?: boolean
       denials?: { tool: string; target: string }[]
       usage: { input: number; output: number; cached: number; model: string
                aux_input: number; aux_output: number
@@ -273,11 +275,12 @@ export function fold(state: Fold, e: WireEvent): Fold {
        * saying what came of it -- which is the common one, and which the
        * first version of this missed by counting text across the whole turn
        * rather than after the last tool. */
-      const blocks: Block[] = (e.silent || e.unclosed)
+      const blocks: Block[] = (e.silent || e.unclosed || e.truncated)
         ? [...state.blocks, {
             kind: 'silent',
             tools: e.tool_calls ?? 0,
             spoke: !e.silent,
+            truncated: e.truncated,
             /* Denials turn "it said nothing" into "it was not allowed to do
              * anything" -- the engine reported these all along. */
             denials: e.denials ?? [],

@@ -351,3 +351,18 @@ def test_a_malformed_denial_does_not_cost_the_turn_its_usage():
     end = events[0]
     assert end.usage.input_tokens == 7
     assert [d.tool for d in end.denials] == ["?"]
+
+
+def test_running_out_of_room_is_not_the_same_as_finishing():
+    """`stop_reason` has been parsed and carried since the orchestrator was
+    written, and read by nothing. A turn cut off at the output ceiling looked
+    exactly like one that had said its piece."""
+    def end(reason):
+        return parse_line(json.dumps({
+            "type": "result", "subtype": "success", "session_id": "s",
+            "duration_ms": 1, "is_error": False, "usage": {}, "modelUsage": {},
+            "stop_reason": reason,
+        }))[0]
+    assert end("max_tokens").truncated
+    assert not end("end_turn").truncated
+    assert not end(None).truncated

@@ -219,6 +219,14 @@ class TurnEnd:
         return self.text_chars == 0
 
     @property
+    def truncated(self) -> bool:
+        """The engine stopped because it ran out of room, not because it was
+        done. `end_turn` is a finished thought; `max_tokens` is a sentence cut
+        in half, and the two are indistinguishable in a transcript unless one
+        of them says so."""
+        return self.stop_reason == "max_tokens"
+
+    @property
     def unclosed(self) -> bool:
         """Ended on a tool call, with nothing said about it.
 

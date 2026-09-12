@@ -83,6 +83,11 @@ def to_dict(e: Event) -> dict[str, Any]:
                 # the reader is still left with an unexplained tool call as
                 # the last thing on screen.
                 "unclosed": e.unclosed,
+                # Ran out of room rather than finishing. stop_reason has been
+                # parsed and carried since the orchestrator was written and
+                # read by nothing, so a turn cut off mid-sentence looked
+                # exactly like one that had said its piece.
+                "truncated": e.truncated,
                 "text_after_last_tool": e.text_after_last_tool,
                 # `blocked` is the one that names a cause. A silent turn with
                 # denials on it was not a session declining to answer -- it
