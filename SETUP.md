@@ -23,6 +23,8 @@ The backend reads and writes `second-brain/` directly off disk. **No Obsidian, n
 
 Nothing else. Repo scaffolding, dependency installs, and env file creation are all handled by `make setup`.
 
-## Native desktop window (optional, replaces the browser-tab workflow)
+## Native desktop window (`make dev`, the normal way to run it)
 
-`make app` opens Noctis OS in its Tauri shell — a native window with global hotkey summon (Opt+Space), tray and launch-at-login — and runs the backend under `backend/supervise.py`, which restarts it if it stops answering. Closing the window hides it rather than quitting; the tray and the hotkey are the ways back. Needs Rust: `cargo` is installed by `bootstrap/`, and the Makefile adds `~/.cargo/bin` to PATH so a non-login shell still finds it. *(Until 2026-09-12 this ran `desktop/app.py`, a pywebview window — v1's shell, now deleted.)*
+`make dev` opens Noctis OS in its Tauri shell — a native window with global hotkey summon (Opt+Space), tray and launch-at-login — and runs the backend under `backend/supervise.py`, which restarts it if it stops answering. Closing the window hides it rather than quitting; the tray and the hotkey are the ways back. Needs Rust: `cargo` is installed by `bootstrap/`, and the Makefile adds `~/.cargo/bin` to PATH so a non-login shell still finds it.
+
+`make browser` is the fallback for backend-only work — a browser tab at `:5180` and `uvicorn --reload` instead of the window and the supervisor — worth it only when a Rust build is not. *(Until 2026-09-12 this ran `desktop/app.py`, a pywebview window — v1's shell, now deleted.)*

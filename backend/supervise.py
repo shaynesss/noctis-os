@@ -76,7 +76,7 @@ def spawn() -> subprocess.Popen:
 
     No `--reload`. This supervisor and the reloader would fight -- a reload
     looks exactly like a death to a health probe, so the supervisor would reap
-    the process the reloader had just started. `make dev` keeps the reloader
+    the process the reloader had just started. `make browser` keeps the reloader
     and has no supervisor; they are alternatives, not layers.
     """
     return subprocess.Popen(
@@ -121,7 +121,7 @@ def main() -> int:
 
     if healthy(timeout=1.0):
         _log(f"something is already answering on :{PORT}; supervising it is not "
-             f"possible without owning it. Stop it first, or use `make dev`.")
+             f"possible without owning it. Stop it first, or use `make browser`.")
         return 1
 
     _child = spawn()

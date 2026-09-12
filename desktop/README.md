@@ -1,56 +1,41 @@
 # Desktop wrapper
 
-Native window via [pywebview](https://pywebview.flowrl.com/), not Tauri —
-`SPEC.md`'s original "Tauri desktop wrap" out-of-scope line covered the
-general idea; superseded 2026-07-21 in favor of this lighter approach.
-Chosen specifically to avoid adding a Rust toolchain to a single-user local
-tool with no distribution need — pywebview stays 100% Python, reusing the
-backend's own venv.
+One file, and it is not a shell: `NoctisOS.app` is a double-click wrapper
+around `make dev`. The shell itself is Tauri, and it lives in
+`frontend/src-tauri/`.
 
-## Running it
+The bundle exists for one reason — a Dock and Finder icon, so starting Noctis
+does not mean opening a terminal first. It is a thin wrapper, not a
+`py2app`/`PyInstaller` freeze: it runs the live repo, so a code change needs
+nothing more than the window's own reload, never a rebuild of this bundle.
 
 ```
-make app
+make open-app     # or double-click desktop/NoctisOS.app
 ```
 
-Starts the same two dev servers `make dev` does (backend `uvicorn --reload`,
-frontend Vite), waits for both to answer, then opens a frameless native
-window pointed at the frontend. Both backend and frontend hot-reload
-live — same as a browser tab, this is a native window, not a snapshot.
-Quit with **Cmd+Q** (there's no visible close button by design — frameless
-means no OS chrome at all, matching "fully my interface").
+Output goes to `backend/runtime/desktop.log`, because a double-clicked app has
+no terminal to print into. That log is the first place to look when the icon
+bounces and no window appears.
 
-## Frameless, and why cleanup needed real fixing
+The repo path is resolved from the script's own location rather than
+hardcoded, so moving the checkout keeps it working — as long as the bundle
+stays inside `desktop/` of that checkout.
 
-The window has zero OS chrome (`frameless=True`) — genuinely just the app's
-own UI, no titlebar, no traffic-light buttons. Verified live, not assumed:
-first pass used a plain `try/finally` around `webview.start()` plus
-`Popen.terminate()`, which looked fine until actually closing the window
-and checking `lsof` — `npm run dev` spawns a *child* process that runs the
-real Vite server, and `terminate()` only signals the immediate child, so
-the real server (and its bound port) kept running invisibly after the
-window closed. Fixed by starting each process in its own group
-(`start_new_session=True`) and killing the whole group on cleanup
-(`os.killpg`), registered three ways (`window.events.closed`, `atexit`,
-`SIGTERM`) for defense in depth. Verified again with a real simulated
-Cmd+Q keystroke (not just `.terminate()` from the launching script) — zero
-leftover processes, zero leftover bound ports.
+## What used to be here
 
-## Custom icon — placeholder now, real art and a bundle later
+Until 2026-09-12 this directory held `app.py`, a pywebview window that was
+v1's shell — chosen in July 2026 specifically to avoid adding a Rust
+toolchain. Tauri replaced it: the Rust toolchain became worth paying for once
+the shell needed a global hotkey, a tray, launch-at-login, and a packaging
+story. `app.py` and its tests are deleted; `SPEC.md`'s "Desktop shell and
+supervision" section is the current account.
 
-pywebview's `icon` parameter (on both `create_window` and `start`) is
-documented GTK/QT-only — doesn't do anything on macOS. Worked around by
-setting the Dock icon directly via AppKit (`NSApplication.setApplicationIconImage_`,
-called once the GUI loop is live via `webview.start(func=_set_dock_icon)`)
-using Faber's sprite as a placeholder — real per Shayne's request ("can be
-random for now, actual art down the line"), not final branding. Ran clean
-with no exception using the standard documented API; couldn't get a clean
-screenshot confirming it in this environment (auto-hiding Dock, synthetic
-mouse events didn't reliably trigger the reveal), so this one's worth a
-glance at the real Dock next run.
+Two things that pywebview shell taught, both of which survive in the current
+code:
 
-Still not done: a proper double-click-able `.app` bundle with a bundled
-`.icns` (`py2app` or `PyInstaller`). Right now `make app` runs from source
-(shows up as "python" in the menu bar), correct for daily personal use but
-not yet something you'd hand to someone else or launch without the
-terminal.
+- **Cleanup needs process groups.** `npm run dev` spawns a *child* that runs
+  the real Vite server, so `Popen.terminate()` on the immediate process left
+  the real server and its bound port running invisibly. `backend/supervise.py`
+  starts its child with `start_new_session=True` and signals the whole group.
+- **Verify by actually closing the window.** That leak looked fine in review
+  and only showed up under `lsof` after a real Cmd+Q.

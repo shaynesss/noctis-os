@@ -1,7 +1,7 @@
 #!/bin/bash
 # Thin wrapper, not a py2app/PyInstaller freeze -- this bundle only exists
-# to be double-clickable (Dock/Applications icon, no more `make app` in a
-# terminal). It runs `make app` straight from the live repo -- which is the
+# to be double-clickable (Dock/Applications icon, no more `make dev` in a
+# terminal). It runs `make dev` straight from the live repo -- which is the
 # Tauri shell plus the backend supervisor since 2026-09-12; it used to run
 # desktop/app.py, v1's pywebview shell, which is now deleted. So
 # a code change just needs the app's own Refresh command (Cmd+R or the
@@ -15,4 +15,4 @@ DIR="$(cd "$(dirname "$0")/../../../.." && pwd)"
 LOG="$DIR/backend/runtime/desktop.log"
 mkdir -p "$(dirname "$LOG")"
 
-exec /usr/bin/make -C "$DIR" app >>"$LOG" 2>&1
+exec /usr/bin/make -C "$DIR" dev >>"$LOG" 2>&1

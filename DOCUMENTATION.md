@@ -399,16 +399,20 @@ A **quick-capture inbox** takes a link plus a note; the next dev session sorts i
 
 ## 16. Running it: two paths
 
-| | `make dev` | `make app` |
+| | `make dev` | `make browser` |
 |---|---|---|
-| Window | browser tab at `:5180` | native Tauri window |
-| Backend | `uvicorn --reload` | supervised by `backend/supervise.py` |
+| Window | native Tauri window | browser tab at `:5180` |
+| Backend | supervised by `backend/supervise.py` | `uvicorn --reload` |
 | Typecheck | `[tsc]` stream | `[tsc]` stream |
-| Vite | started directly | started by `tauri dev` |
+| Vite | started by `tauri dev` | started directly |
 
-`make dev` is for building Noctis; `make app` is for using it. **Product
-capabilities are identical** — everything else is backend or frontend code.
-`make open-app` is a double-clickable bundle around `make app`.
+**You develop in the window you use.** `make dev` is the app; `make browser`
+is the fallback for backend-only work where a Rust build is not worth paying
+for. **Product capabilities are identical** — everything else is backend or frontend code.
+`make open-app` is a double-clickable bundle around `make dev`. `make reload`
+kills the backend so the supervisor restarts it on new code — a deliberate
+restart takes the same path as a crash, which is the point of crash-only
+design rather than a special case beside it.
 
 **Why the shell is Tauri.** A Rust window around the OS's WebView. VS Code
 uses the same architecture — Electron is Chromium plus Node — and Tauri is
@@ -437,7 +441,7 @@ not prevent loss. See §18.
 ## 17. What v1 left behind
 
 Removed at the 2026-09-12 cutover: `desktop/app.py` (the pywebview shell,
-which `make app` still pointed at for five days after Tauri shipped),
+which `make dev` still pointed at for five days after Tauri shipped),
 `World.tsx`, `ProfileOverlay.tsx`,
 `DesignLodge.tsx`, `modes.ts`, `api.ts`, v1's `index.css` and `App.tsx`; the
 `mode`, `session`, `nightshift` and `design_lodge` routers; `launch_surfaces.py`
@@ -520,7 +524,7 @@ Start with `make doctor`. It answers most of this in three lines.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| App loads, nothing responds | Backend is *absent*, not broken. `make dev` starts both under one trap that only fires when `make` exits, so a dead backend leaves Vite serving a UI pointed at a closed port. | `make backend` — restarts uvicorn alone, keeps the frontend's state |
+| App loads, nothing responds | Backend is *absent*, not broken. Under `make dev` the supervisor should have caught it; under `make browser` there is no supervisor, so a dead backend leaves Vite serving a UI pointed at a closed port. | `make reload` — kills uvicorn so the supervisor restarts it on current code, keeping the frontend's state |
 | `make doctor` says `imports FAIL` | A real code error | `cd backend && .venv/bin/python -c "import main"` and read the traceback |
 | `capabilities` shows a `GAP` | A methodology references a tool this machine cannot reach | Install it, or amend the methodology — do not leave it |
 | A session asks permission for `vault_search` | The shared allowlist did not reach the spawn | `ps -axo args \| grep -- --settings` |

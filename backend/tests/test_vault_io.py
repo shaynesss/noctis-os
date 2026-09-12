@@ -124,8 +124,8 @@ def test_the_supervised_backend_does_not_reload():
 
     A reload is indistinguishable from a death to a health probe, so the
     supervisor would reap what the reloader had just started and the two would
-    fight over the port. They are alternatives, not layers: `make dev` has the
-    reloader and no supervisor, `make app` has the supervisor and no reloader.
+    fight over the port. They are alternatives, not layers: `make browser` has the
+    reloader and no supervisor, `make dev` has the supervisor and no reloader.
 
     Noctis's own primary job is editing this repository, which is what makes
     the pairing dangerous rather than merely redundant -- with --reload on, a
@@ -144,9 +144,9 @@ def test_the_supervised_backend_does_not_reload():
 
     repo = Path(__file__).resolve().parents[2]
     makefile = (repo / "Makefile").read_text()
-    app_target = makefile[makefile.index("\napp:"):makefile.index("\nopen-app:")]
-    assert "--reload" not in app_target, "`make app` must not run a reloader"
-    assert "supervise.py" in app_target, "`make app` must run the backend supervised"
+    app_target = makefile[makefile.index("\ndev:"):makefile.index("\n# desktop/NoctisOS.app")]
+    assert "--reload" not in app_target, "`make dev` must not run a reloader"
+    assert "supervise.py" in app_target, "`make dev` must run the backend supervised"
 
 
 def _uvicorn_commands(makefile: str) -> list[str]:

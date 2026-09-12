@@ -110,16 +110,17 @@ make setup     # deps, and .env.example -> .env
 Set `VAULT_PATH`, `NOCTIS_API_TOKEN` and `VITE_API_TOKEN` in `.env`. Everything else has a working default — see [DOCUMENTATION.md](DOCUMENTATION.md#configuration) for the full table.
 
 ```bash
-make app       # the product — Tauri window, supervised backend
-make dev       # the dev loop — browser tab, hot reload
+make dev       # the app: Tauri window, supervised backend, typecheck
+make browser   # backend-only work: browser tab, hot reload, no Rust build
 make doctor    # what is up, what is down, any capability gaps
 make test      # pytest + tsc -b + vitest
 ```
 
-`make app` is what you use; `make dev` is what you build in. Both carry the
-same capabilities — `dev` swaps the native window for a browser tab and the
-backend supervisor for a file-watching reloader, which are alternatives
-rather than layers.
+**You develop in the window you use.** `make dev` is the app — a native Tauri
+window — so a bug found while working is a bug found in the real surface.
+`make browser` is the fallback for backend-only work, where a Rust build is
+not worth paying for; it swaps the window for a browser tab and the supervisor
+for a file-watching reloader, which are alternatives rather than layers.
 
 ## Blast radius
 
@@ -149,7 +150,7 @@ rather than layers.
 |---|---|
 | **v2** (2026-09) | The app hosts sessions instead of launching them into VS Code and Terminal. Live transcripts, durable history, cross-mode search — none of which the fire-and-forget model could do. |
 | **v2 harness pass** (2026-09-11/12) | Sessions run against the real `~/.claude` rather than private config directories, so they inherit the full toolkit. Per-mode tool cages removed. Turn integrity made visible and enforced. |
-| **v1 cutover** (2026-09-12) | v1 removed entirely — world screen, launch surfaces, four routers, config dirs, and the pywebview shell `make app` was still pointing at. Maintenance's state moved out of `modes/` to root-level `maintenance/`. The backend is supervised: it restarts itself when it stops answering. |
+| **v1 cutover** (2026-09-12) | v1 removed entirely — world screen, launch surfaces, four routers, config dirs, and the pywebview shell the `app` target was still pointing at. Maintenance's state moved out of `modes/` to root-level `maintenance/`. The backend is supervised: it restarts itself when it stops answering. |
 | **v1.5** (2026-07) | Five modes wired to real vault reads and writes; Design Lodge. |
 
 Full detail in [DOCUMENTATION.md](DOCUMENTATION.md) · [`STATUS.md`](STATUS.md) · [`CHANGELOG.md`](CHANGELOG.md).

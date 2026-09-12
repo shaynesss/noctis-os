@@ -147,21 +147,23 @@ earlier decision was right for v1 is the same reason it is wrong for v2: v1
 was a *launcher*, so native OS integration bought nothing. v2 is the front
 door, which makes summon and tray load-bearing rather than polish.
 
-> **Amended 2026-09-12.** `make app` ran `desktop/app.py`, v1's pywebview
+> **Amended 2026-09-12.** The `app` target ran `desktop/app.py`, v1's pywebview
 > shell, for five days after Tauri shipped — a third v1/v2 straddle alongside
 > the two specs and `modes/settings`, and the one that mattered most because
-> it is the path a person actually opens. pywebview is deleted; `make app` is
+> it is the path a person actually opens. pywebview is deleted; the loop is
 > the Tauri shell, and `desktop/NoctisOS.app` wraps that.
 
 **Two run paths, and only two.**
 
-| | `make dev` | `make app` |
+| | `make dev` | `make browser` |
 |---|---|---|
-| Window | browser tab at `:5180` | native Tauri window |
-| Backend | `uvicorn --reload` | under `backend/supervise.py` |
+| Window | native Tauri window | browser tab at `:5180` |
+| Backend | under `backend/supervise.py` | `uvicorn --reload` |
 | Typecheck | `[tsc]` stream | `[tsc]` stream |
 
-`make dev` is for building Noctis; `make app` is for using it. **Both carry
+**You develop in the window you use**, so a bug found while working is a bug
+found in the real surface. `make browser` is the fallback for backend-only
+work, where a Rust build is not worth paying for. **Both carry
 the same product capabilities** — everything else is backend or frontend code
 and identical in either.
 
