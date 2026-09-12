@@ -98,6 +98,25 @@ export function uniqueLabel(base: string, taken: readonly string[]): string {
   }
 }
 
+/* Apply a patch to one entry of a keyed map, or drop it if the entry is gone.
+ *
+ * The shape every session updater needs. A tab can be closed while its turn
+ * is still unwinding -- the close deletes the session and aborts the stream,
+ * but the abort resolves a tick later, so the stream's updaters and its
+ * `finally` both still run against an entry that no longer exists.
+ *
+ * TypeScript cannot catch that: indexing a `Record<string, T>` is typed as
+ * always present unless `noUncheckedIndexedAccess` is on. The guard has to be
+ * written rather than inferred, which is why it lives here with a test on it
+ * instead of being re-remembered at each call site. */
+export function patchEntry<T>(
+  map: Record<string, T>,
+  key: string,
+  patch: (prev: T) => T,
+): Record<string, T> {
+  return map[key] ? { ...map, [key]: patch(map[key]) } : map
+}
+
 export interface Tab {
   id: string
   mode: Mode

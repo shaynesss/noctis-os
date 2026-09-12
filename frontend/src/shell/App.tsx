@@ -35,7 +35,7 @@ import {
 import { Transcript } from './Transcript'
 import {
   EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL,
-  DEFAULT_EFFORT, EFFORT_CYCLE, uniqueLabel,
+  DEFAULT_EFFORT, EFFORT_CYCLE, patchEntry, uniqueLabel,
   type Effort, type Mode, type Permission, type SessionState, type Tab,
 } from './domain'
 import './tokens.css'
@@ -181,6 +181,26 @@ export default function App() {
    * response event -- otherwise a slow or failing backend leaves the screen
    * showing nothing happened, and the most likely reaction is to type it
    * again. */
+  /* Update one tab's session, or do nothing if the tab is gone.
+   *
+   * Every updater below spreads `...s[tabId]`, and a tab can be closed while
+   * its turn is still unwinding: `closeTab` deletes the session and aborts
+   * the stream, but the abort resolves a tick later, so the stream's own
+   * updaters and its `finally` both still run against an entry that no
+   * longer exists. That threw `undefined is not an object (evaluating
+   * 's[tabId].lastTurn')` and took the window down.
+   *
+   * TypeScript cannot catch this: indexing a `Record<string, T>` is typed as
+   * always present unless `noUncheckedIndexedAccess` is on, so `[tsc]`
+   * reports zero errors on it. The guard has to be written, not inferred.
+   *
+   * Dropping the update is correct rather than merely safe -- the tab it
+   * described is closed, so there is nothing left for it to say. */
+  const patchSession = (
+    tabId: string,
+    patch: (prev: SessionState) => SessionState,
+  ) => setSessions((s) => patchEntry(s, tabId, patch))
+
   const turn = async (
     tabId: string,
     prompt: string,
@@ -243,16 +263,13 @@ export default function App() {
         if (ev.t === 'limits') setLimits(ev)
         // Written on every event rather than batched: the point of streaming
         // is that the transcript moves while the model works.
-        setSessions((s) => ({
-          ...s,
-          [tabId]: {
-            ...s[tabId],
-            blocks: state.blocks,
-            thinking: state.thinking,
-            context: state.context,
-            ranModel: state.model ?? s[tabId].ranModel,
-            engineId: state.sessionId ?? s[tabId].engineId,
-          },
+        patchSession(tabId, (prev) => ({
+          ...prev,
+          blocks: state.blocks,
+          thinking: state.thinking,
+          context: state.context,
+          ranModel: state.model ?? prev.ranModel,
+          engineId: state.sessionId ?? prev.engineId,
         }))
       }
     } finally {
@@ -274,25 +291,22 @@ export default function App() {
       }
 
       delete aborts.current[tabId]
-      setSessions((s) => ({
-        ...s,
-        [tabId]: {
-          ...s[tabId],
-          busy: false,
-          thinking: null,
-          startedAt: null,
-          // Only for a turn that ran to completion: a stopped one already
-          // says "Stopped." and does not need a duration beside it.
-          lastTurn: stopped
-            ? s[tabId].lastTurn
-            : { seconds: (Date.now() - (withUser.startedAt ?? Date.now())) / 1000, at: Date.now() },
-          // Recorded in the transcript rather than left silent. A reply that
-          // simply stops mid-sentence is indistinguishable from one that
-          // finished badly, and you would not know whether to retry.
-          blocks: stopped
-            ? [...s[tabId].blocks, { kind: 'error', message: 'Stopped.', fatal: false }]
-            : s[tabId].blocks,
-        },
+      patchSession(tabId, (prev) => ({
+        ...prev,
+        busy: false,
+        thinking: null,
+        startedAt: null,
+        // Only for a turn that ran to completion: a stopped one already
+        // says "Stopped." and does not need a duration beside it.
+        lastTurn: stopped
+          ? prev.lastTurn
+          : { seconds: (Date.now() - (withUser.startedAt ?? Date.now())) / 1000, at: Date.now() },
+        // Recorded in the transcript rather than left silent. A reply that
+        // simply stops mid-sentence is indistinguishable from one that
+        // finished badly, and you would not know whether to retry.
+        blocks: stopped
+          ? [...prev.blocks, { kind: 'error', message: 'Stopped.', fatal: false }]
+          : prev.blocks,
       }))
     }
   }

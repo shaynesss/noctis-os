@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { emptyFold, fold, get, readSSE, type WireEvent } from './engine'
-import { DEFAULT_EFFORT, EFFORT_CYCLE, uniqueLabel } from './domain'
+import { DEFAULT_EFFORT, EFFORT_CYCLE, patchEntry, uniqueLabel } from './domain'
 import type { Block, Effort } from './domain'
 
 const run = (events: WireEvent[]) => events.reduce(fold, emptyFold())
@@ -406,5 +406,30 @@ describe('tab labels', () => {
     // Closing (2) while (3) is open must not hand the next tab (2) as well.
     expect(uniqueLabel('Faber · x', ['Faber · x', 'Faber · x (3)']))
       .toBe('Faber · x (2)')
+  })
+})
+
+describe('patchEntry', () => {
+  it('applies the patch when the entry is there', () => {
+    const m = { a: { n: 1 }, b: { n: 2 } }
+    expect(patchEntry(m, 'a', (p) => ({ n: p.n + 10 }))).toEqual({ a: { n: 11 }, b: { n: 2 } })
+  })
+
+  it('drops the update when the entry is gone, rather than throwing', () => {
+    // The live crash: closing a tab deletes its session and aborts the
+    // stream, but the abort resolves a tick later -- so the stream's own
+    // updater and its `finally` both still run. Spreading `...s[tabId]`
+    // there threw `undefined is not an object (evaluating
+    // 's[tabId].lastTurn')` and took the window down.
+    const m: Record<string, { n: number }> = { a: { n: 1 } }
+    expect(() => patchEntry(m, 'closed', (p) => ({ n: p.n + 1 }))).not.toThrow()
+    expect(patchEntry(m, 'closed', (p) => ({ n: p.n + 1 }))).toBe(m)
+  })
+
+  it('does not resurrect a deleted entry', () => {
+    // Dropping is correct rather than merely safe: the tab it described is
+    // closed, so there is nothing left for the update to say.
+    const m: Record<string, { n: number }> = {}
+    expect(patchEntry(m, 'gone', () => ({ n: 99 }))).toEqual({})
   })
 })
