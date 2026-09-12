@@ -58,7 +58,7 @@ class Boundary extends Component<{ children: ReactNode }, { error: Error | null 
         <div className="mb-3 text-faber">Noctis hit an error and stopped rendering.</div>
         <div className="mb-4 text-ink-faint">
           {dev
-            ? 'Dev build — this clears itself on the next save. If it persists, the fault is real: run `npm run typecheck`.'
+            ? 'Dev build — clears itself once the code compiles. The `[tsc]` stream in your `make dev` terminal names the actual fault; this stack is only where it surfaced.'
             : 'Reopen the window to recover. The session and its history are on disk and were not lost.'}
         </div>
         {dev && (

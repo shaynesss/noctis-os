@@ -8,10 +8,23 @@ setup:
 bootstrap:
 	./bootstrap/bootstrap.sh
 
+# Three processes, and the third is the one worth explaining.
+#
+# **Vite never typechecks.** It transforms and serves whatever is on disk, so
+# a type error is not caught at all -- it reaches the browser and becomes a
+# runtime crash. `Can't find variable: effort` with a React stack is what a
+# missing const looks like when nothing checked first, and the editor's own
+# squiggle is the only other place it would have shown.
+#
+# `tsc -b --watch` closes that: the error appears in this terminal the moment
+# it is written, named and located, whether or not an editor is open on the
+# file. Prefixed so three interleaved streams stay readable. It never blocks
+# anything -- it only reports.
 dev:
 	@trap 'kill 0' EXIT; \
 	(cd backend && .venv/bin/uvicorn main:app --reload --reload-exclude 'runtime/*' --reload-exclude 'data/*' --port $${PORT:-8000}) & \
 	(cd frontend && npm run dev) & \
+	(cd frontend && npx tsc -b --watch --preserveWatchOutput 2>&1 | sed 's/^/[tsc] /') & \
 	wait
 
 # The suite has always been run by typing the venv's interpreter path out in
