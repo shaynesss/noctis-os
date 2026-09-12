@@ -23,7 +23,8 @@ from datetime import datetime, timezone
 from typing import AsyncIterator, Callable
 
 from .driver import SessionSpec, run_session
-from .events import EngineError, Event, Limits, SessionStart, TurnEnd
+from .events import (EngineError, Event, Limits, SessionStart, TextDelta,
+                     TurnEnd)
 
 MAX_CONCURRENT = 2
 
@@ -53,9 +54,13 @@ class SessionHandle:
 # All three rules, because a turn that failed one has usually failed the
 # others: it stopped without text, so it also never reported state and never
 # handed anything back.
+ALREADY_CLOSED = "closed"
+
 CLOSING_PROMPT = (
-    "That turn ended without closing. Close it now, in prose, with no tool "
-    "calls except a `git status` if code was touched.\n\n"
+    f"If that turn already ended with a handback -- what was done, what it "
+    f"fixed, what is next -- reply with exactly `{ALREADY_CLOSED}` and nothing "
+    f"else.\n\nOtherwise close it now, in prose, with no tool calls except a "
+    f"`git status` if code was touched.\n\n"
     "Say what was done, what it fixed, and what is next -- a handback, not a "
     "restatement of the working. If the turn ended before finishing, report "
     "state rather than intent: what actually landed on disk, not what you "
@@ -167,13 +172,27 @@ class SessionManager:
             continuation=True,
             images=(),                  # the pictures went with the first turn
         )
+        # Text is buffered rather than streamed, because most of the time
+        # there is nothing to show: a turn that closed itself answers
+        # `closed`, and that word must never reach the transcript. Streaming
+        # it and retracting would be worse than a short wait, and what is
+        # being waited on is a closing note rather than the turn's substance.
+        buffered: list[Event] = []
+        text: list[str] = []
         try:
             async for event in self._runner(closing):
                 if isinstance(event, EngineError):
                     return              # see docstring: stay quiet, keep the turn
-                yield event
+                if isinstance(event, TextDelta):
+                    text.append(event.text)
+                buffered.append(event)
         except Exception:               # noqa: BLE001 - see docstring
             return
+
+        if "".join(text).strip().strip(".`").lower() == ALREADY_CLOSED:
+            return                      # it had already handed back; say nothing
+        for event in buffered:
+            yield event
 
 
     def resume_spec(

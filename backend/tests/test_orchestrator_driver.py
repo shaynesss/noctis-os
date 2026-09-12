@@ -741,24 +741,52 @@ def test_the_continuation_cannot_trigger_another():
     assert seen == [False, True], "exactly one continuation, never a third"
 
 
-def test_a_turn_that_closed_itself_is_left_alone():
-    seen: list = []
-
-    async def clean(spec):
-        seen.append(spec.prompt)
+def test_a_turn_that_already_closed_answers_closed_and_shows_nothing():
+    """Every working turn is asked, because whether prose amounts to a
+    handback is not mechanically decidable -- the only reader qualified to
+    judge is the one that wrote it. A turn that did close answers `closed`,
+    and that word must never reach the transcript."""
+    async def runner(spec):
+        if spec.continuation:
+            yield TextDelta("closed")
+            yield TurnEnd(session_id="s1", usage=Usage(0, 0, 0, "m"), duration_ms=1)
+            return
         yield SessionStart(session_id="s1", model="m", cwd="/x")
         yield ToolCall(id="1", name="Bash", args={})
-        yield TextDelta("Done — all green.")
+        yield TextDelta("Done — all green. Next: push.")
         yield TurnEnd(session_id="s1", usage=Usage(0, 0, 0, "m"), duration_ms=1,
-                      text_chars=17, tool_calls=1, text_after_last_tool=17)
+                      text_chars=29, tool_calls=1, text_after_last_tool=29)
 
-    mgr = SessionManager(runner=clean)
+    mgr = SessionManager(runner=runner)
+
+    async def go():
+        return [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="x"))]
+
+    events = asyncio.run(go())
+    text = "".join(e.text for e in events if isinstance(e, TextDelta))
+    assert "closed" not in text.lower(), "the escape word is not transcript content"
+    assert "all green" in text
+
+
+def test_a_turn_with_no_tools_is_not_asked_to_close():
+    """Plain conversation closes itself by existing. Asking would spend a
+    spawn to be told nothing."""
+    seen: list = []
+
+    async def chat(spec):
+        seen.append(spec.continuation)
+        yield SessionStart(session_id="s1", model="m", cwd="/x")
+        yield TextDelta("Here is the answer.")
+        yield TurnEnd(session_id="s1", usage=Usage(0, 0, 0, "m"), duration_ms=1,
+                      text_chars=19, tool_calls=0, text_after_last_tool=19)
+
+    mgr = SessionManager(runner=chat)
 
     async def go():
         return [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="x"))]
 
     asyncio.run(go())
-    assert seen == ["x"], "no continuation for a turn that closed itself"
+    assert seen == [False], "no continuation for a turn that used no tools"
 
 
 def test_a_failing_close_leaves_the_turn_it_was_helping():

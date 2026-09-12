@@ -220,19 +220,26 @@ class TurnEnd:
 
     @property
     def needs_closing(self) -> bool:
-        """The turn ended without doing what system.md requires of it.
+        """Should the manager ask this turn to close itself.
 
-        Three mechanically-checkable failures, and deliberately only three:
-        it said nothing at all, it ended on a tool call without saying what
-        came of it, or it was cut off at the output ceiling mid-sentence.
+        Any turn that did work, plus the two failures that can happen with no
+        tools at all. Deliberately not an attempt to detect a missing
+        handback: whether prose amounts to one is a judgement, and grepping
+        for "Summary" would be the same fragile inference this replaced.
 
-        Not checked, because it cannot be without guessing: whether prose
-        that *is* present amounts to the handback the rule asks for. A
-        keyword search for "Summary" would be the same fragile inference
-        this module replaced. The nudge sent on these three carries the full
-        rule, so when it does fire it asks for the whole thing.
+        So the question is not asked of the text, it is asked of the model --
+        every working turn is offered the chance to close, and one that
+        already closed properly answers `closed` for a few tokens. That is
+        the only version with no false positives in either direction, because
+        the only reader qualified to judge whether a turn handed back is the
+        one that wrote it.
+
+        The narrower version -- silence, a trailing tool call, truncation --
+        shipped first and caught only the extremes. A turn that wrote three
+        paragraphs and never handed back sailed past it, which is precisely
+        the shape "a complete turn comes with a summary" is about.
         """
-        return self.silent or self.unclosed or self.truncated
+        return self.silent or self.truncated or self.tool_calls > 0
 
     @property
     def truncated(self) -> bool:
