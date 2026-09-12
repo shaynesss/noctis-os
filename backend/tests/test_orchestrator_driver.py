@@ -844,3 +844,55 @@ def test_the_recap_helper_also_uses_the_real_config_root(monkeypatch):
     source = inspect.getsource(driver.one_shot)
     assert 'env["CLAUDE_CONFIG_DIR"]' not in source
     assert "--disallowedTools" in source, "the summariser stays caged"
+
+
+def test_the_concurrency_cap_is_a_budget_not_a_constant(monkeypatch):
+    """It was 2, and 2 was never chosen on its merits: each mode had a config
+    dir whose CLAUDE.md was rewritten per launch, so two sessions of one mode
+    would have raced on that file. Nothing per-mode is written to disk now, so
+    the reason the number was small is gone -- and the number itself depends
+    on the plan rather than on the code.
+
+    Read at construction rather than at import: a module constant binds into
+    `__init__`'s default before `.env` is necessarily loaded, so the setting
+    would work or not depending on import order.
+    """
+    from orchestrator.manager import DEFAULT_MAX_CONCURRENT
+
+    assert DEFAULT_MAX_CONCURRENT >= 2, "never fewer than the old default"
+    assert SessionManager().max_concurrent == DEFAULT_MAX_CONCURRENT
+
+    monkeypatch.setenv("NOCTIS_MAX_CONCURRENT", "7")
+    assert SessionManager().max_concurrent == 7, "no reload required"
+
+    monkeypatch.setenv("NOCTIS_MAX_CONCURRENT", "nonsense")
+    assert SessionManager().max_concurrent == DEFAULT_MAX_CONCURRENT, "bad value falls back"
+
+    monkeypatch.setenv("NOCTIS_MAX_CONCURRENT", "0")
+    assert SessionManager().max_concurrent == 1, "a cap of zero would run nothing"
+
+
+def test_two_sessions_of_one_mode_run_together():
+    """Same-mode concurrency, which the per-mode config dirs made unsafe and
+    their removal made ordinary. Two Faber tabs on two repositories is the
+    case; two on one repository is the other."""
+    async def runner(spec):
+        yield SessionStart(session_id=f"s-{spec.cwd}", model="m", cwd=str(spec.cwd))
+        yield TextDelta("done")
+        yield TurnEnd(session_id=f"s-{spec.cwd}", usage=Usage(0, 0, 0, "m"),
+                      duration_ms=1, text_chars=4, tool_calls=0,
+                      text_after_last_tool=4)
+
+    mgr = SessionManager(runner=runner)
+
+    async def go():
+        a = [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="x",
+                                                        cwd=Path("/one")))]
+        b = [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="y",
+                                                        cwd=Path("/two")))]
+        return a, b
+
+    a, b = asyncio.run(go())
+    assert any(isinstance(e, TextDelta) for e in a)
+    assert any(isinstance(e, TextDelta) for e in b)
+    assert len(mgr.by_mode("faber")) == 2, "both handles are tracked, not one replacing the other"

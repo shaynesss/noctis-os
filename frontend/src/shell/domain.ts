@@ -83,6 +83,21 @@ export type Block =
    * from instead of looking like something you started and forgot. */
   | { kind: 'handoff'; from: Mode; fromLabel: string; carried: string }
 
+/* A tab label that is not already taken.
+ *
+ * Two sessions of one mode on one directory are an ordinary thing to want --
+ * two angles on the same repository -- and both would otherwise read
+ * `Faber · noctis-os`, which makes the tab bar a guessing game. The suffix
+ * only appears on the second and later, so the common case is unchanged.
+ */
+export function uniqueLabel(base: string, taken: readonly string[]): string {
+  if (!taken.includes(base)) return base
+  for (let n = 2; ; n++) {
+    const candidate = `${base} (${n})`
+    if (!taken.includes(candidate)) return candidate
+  }
+}
+
 export interface Tab {
   id: string
   mode: Mode

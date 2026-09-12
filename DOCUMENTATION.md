@@ -100,7 +100,7 @@ spawn ──► SessionStart ──► [ThinkingDelta │ TextDelta │ ToolCall
 
 **Resume.** `session_id` from the first event, `--resume` on the next spawn. Stored per session, not per app: a turn without one starts fresh rather than continuing.
 
-**Concurrency: 2.** Queued, not refused — a handle stays visibly `queued` rather than disappearing. The cap is a budget on the 5-hour window, not a resource limit; orchestrated sessions burn quota faster than chatting.
+**Concurrency: 4 by default**, settable with `NOCTIS_MAX_CONCURRENT`. Queued, not refused — a handle stays visibly `queued` rather than disappearing. The cap is a budget on the 5-hour window, not a resource limit; orchestrated sessions burn quota faster than chatting.
 
 **Failure containment.** A crashed run must not look like a clean one: the manager marks a handle `failed` when any fatal event appeared, `done` otherwise, in a `finally` so an abort cannot strand it. The shell clears `busy` in a `finally` too, so a throw cannot lock a composer with no way back.
 
@@ -460,6 +460,7 @@ Two variables are required. Everything else has a working default.
 | `VITE_API_TOKEN` | **yes** | — | The same token, for the shell. Vite inlines it into the bundle — acceptable only because this is a local single-user app on localhost. |
 | `VITE_API_BASE` | no | `http://localhost:8000` | Where the shell reaches the backend. |
 | `PORT` | no | `8000` | Backend listen port. Change `VITE_API_BASE` and `NOCTIS_BACKEND` to match. |
+| `NOCTIS_MAX_CONCURRENT` | no | `4` | Sessions that may run at once. A budget on the 5-hour window, not a machine limit. |
 | `NOCTIS_CLAUDE_BIN` | no | PATH, then common install paths | Absolute path to `claude`. Needed for a non-standard install, or to pin a build. |
 | `NOCTIS_DATA_DIR` | no | `backend/data/` | SQLite history and the search index. |
 | `NOCTIS_HISTORY_DB` | no | derived | Explicit DB path for the MCP server, which runs as its own process. |

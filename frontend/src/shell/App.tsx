@@ -35,7 +35,7 @@ import {
 import { Transcript } from './Transcript'
 import {
   EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL,
-  DEFAULT_EFFORT, EFFORT_CYCLE,
+  DEFAULT_EFFORT, EFFORT_CYCLE, uniqueLabel,
   type Effort, type Mode, type Permission, type SessionState, type Tab,
 } from './domain'
 import './tokens.css'
@@ -438,7 +438,10 @@ export default function App() {
    * been given it -- showing it as an unsent draft would misreport state. */
   const launch = (req: LaunchRequest) => {
     const id = `t${Date.now()}`
-    const label = `${MODE_LABEL[req.mode]} · ${req.cwd.split('/').pop()}`
+    const label = uniqueLabel(
+      `${MODE_LABEL[req.mode]} · ${req.cwd.split('/').pop()}`,
+      tabs.map((t) => t.label),
+    )
     const blocks: SessionState['blocks'] = []
     if (req.from) {
       blocks.push({
@@ -451,11 +454,16 @@ export default function App() {
     // Only when there is one. An empty launch opens the tab and waits.
     if (req.prompt.trim()) blocks.push({ kind: 'user', text: req.prompt, at: now() })
 
-    // At most one session beside General. The engine's own cap is two
-    // concurrent, so a third tab could not run anyway -- and the point of
-    // the second is overflow, for when one task is too much to hold in the
-    // main thread of work, not a filing system.
-    setTabs((ts) => [ts[0], { id, mode: req.mode, label }])
+    // Appended, not replacing. This kept exactly one tab beside General,
+    // reasoning that the engine's cap of two made a third unrunnable anyway.
+    // Both halves of that are gone: the cap is a budget rather than a limit
+    // and is settable, and same-mode concurrency stopped being a hazard when
+    // per-mode config dirs did -- there is no shared file left to race on.
+    //
+    // Two sessions of one mode is an ordinary thing to want: two Faber tabs
+    // on two repositories, or two angles on the same one. The tab bar already
+    // scrolls rather than wraps, so more of them costs nothing in layout.
+    setTabs((ts) => [...ts, { id, mode: req.mode, label }])
     // The provenance block only; the opening prompt is appended by `turn`,
     // so a launched session and a typed one build their transcript the same
     // way rather than through two paths that can drift.

@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { emptyFold, fold, get, readSSE, type WireEvent } from './engine'
-import { DEFAULT_EFFORT, EFFORT_CYCLE } from './domain'
+import { DEFAULT_EFFORT, EFFORT_CYCLE, uniqueLabel } from './domain'
 import type { Block, Effort } from './domain'
 
 const run = (events: WireEvent[]) => events.reduce(fold, emptyFold())
@@ -384,5 +384,27 @@ describe('effort defaults', () => {
     cycle('b')
     expect(efforts.b).toBe('low')      // wraps past the end
     expect(efforts.a).toBe('medium')
+  })
+})
+
+describe('tab labels', () => {
+  it('leaves the first of a kind alone', () => {
+    expect(uniqueLabel('Faber · noctis-os', [])).toBe('Faber · noctis-os')
+    expect(uniqueLabel('Faber · noctis-os', ['General'])).toBe('Faber · noctis-os')
+  })
+
+  it('disambiguates a second session of the same mode on the same directory', () => {
+    // The case this exists for: two Faber tabs on one repo, which is an
+    // ordinary thing to want and used to be impossible anyway.
+    const taken = ['General', 'Faber · noctis-os']
+    expect(uniqueLabel('Faber · noctis-os', taken)).toBe('Faber · noctis-os (2)')
+    expect(uniqueLabel('Faber · noctis-os', [...taken, 'Faber · noctis-os (2)']))
+      .toBe('Faber · noctis-os (3)')
+  })
+
+  it('does not reuse a number freed by a closed tab', () => {
+    // Closing (2) while (3) is open must not hand the next tab (2) as well.
+    expect(uniqueLabel('Faber · x', ['Faber · x', 'Faber · x (3)']))
+      .toBe('Faber · x (2)')
   })
 })

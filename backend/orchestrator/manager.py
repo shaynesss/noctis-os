@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import itertools
+import os
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import AsyncIterator, Callable
@@ -26,7 +27,35 @@ from .driver import SessionSpec, run_session
 from .events import (EngineError, Event, Limits, SessionStart, TextDelta,
                      TurnEnd)
 
-MAX_CONCURRENT = 2
+# How many sessions may run at once. A **budget on the 5-hour window**, not a
+# resource limit -- orchestrated sessions burn quota faster than chatting, and
+# nothing about the machine minds more of them.
+#
+# It was 2, and 2 was never asked for: it was chosen when each mode had its
+# own config dir whose CLAUDE.md was rewritten per launch, so concurrent
+# sessions *of the same mode* would have raced on that file. Nothing per-mode
+# is written to disk any more, so same-mode concurrency is ordinary now, and
+# with it the reason the number was small.
+#
+# Settable, because the right value depends on the plan rather than on the
+# code: a heavy day measured 3% of the 5-hour window, so 2 was leaving most
+# of the budget unspent.
+DEFAULT_MAX_CONCURRENT = 4
+
+
+def max_concurrent_setting() -> int:
+    """Read at construction, not at import.
+
+    A module-level constant would bind into `__init__`'s default the moment
+    this file is imported, which is before `.env` is necessarily loaded --
+    so the setting would work or not depending on import order, which is the
+    worst way for a setting to behave.
+    """
+    try:
+        value = int(os.environ.get("NOCTIS_MAX_CONCURRENT", DEFAULT_MAX_CONCURRENT))
+    except ValueError:
+        return DEFAULT_MAX_CONCURRENT
+    return max(1, value)
 
 _counter = itertools.count(1)
 
@@ -73,7 +102,8 @@ CLOSING_PROMPT = (
 class SessionManager:
     """Tracks live and finished sessions, enforcing the concurrency budget."""
 
-    def __init__(self, max_concurrent: int = MAX_CONCURRENT, runner: Callable = run_session):
+    def __init__(self, max_concurrent: int | None = None, runner: Callable = run_session):
+        max_concurrent = max_concurrent or max_concurrent_setting()
         self._sem = asyncio.Semaphore(max_concurrent)
         self._runner = runner
         self.max_concurrent = max_concurrent

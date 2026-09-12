@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from orchestrator.manager import DEFAULT_MAX_CONCURRENT
 from orchestrator.events import (
     EngineError, Limits, SessionStart, TextDelta, ThinkingDelta,
     ThinkingProgress, ToolCall, ToolResult, TurnEnd, Usage,
@@ -169,7 +170,7 @@ def test_limits_distinguishes_unknown_from_zero(client):
 
 def test_session_list_reports_the_concurrency_budget(client):
     body = client.get("/v2/sessions", headers=AUTH).json()
-    assert body["max_concurrent"] == 2
+    assert body["max_concurrent"] == DEFAULT_MAX_CONCURRENT
     assert body["running"] == 0
 
 
@@ -904,7 +905,7 @@ def test_the_session_list_reports_what_is_live_right_now(client):
     windows, because together they answer one question: whether there is room
     to start something now."""
     body = client.get("/v2/sessions", headers=AUTH).json()
-    assert body["max_concurrent"] == 2
+    assert body["max_concurrent"] == DEFAULT_MAX_CONCURRENT
     assert isinstance(body["live"], list)
     assert body["running"] == len([s for s in body["live"] if s["state"] == "running"])
 
