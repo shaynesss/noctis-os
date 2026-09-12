@@ -278,6 +278,11 @@ class SessionSpec:
     # nothing passed it, so every session ran at whatever the CLI defaulted
     # to and the rule described a setting no code applied.
     effort: str = "high"
+    # This spawn is the automatic close of a turn that did not close itself,
+    # not work of its own. It exists to stop the obvious recursion: a
+    # continuation is a turn, so without a way to tell them apart it would
+    # qualify for its own continuation and never terminate.
+    continuation: bool = False
 
     def __post_init__(self) -> None:
         if self.mode not in MODE_MODELS:

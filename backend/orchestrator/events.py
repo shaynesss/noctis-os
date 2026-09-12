@@ -219,6 +219,22 @@ class TurnEnd:
         return self.text_chars == 0
 
     @property
+    def needs_closing(self) -> bool:
+        """The turn ended without doing what system.md requires of it.
+
+        Three mechanically-checkable failures, and deliberately only three:
+        it said nothing at all, it ended on a tool call without saying what
+        came of it, or it was cut off at the output ceiling mid-sentence.
+
+        Not checked, because it cannot be without guessing: whether prose
+        that *is* present amounts to the handback the rule asks for. A
+        keyword search for "Summary" would be the same fragile inference
+        this module replaced. The nudge sent on these three carries the full
+        rule, so when it does fire it asks for the whole thing.
+        """
+        return self.silent or self.unclosed or self.truncated
+
+    @property
     def truncated(self) -> bool:
         """The engine stopped because it ran out of room, not because it was
         done. `end_turn` is a finished thought; `max_tokens` is a sentence cut

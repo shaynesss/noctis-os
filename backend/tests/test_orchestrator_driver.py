@@ -680,3 +680,121 @@ def test_the_trailing_counter_resets_between_turns():
     first, second = [e for e in events if isinstance(e, TurnEnd)]
     assert not first.unclosed
     assert second.unclosed
+
+
+# ------------------------------------------- closing a turn that did not
+
+def _unclosed_run(prompt_seen: list):
+    """A runner whose first turn ends on a tool call and whose continuation
+    closes properly — the shape observed live on 2026-09-12."""
+    async def runner(spec):
+        prompt_seen.append(spec.prompt)
+        if spec.continuation:
+            yield TextDelta("Ran the suite: 431 passing. Nothing left open.")
+            yield TurnEnd(session_id="s1", usage=Usage(0, 0, 0, "m"), duration_ms=1,
+                          text_chars=48, tool_calls=0, text_after_last_tool=48)
+            return
+        yield SessionStart(session_id="s1", model="m", cwd="/x")
+        yield TextDelta("Now verifying:")
+        yield ToolCall(id="1", name="Bash", args={"command": "make test"})
+        yield TurnEnd(session_id="s1", usage=Usage(0, 0, 0, "m"), duration_ms=1,
+                      text_chars=14, tool_calls=1, text_after_last_tool=0)
+    return runner
+
+
+def test_a_turn_that_does_not_close_itself_gets_closed():
+    """The Stop hook Noctis cannot have. `Stop` fires at the end of every turn
+    and can refuse the stop, but not under --print, and the SDK that does
+    support hooks needs API-key auth — the metered path the architecture
+    exists to avoid. So the manager does it where a turn's end is known."""
+    seen: list = []
+    mgr = SessionManager(runner=_unclosed_run(seen))
+
+    async def go():
+        return [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="build"))]
+
+    events = asyncio.run(go())
+    assert len(seen) == 2, "the continuation should have been sent"
+    assert "handback" in seen[1], "and it should carry system.md's rule"
+    text = "".join(e.text for e in events if isinstance(e, TextDelta))
+    assert "431 passing" in text, "the close lands in the same transcript"
+
+
+def test_the_continuation_cannot_trigger_another():
+    """The loop guard, and the reason it is needed: a continuation is itself
+    a turn, so without a flag it qualifies for a continuation of its own."""
+    seen: list = []
+
+    async def always_unclosed(spec):
+        seen.append(spec.continuation)
+        yield SessionStart(session_id="s1", model="m", cwd="/x")
+        yield ToolCall(id="1", name="Bash", args={})
+        yield TurnEnd(session_id="s1", usage=Usage(0, 0, 0, "m"), duration_ms=1,
+                      text_chars=0, tool_calls=1, text_after_last_tool=0)
+
+    mgr = SessionManager(runner=always_unclosed)
+
+    async def go():
+        return [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="x"))]
+
+    asyncio.run(go())
+    assert seen == [False, True], "exactly one continuation, never a third"
+
+
+def test_a_turn_that_closed_itself_is_left_alone():
+    seen: list = []
+
+    async def clean(spec):
+        seen.append(spec.prompt)
+        yield SessionStart(session_id="s1", model="m", cwd="/x")
+        yield ToolCall(id="1", name="Bash", args={})
+        yield TextDelta("Done — all green.")
+        yield TurnEnd(session_id="s1", usage=Usage(0, 0, 0, "m"), duration_ms=1,
+                      text_chars=17, tool_calls=1, text_after_last_tool=17)
+
+    mgr = SessionManager(runner=clean)
+
+    async def go():
+        return [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="x"))]
+
+    asyncio.run(go())
+    assert seen == ["x"], "no continuation for a turn that closed itself"
+
+
+def test_a_failing_close_leaves_the_turn_it_was_helping():
+    """The close is a courtesy on top of a turn that already happened. If the
+    engine will not spawn, the right outcome is the transcript the user
+    already has -- not an error about the thing that was trying to help."""
+    async def runner(spec):
+        if spec.continuation:
+            yield EngineError("could not start engine", fatal=True)
+            return
+        yield SessionStart(session_id="s1", model="m", cwd="/x")
+        yield TextDelta("real work")
+        yield ToolCall(id="1", name="Bash", args={})
+        yield TurnEnd(session_id="s1", usage=Usage(0, 0, 0, "m"), duration_ms=1,
+                      text_chars=9, tool_calls=1, text_after_last_tool=0)
+
+    mgr = SessionManager(runner=runner)
+
+    async def go():
+        return [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="x"))]
+
+    events = asyncio.run(go())
+    assert not any(isinstance(e, EngineError) for e in events)
+    assert any(isinstance(e, TextDelta) for e in events)
+
+
+def test_no_session_id_means_nothing_to_resume():
+    """A run that died before reporting one cannot be continued, and must not
+    raise trying."""
+    async def runner(spec):
+        yield TurnEnd(session_id="", usage=Usage(0, 0, 0, "m"), duration_ms=1,
+                      text_chars=0, tool_calls=1, text_after_last_tool=0)
+
+    mgr = SessionManager(runner=runner)
+
+    async def go():
+        return [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="x"))]
+
+    asyncio.run(go())      # must not raise
