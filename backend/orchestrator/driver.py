@@ -558,8 +558,13 @@ async def one_shot(prompt: str, timeout: float = 60) -> str:
         "--permission-mode", "plan",
         "--disallowedTools", "Bash Edit Write Read Grep Glob WebSearch WebFetch Task",
     ]
+    # No CLAUDE_CONFIG_DIR, for the same reason no spawn sets one -- and this
+    # was the last place it survived. Pointing at launch_config/general also
+    # made a one-line summariser depend on a directory that is otherwise dead
+    # and safe to delete, which would have surfaced as "Not logged in" from
+    # the recap of all things.
     env = dict(os.environ)
-    env["CLAUDE_CONFIG_DIR"] = str(CONFIG_ROOT / "general")
+    env.pop("CLAUDE_CONFIG_DIR", None)
 
     parts: list[str] = []
     async for event in launch(command, env=env, timeout=timeout):

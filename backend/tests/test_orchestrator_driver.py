@@ -826,3 +826,21 @@ def test_no_session_id_means_nothing_to_resume():
         return [e async for _h, e in mgr.start(SessionSpec(mode="faber", prompt="x"))]
 
     asyncio.run(go())      # must not raise
+
+
+def test_the_recap_helper_also_uses_the_real_config_root(monkeypatch):
+    """It was the last place the redirect survived. A summariser pointed at
+    launch_config/general depended on a directory that is otherwise dead and
+    safe to delete -- which would have surfaced as "Not logged in" from the
+    recap, of all things.
+
+    Its tool cage is a different thing and stays: `one_shot` summarises text
+    handed to it, and a summariser that can read the filesystem is a larger
+    thing than the job needs. That is a cage on a helper, not on a mode.
+    """
+    import inspect
+
+    import orchestrator.driver as driver
+    source = inspect.getsource(driver.one_shot)
+    assert 'env["CLAUDE_CONFIG_DIR"]' not in source
+    assert "--disallowedTools" in source, "the summariser stays caged"

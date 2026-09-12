@@ -50,4 +50,6 @@ Tailwind wiring + path alias. `/impeccable init`, register as **Product** (not B
 
 ## Launch surfaces
 
-Learn/Research/Settings/Nightshift → Terminal.app (tinted per character), launched with `CLAUDE_CONFIG_DIR` set to `noctis-os/backend/launch_config/nondev/` so these sessions get a minimal universal CLAUDE.md instead of Dev's full methodology. Dev → VS Code, no override — reads the default `~/.claude/CLAUDE.md` → `modes/dev/dev.md`. Fire-and-forget — the interface launches and reads back state via hooks/state files, never watches or controls a running session live. Full detail: `wiki/Noctis OS/Interface.md`, `SPEC.md`'s "Mode files + CLAUDE.md migration" section.
+**v2 hosts sessions; it does not launch them elsewhere.** The orchestrator spawns `claude -p` and streams it into the app's own transcript. A mode's identity travels in the argv (`--append-system-prompt`, `--agents`, `--settings`) — **no `CLAUDE_CONFIG_DIR` anywhere**, so every session inherits the real `~/.claude` and the plugins, skills, subagents, MCP servers and permissions installed there.
+
+v1's launch surfaces still exist in the tree, unreferenced: Faber → VS Code via a `folderOpen` task, the rest → tinted `Terminal.app`. Both pass their methodology as a flag now rather than redirecting the config root. They go at the Stage 2 cutover. Full detail: `SPEC.md`'s EDD, `wiki/Noctis OS/Interface.md`.
