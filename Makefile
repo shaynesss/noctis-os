@@ -16,6 +16,12 @@ bootstrap:
 # missing const looks like when nothing checked first, and the editor's own
 # squiggle is the only other place it would have shown.
 #
+# The binary directly, not through `npx`. npx runs an `npm exec` wrapper with
+# the real compiler as its child, and the wrapper is what the exit trap
+# reaches -- killing it orphans the node process, which then survives every
+# restart. Two such pairs had accumulated before the machine ran short of
+# memory and killed the dev loop outright.
+#
 # `tsc -b --watch` closes that: the error appears in this terminal the moment
 # it is written, named and located, whether or not an editor is open on the
 # file. It never blocks anything -- it only reports.
@@ -29,7 +35,7 @@ dev:
 	@trap 'kill 0' EXIT; \
 	(cd backend && .venv/bin/uvicorn main:app --reload --reload-exclude 'runtime/*' --reload-exclude 'data/*' --port $${PORT:-8000}) & \
 	(cd frontend && npm run dev) & \
-	(cd frontend && npx tsc -b --watch --preserveWatchOutput 2>&1 | awk '{print "[tsc] " $$0; fflush()}') & \
+	(cd frontend && ./node_modules/.bin/tsc -b --watch --preserveWatchOutput 2>&1 | awk '{print "[tsc] " $$0; fflush()}') & \
 	wait
 
 # The suite has always been run by typing the venv's interpreter path out in
