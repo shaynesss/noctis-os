@@ -4,10 +4,16 @@ Last updated: 2026-09-12
 
 ## Current state
 
-**v1.5.2 is shipped and still the working system. v2 is mid-build — Stage 1
-complete, Stage 2 items 1-5 and 7 complete and verified live, and item 6 done
-except its scheduler. The remaining work is the launchd-on-wake trigger, then
-items 8 and 9.**
+**v2 is the system. v1 is gone.** Stage 1 complete. Stage 2 items 1-5, 7, 8
+and 9 closed; item 6 done except its scheduler. **The launchd-on-wake
+scheduler is the only feature left in the build order.**
+
+The 2026-09-12 cutover removed v1 entirely: its world screen, profile overlay,
+launch surfaces, four routers and `launch_config/`. Maintenance's state moved
+out of `modes/settings/` and `modes/nightshift/` to root-level `maintenance/`,
+closing item 9 and the two MOVED.md markers that had deferred it. Item 8
+("tiered loading policy") was removed rather than defined — see SPEC.md's
+Open questions.
 
 Verified 2026-09-12: working tree clean, 426 backend tests, 79 frontend,
 `tsc -b` clean, `make doctor` reporting no capability gaps. 130 commits

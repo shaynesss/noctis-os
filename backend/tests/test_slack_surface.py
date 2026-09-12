@@ -34,15 +34,15 @@ def test_check_settings_no_slack_when_cursor_matches_current_length(vault):
     dev_lessons = vault_io.read_file("modes/dev/lessons.md")
     line_count = len(dev_lessons.splitlines())
     vault_io.write_frontmatter(
-        "modes/settings/state.md",
+        "maintenance/state.md",
         {
-            "mode": "settings",
+            "mode": "maintenance",
             "busy": False,
             "lessons_distilled_through": {
                 "dev": line_count,
                 "learn": 999,
                 "research": 999,
-                "settings": 999,
+                "maintenance": 999,
                 "nightshift": 999,
             },
         },
@@ -54,8 +54,8 @@ def test_check_settings_no_slack_when_cursor_matches_current_length(vault):
 def test_check_settings_surfaces_growth_past_cursor(vault):
     vault_io.write_file("modes/dev/lessons.md", "# Dev — Lessons\n\n- 2026-07-21 [x]: something learned.\n")
     vault_io.write_frontmatter(
-        "modes/settings/state.md",
-        {"mode": "settings", "busy": False, "lessons_distilled_through": {"dev": 0}},
+        "maintenance/state.md",
+        {"mode": "maintenance", "busy": False, "lessons_distilled_through": {"dev": 0}},
         "",
     )
     items = slack_surface.check_settings()

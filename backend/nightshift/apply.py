@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timezone
 
 import vault_io
+from jobs import MAINTENANCE_STATE, jobs_dir
 
 
 class DiffApplyError(Exception):
@@ -103,7 +104,7 @@ def apply_proposal(proposal_text: str) -> str | None:
         return None
 
     # (.+) not \S+: every prior target was a vault mode file
-    # (modes/settings/settings.md and the like), none with a space in the
+    # (maintenance/audit.md and the like), none with a space in the
     # path, so \S+ silently truncated at the first space and was never
     # caught -- the first proposal targeting a wiki page ("wiki/Noctis
     # OS/Modes.md", a real directory name with a literal space) exposed it.
@@ -173,11 +174,11 @@ def advance_lessons_cursor(mode: str) -> None:
     lessons_path = f"modes/{mode}/lessons.md"
     through = len(vault_io.read_file(lessons_path).splitlines()) if vault_io.file_exists(lessons_path) else 0
 
-    state, content = vault_io.read_frontmatter("modes/settings/state.md")
+    state, content = vault_io.read_frontmatter(MAINTENANCE_STATE)
     cursor = state.get("lessons_distilled_through", {}) or {}
     cursor[mode] = through
     state["lessons_distilled_through"] = cursor
-    vault_io.write_frontmatter("modes/settings/state.md", state, content)
+    vault_io.write_frontmatter(MAINTENANCE_STATE, state, content)
 
 
 _JOB_ORIGIN_MARKER = re.compile(r"<!--\s*job-origin:\s*([\w-]+)/([\w-]+)\s*-->")
@@ -212,7 +213,9 @@ def close_job(mode: str, slug: str, resolution: str) -> None:
     it actually passed. The frontend collapses Done rows to a single line
     (ProfileOverlay.tsx's JobRow) so this doesn't pile up as clutter.
     """
-    job_path = f"modes/{mode}/jobs/{slug}/context.md"
+    # Via jobs_dir rather than assembled here: maintenance's jobs live at
+    # root-level `maintenance/jobs`, outside `modes/` entirely.
+    job_path = f"{jobs_dir(mode)}/{slug}/context.md"
     if vault_io.file_exists(job_path):
         job_meta, job_content = vault_io.read_frontmatter(job_path)
         job_meta["stage"] = "Done"
@@ -220,7 +223,9 @@ def close_job(mode: str, slug: str, resolution: str) -> None:
         job_meta["last_touched"] = datetime.now(timezone.utc).isoformat()
         vault_io.write_frontmatter(job_path, job_meta, job_content)
 
-    state_path = f"modes/{mode}/state.md"
+    # Maintenance sits outside `modes/`; the other three do not.
+    state_path = (MAINTENANCE_STATE if mode == "maintenance"
+                  else f"modes/{mode}/state.md")
     state_meta, state_content = vault_io.read_frontmatter(state_path)
     jobs = state_meta.get("jobs", []) or []
     for job in jobs:

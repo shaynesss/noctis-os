@@ -19,10 +19,12 @@ So the list lives here, the test is driven by it, and adding a new
 runtime-written directory without excluding it fails loudly.
 """
 
+# `launch_config` was here until the 2026-09-12 cutover: each mode's rendered
+# CLAUDE.md was rewritten on launch. Nothing writes there now -- identity
+# travels in the argv -- and the directory is gone.
 RUNTIME_WRITE_DIRS = (
     "runtime",        # hook-written action logs and busy markers
     "data",           # conversation store: history.db and its WAL/shm sidecars
-    "launch_config",  # each mode's rendered CLAUDE.md, rewritten on launch
 )
 
 RELOAD_EXCLUDES = tuple(f"{d}/*" for d in RUNTIME_WRITE_DIRS)

@@ -9,8 +9,18 @@ job flagging: computed live on every poll, not left to a session's say-so
 from datetime import datetime, timedelta, timezone
 
 import vault_io
+from jobs import MAINTENANCE_LESSONS, MAINTENANCE_STATE
 
-MODES = ("dev", "learn", "research", "settings", "nightshift")
+# Vault folder names, not interface mode names -- this reads lessons files
+# off disk. Settings and nightshift collapsed into root-level `maintenance/`
+# at the 2026-09-12 cutover, so there are four sources of lessons now, not
+# five, and one of them is not under `modes/`.
+MODES = ("dev", "learn", "research", "maintenance")
+
+
+def lessons_path(mode: str) -> str:
+    """Where a mode's lessons live. Maintenance is outside `modes/`."""
+    return MAINTENANCE_LESSONS if mode == "maintenance" else f"modes/{mode}/lessons.md"
 
 # Judgment calls, noted rather than asked -- settings.md itself flagged
 # these as an open question until this pass.
@@ -21,7 +31,7 @@ FRICTION_MARKER = "FRICTION:"
 def _new_lessons_text(mode: str, cursor: dict) -> str:
     """Lines added to a mode's lessons.md since the last distillation pass
     -- the same cursor nightshift's settings slack-check already tracks
-    (modes/settings/state.md's lessons_distilled_through), reused here
+    (maintenance/state.md's lessons_distilled_through), reused here
     rather than tracked a second time.
 
     This runs on every GET /mode/settings poll (World screen, every 15s) --
@@ -32,9 +42,9 @@ def _new_lessons_text(mode: str, cursor: dict) -> str:
     against a state that can't currently occur, not a fix for an observed
     failure -- caught in the 2026-07-21 ship-gate review.
     """
-    if not vault_io.file_exists(f"modes/{mode}/lessons.md"):
+    if not vault_io.file_exists(lessons_path(mode)):
         return ""
-    content = vault_io.read_file(f"modes/{mode}/lessons.md")
+    content = vault_io.read_file(lessons_path(mode))
     lines = content.splitlines()
     seen = cursor.get(mode, 0)
     return "\n".join(lines[seen:])
@@ -60,7 +70,7 @@ def compute_trigger_modes() -> dict[str, list[str]]:
     STALE_STATE_THRESHOLD -- a vault smell, per settings.md's own
     definition ("drift, staleness, a vault smell").
     """
-    settings_state, _ = vault_io.read_frontmatter("modes/settings/state.md")
+    settings_state, _ = vault_io.read_frontmatter(MAINTENANCE_STATE)
     cursor = settings_state.get("lessons_distilled_through", {}) or {}
 
     accumulation_modes = []
@@ -112,6 +122,6 @@ def compute_diffs_awaiting_review() -> int:
     runner.py's _draft_flagged_job_summary), so they aren't a "diff
     awaiting review" in the sense this stat means.
     """
-    nightshift_state, _ = vault_io.read_frontmatter("modes/nightshift/state.md")
+    nightshift_state, _ = vault_io.read_frontmatter(MAINTENANCE_STATE)
     inbox = nightshift_state.get("inbox", []) or []
     return sum(1 for item in inbox if item.get("origin_mode") == "settings")

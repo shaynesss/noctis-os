@@ -206,10 +206,8 @@ def test_every_mode_methodology_path_resolves():
 
     There were three copies of this -- jobs.py, orchestrator/modes.py and
     mcp/server.py -- and two disagreed about maintenance before anything
-    called them. Maintenance is the case worth pinning: its methodology moved
-    to maintenance/audit.md in 2026-09 while its state stayed at
-    modes/settings/, so the two paths genuinely differ and a single map
-    covering both would be wrong.
+    called them. Maintenance is still the case worth pinning: it sits outside
+    `modes/` entirely, so a map that assumes `modes/<dir>/` is wrong for it.
     """
     from pathlib import Path
     real = Path("/Users/shayneyong/Developer/second-brain")
@@ -227,7 +225,11 @@ def test_general_has_no_methodology_just_as_it_has_no_jobs():
     assert jobs.jobs_dir("general") is None
 
 
-def test_state_and_methodology_are_allowed_to_diverge():
-    """Maintenance is the live example and the reason this is two functions."""
-    assert jobs.jobs_dir("maintenance") == "modes/settings/jobs"
+def test_maintenance_lives_outside_modes_entirely():
+    """It is infrastructure, not a mode. Both its methodology and its state
+    sit at root-level `maintenance/` after the 2026-09-12 cutover — the
+    divergence that made these two separate functions is closed, and the
+    functions stay separate because the *general* case still differs."""
+    assert jobs.jobs_dir("maintenance") == "maintenance/jobs"
     assert jobs.methodology_path("maintenance") == "maintenance/audit.md"
+    assert "modes/" not in jobs.jobs_dir("maintenance")

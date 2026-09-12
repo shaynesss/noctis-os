@@ -8,7 +8,7 @@
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />
   <img alt="status" src="https://img.shields.io/badge/v2-mid--build-orange.svg" />
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS-black.svg" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-437%20%2B%2080-brightgreen.svg" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-372%20%2B%2080-brightgreen.svg" />
 </p>
 
 ---
@@ -125,7 +125,7 @@ make test      # pytest + tsc -b + vitest
 
 **It writes to your vault** — lessons, job contexts, staged proposals. Keep the vault in git so you can see and revert. Nothing is committed for you.
 
-**And outside it:** `backend/data/` (SQLite), `backend/runtime/` (action logs, gitignored), and a `.vscode/tasks.json` in any project the v1 launcher opens.
+**And outside it:** `backend/data/` (SQLite) and `backend/runtime/` (action logs, gitignored).
 
 **`bootstrap.sh` modifies the machine**, not just the repo — config directories, a `launchd` job, telemetry hooks. `./bootstrap/bootstrap.sh --dry-run` shows exactly what it would do first.
 
@@ -133,9 +133,9 @@ make test      # pytest + tsc -b + vitest
 
 ## Status
 
-**v1.5.2 is shipped and still the working system. v2 is mid-build.** Stage 1 complete; Stage 2 items 1–5 and 7 done and verified live, item 6 outstanding on its scheduler, items 8 and 9 open.
+**v2 is the system.** Stage 1 complete; Stage 2 items 1–5, 7, 8 and 9 closed, item 6 outstanding on its `launchd`-on-wake scheduler.
 
-Both versions coexist on purpose: `frontend/src/shell/` is what runs, and v1's world screen and launch routes stay in the tree, unreferenced, until the cutover can take them with the state that still lives at their paths.
+**v1 is gone.** The 2026-09-12 cutover removed its world screen, launch surfaces, four routers and every mode config directory, and moved maintenance's state to root-level `maintenance/`. The only feature left in the build order is the `launchd`-on-wake scheduler.
 
 ### Major revisions
 
@@ -143,6 +143,7 @@ Both versions coexist on purpose: `frontend/src/shell/` is what runs, and v1's w
 |---|---|
 | **v2** (2026-09) | The app hosts sessions instead of launching them into VS Code and Terminal. Live transcripts, durable history, cross-mode search — none of which the fire-and-forget model could do. |
 | **v2 harness pass** (2026-09-11/12) | Sessions run against the real `~/.claude` rather than private config directories, so they inherit the full toolkit. Per-mode tool cages removed. Turn integrity made visible and enforced. |
+| **v1 cutover** (2026-09-12) | v1 removed entirely — world screen, launch surfaces, four routers, config dirs. Maintenance's state moved out of `modes/` to root-level `maintenance/`. |
 | **v1.5** (2026-07) | Five modes wired to real vault reads and writes; Design Lodge. |
 
 Full detail in [DOCUMENTATION.md](DOCUMENTATION.md) · [`STATUS.md`](STATUS.md) · [`CHANGELOG.md`](CHANGELOG.md).

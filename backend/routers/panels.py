@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 import vault_io
 from prompts.render import render
+from jobs import MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
 from orchestrator.driver import (EFFORT_CYCLE, MODEL_CATALOG, MODE_MODELS, MODE_TOOLS,
                                  PERMISSION_CYCLE)
 
@@ -136,7 +137,7 @@ def _proposals() -> list[dict]:
     Maintenance can only propose — the tool policy enforces it at spawn —
     so everything here is waiting on a human decision by construction.
     """
-    staged = "modes/nightshift/inbox"
+    staged = MAINTENANCE_INBOX
     if not vault_io.file_exists(staged):
         return []
     items: list[dict] = []
@@ -511,11 +512,11 @@ def decide(item_id: str, decision: str) -> dict:
     if not vault_io.is_safe_slug(item_id):
         raise HTTPException(status_code=400, detail=f"Invalid item: {item_id!r}")
 
-    staged = f"modes/nightshift/inbox/{item_id}.md"
+    staged = f"{MAINTENANCE_INBOX}/{item_id}.md"
     if not vault_io.file_exists(staged):
         raise HTTPException(status_code=404, detail=f"No such proposal: {item_id}")
 
-    archive = f"modes/nightshift/archive/{item_id}.md"
+    archive = f"{MAINTENANCE_ARCHIVE}/{item_id}.md"
     if vault_io.file_exists(archive):
         raise HTTPException(status_code=409, detail=f"{item_id} was already decided")
 

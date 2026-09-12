@@ -259,9 +259,9 @@ def t_propose(args: dict) -> dict:
         f"**Evidence:** {args.get('evidence','')}\n\n---\n\n{args.get('body','')}\n"
     )
     return text(
-        f"Staged: modes/nightshift/inbox/{slug}.md\n\n"
+        f"Staged: maintenance/inbox/{slug}.md\n\n"
         "Still required before this is reviewable: add the matching index entry to "
-        "modes/nightshift/state.md's `inbox` array. Without it the proposal is "
+        "maintenance/state.md's `inbox` array. Without it the proposal is "
         "invisible to the inbox view and the stat block."
     )
 

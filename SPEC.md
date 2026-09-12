@@ -252,7 +252,8 @@ Full reasoning: `second-brain/wiki/Harness Portability.md`.
 Genuinely unresolved. Not gaps to silently fill.
 
 1. **Interface sub-name** — Deck / Bridge / Console / none.
-2. **Stage 2 item 8, "tiered loading policy"** — appears in the build-order table and nowhere else. No description, no acceptance condition. Needs a definition or removal.
+
+> **Closed 2026-09-12 — "tiered loading policy" (Stage 2 item 8), removed rather than defined.** It appeared in the build-order table and nowhere else: no description, no reasoning, no acceptance condition, and no trace anywhere in the vault. Its only defensible reading is *what enters a session's context at entry versus what it fetches on demand* — and the system already implements that: the job brief is capped and carries the tail, a mode's overlay is a pointer rather than the methodology, and retrieval is opt-in. The policy exists; it was undocumented, not unbuilt. Written up in `DOCUMENTATION.md` §6 rather than kept as a build item implying work that does not exist.
 3. ~~**The v2 checkpoint** — *"do I still open Desktop?"*~~ **Closed 2026-09-12: passed.** The shell has been the daily driver since 2026-09-08. Recorded late deliberately — until 09-11 the answer was contaminated, because Faber inside Noctis could not do build work and the fallback to Desktop was therefore forced rather than chosen. With that fixed the question could be asked cleanly, and the answer held.
 4. **`seven_day_opus` window** — present in the CLI binary and the statusline schema, absent from an observed Haiku run. Unverified.
 5. **`--input-format stream-json` as a persistent bidirectional session** — untested. Would address spawn-per-turn latency (~1.9s).

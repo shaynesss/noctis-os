@@ -9,6 +9,8 @@ in this package should need mode-specific knowledge.
 from dataclasses import dataclass
 
 import vault_io
+from jobs import MAINTENANCE_STATE
+from triggers import lessons_path
 
 
 @dataclass
@@ -52,11 +54,13 @@ def check_settings() -> list[SlackItem]:
     isn't wired yet -- known follow-up, same shape as nightshift's other
     not-yet-built mode-specific apply logic (see STATUS.md).
     """
-    settings_state, _ = vault_io.read_frontmatter("modes/settings/state.md")
+    settings_state, _ = vault_io.read_frontmatter(MAINTENANCE_STATE)
     cursor = settings_state.get("lessons_distilled_through", {}) or {}
     items = []
-    for mode in ("dev", "learn", "research", "settings", "nightshift"):
-        content = vault_io.read_file(f"modes/{mode}/lessons.md")
+    # Vault folder names. Settings and nightshift collapsed into
+    # root-level `maintenance/` at the 2026-09-12 cutover.
+    for mode in ("dev", "learn", "research", "maintenance"):
+        content = vault_io.read_file(lessons_path(mode))
         line_count = len(content.splitlines())
         if line_count > cursor.get(mode, 0):
             items.append(

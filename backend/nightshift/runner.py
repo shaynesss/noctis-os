@@ -1,8 +1,8 @@
 """Nightshift's Scan -> Advance -> Stage loop (nightshift.md section 2),
 the launchd entrypoint's actual logic (scripts/nightshift_run.sh just
 invokes this). Propose-never-commit: writes only to
-modes/nightshift/inbox/<slug>.md and the mirrored index entry in
-modes/nightshift/state.md -- nothing else in the vault, ever.
+maintenance/inbox/<slug>.md and the mirrored index entry in
+maintenance/state.md -- nothing else in the vault, ever.
 """
 
 import os
@@ -21,9 +21,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 import vault_io  # noqa: E402
+from jobs import MAINTENANCE_INBOX, MAINTENANCE_STATE  # noqa: E402
 from nightshift.slack_surface import SLACK_CHECKS, SlackItem  # noqa: E402
 
-STATE_PATH = "modes/nightshift/state.md"
+STATE_PATH = MAINTENANCE_STATE
 # Cheapest/fastest current Claude tier, for mechanical distillation work
 # (dev.md: "effort routing expressed as model routing"). Env-overridable so
 # a smaller/newer tier can be adopted without a code change when one ships --
@@ -86,7 +87,7 @@ def _draft_distillation(item: SlackItem, vault_path: Path, inbox_path: Path) -> 
     """
     methodology = vault_io.read_file("maintenance/schedule.md")
     agent_def = vault_io.read_file("maintenance/agents/distiller.md")
-    readme = vault_io.read_file("modes/nightshift/inbox/README.md")
+    readme = vault_io.read_file(f"{MAINTENANCE_INBOX}/README.md")
 
     prompt = f"""{methodology}
 

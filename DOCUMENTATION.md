@@ -160,6 +160,16 @@ Five session configurations. They differ by **methodology and model, never by ca
 
 **Subagents** come from `modes/<folder>/agents/*.md`, front matter parsed for `description` only — the body is the prompt. Deliberately not a YAML parse: these are hand-written, and one bad header must cost its own description rather than the whole roster.
 
+**Context loading is tiered**, and the tiers are a policy rather than an accident — this is what Stage 2's "tiered loading policy" turned out to describe, once someone looked.
+
+| Tier | What | Why |
+|---|---|---|
+| **Always** | universal prompt · mode overlay · job-context tail (capped at 2,600 chars) | Small, and needed before the session does anything. |
+| **By reference** | the full methodology, `lessons.md`, wiki pages | Named in the overlay, read on demand. Faber's overlay is 672 bytes pointing at 22KB. |
+| **On demand** | ranked retrieval over vault and history | Opt-in, and the reason a when-to-search rule sits in every mode's prompt. |
+
+The budget matters because an orchestrated workload re-sends its context every turn: measured spawn cost was ~1.9s, **~26K tokens of it configuration**. The regression signal is the cache-read ratio in Stats — a *drop* is the earliest warning that context structure has started thrashing.
+
 **Failures are non-fatal.** A session with the base prompt and no overlay is worse; a session that fails to spawn is nothing at all. The flags are omitted rather than passed empty.
 
 ---
@@ -387,16 +397,19 @@ A **quick-capture inbox** takes a link plus a note; the next dev session sorts i
 
 ---
 
-## 16. v1 surfaces, still present
+## 16. What v1 left behind
 
-Unreferenced, and they go at the Stage 2 cutover together with the state that still lives at their paths.
+Removed at the 2026-09-12 cutover: `World.tsx`, `ProfileOverlay.tsx`,
+`DesignLodge.tsx`, `modes.ts`, `api.ts`, v1's `index.css` and `App.tsx`; the
+`mode`, `session`, `nightshift` and `design_lodge` routers; `launch_surfaces.py`
+and every mode config directory. The VS Code and Terminal.app launch paths
+went with them — v2 hosts sessions rather than launching them elsewhere.
 
-- **Faber → VS Code.** Writes a `folderOpen` task running the real CLI in the integrated terminal, then `code --new-window`. `--new-window` is required: the task only fires on a genuine open event.
-- **The rest → tinted `Terminal.app`** via `osascript`, background set to a darkened version of the character's hex.
-
-**Neither redirects the config root any more** — both pass their methodology as a flag. A test asserts the string `CLAUDE_CONFIG_DIR=` does not appear in the module.
-
----
+What survived, and is load-bearing: `vault_io.py`, `backend/hooks/`, the
+`nightshift/` package (the scheduler's logic, distinct from its deleted
+router), `assets/characters/`, and the vault itself. `assets/world/` retired
+with the pixel scene; the sprites keep sole-source-of-truth status, because
+with the world gone they are the only carrier of Noctis's visual identity.
 
 ## 17. Capability contract
 
@@ -501,9 +514,7 @@ make test        # pytest + tsc -b + vitest
 ## 22. Known gaps
 
 **Outstanding:**
-- The `launchd`-on-wake scheduler. `brief/generate.py` writes the brief; nothing fires it.
-- Stage 2 item 8, "tiered loading policy" — appears in the build-order table and nowhere else. Needs a definition or removal.
-- Item 9, maintenance migration — unblocked, not started.
+- The `launchd`-on-wake scheduler — the only feature left in the build order. `brief/generate.py` writes the brief; nothing fires it, and the vault auto-commit/push job does not exist.
 
 **Known and accepted:**
 - `--effort` and `--agents` reach in-app sessions only, not the Terminal or VS Code surfaces.

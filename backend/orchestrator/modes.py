@@ -24,9 +24,9 @@ from pathlib import Path
 
 # Which vault folder a mode's files live in. Imported rather than restated:
 # `jobs.py` has needed the same mapping since it was written, and a second
-# copy here had already drifted (it sent maintenance to modes/nightshift,
-# where jobs.py sends it to modes/settings) before anything used it. General
-# is absent from both, deliberately -- it has no vault folder of its own.
+# copy here had already drifted before anything used it. Maintenance is
+# absent because it is not under `modes/` at all, and general because it has
+# no vault folder -- `jobs.py` names both cases.
 from jobs import MODE_VAULT_DIR
 
 
@@ -35,9 +35,9 @@ def vault_folder(mode: str) -> str | None:
     return MODE_VAULT_DIR.get(mode)
 
 
-# The inverse, for the launchers that name modes by folder rather than by
-# character -- launch_surfaces.py speaks "dev"/"learn", the orchestrator
-# speaks "faber"/"noctua", and something has to reconcile them once.
+# The inverse, for anything that names a mode by its folder rather than by
+# its character. v1's launchers spoke "dev"/"learn" and are gone; this stays
+# because the vault's own directory names are still the folder form.
 MODE_OF_FOLDER = {folder: mode for mode, folder in MODE_VAULT_DIR.items()}
 
 

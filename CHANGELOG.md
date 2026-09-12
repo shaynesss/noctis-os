@@ -8,6 +8,46 @@ a subprocess, so it runs on the existing subscription with no API billing.**
 Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5
 and 7 are complete and verified live. Item 6 is done except its scheduler.
 
+### The v1 cutover (2026-09-12)
+
+v1 is gone. Removed: `World.tsx`, `ProfileOverlay.tsx`, `DesignLodge.tsx`,
+`modes.ts`, `api.ts`, v1's `index.css` and `App.tsx`; the `mode`, `session`,
+`nightshift` and `design_lodge` routers; `launch_surfaces.py`; every mode
+config directory. The v2 shell calls only `/v2/*`, and nothing in it imported
+from `src/` root, so the two halves came apart cleanly.
+
+**Item 9, maintenance migration — closed.** Settings and Nightshift collapsed
+into root-level `maintenance/` in September, but only their *methodology*
+moved; two `MOVED.md` markers deferred the state because v1's pipeline still
+read the old paths. With v1 gone the state followed: `state.md`, `lessons.md`,
+`jobs/`, `inbox/` and `archive/` are now under `maintenance/`, the two state
+files merged without key collisions beyond `mode` and `last_touched`, and the
+two lessons files merged carrying nightshift's own security note — unattended
+runs write with no human in the loop at write time, which the settings note
+did not cover.
+
+**The paths are named once.** There were eleven literals across six files, and
+the mode→directory mapping had been restated three times and disagreed twice.
+`jobs.py` owns them now, and `jobs_dir()` handles maintenance sitting outside
+`modes/` rather than each caller assembling `modes/{mode}/...` and being wrong
+for one of them.
+
+**Item 8, tiered loading policy — removed rather than defined.** It appeared
+in the build-order table and nowhere else: no description, no acceptance
+condition, no trace in the vault. Its only defensible reading is what enters a
+session's context at entry versus what it fetches on demand, and the system
+already does that — capped job brief, overlay-as-pointer, opt-in retrieval.
+The policy existed and was undocumented, not unbuilt. Written up in
+DOCUMENTATION.md §6.
+
+**api_error_status** is parsed, independently of `is_error`: a turn that died
+on a provider 429 was reported as a plain empty turn, which sends you looking
+in the harness for a fault that happened upstream.
+
+**The v2 checkpoint is closed, passed.** Recorded four days late because until
+09-11 the answer was contaminated — Faber could not run Bash, Edit or Write,
+so any fallback to Desktop was forced rather than chosen.
+
 ### The harness itself (2026-09-11/12)
 
 Not a numbered item — infrastructure debt that had been capping every one of

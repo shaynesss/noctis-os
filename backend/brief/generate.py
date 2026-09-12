@@ -134,7 +134,7 @@ def gather() -> dict:
 
 
 def _inbox_counts() -> dict:
-    staged = "modes/nightshift/inbox"
+    staged = "maintenance/inbox"
     if not vault_io.file_exists(staged):
         return {"waiting": 0, "empty": 0}
     waiting = empty = 0

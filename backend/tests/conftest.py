@@ -39,7 +39,7 @@ def vault(tmp_path, monkeypatch):
 
     (tmp_path / "log.md").write_text("# Log\n\n", encoding="utf-8")
 
-    for name in ("dev", "learn", "research", "settings", "nightshift"):
+    for name in ("dev", "learn", "research"):
         mode_dir = tmp_path / "modes" / name
         (mode_dir / "jobs").mkdir(parents=True)
         (mode_dir / f"{name}.md").write_text(f"# {name} methodology\n", encoding="utf-8")
@@ -47,6 +47,18 @@ def vault(tmp_path, monkeypatch):
         (mode_dir / "state.md").write_text(
             "---\nmode: " + name + "\nbusy: false\n---\n\nnotes\n", encoding="utf-8"
         )
+
+    # Maintenance is not under modes/. Settings and nightshift collapsed into
+    # root-level `maintenance/` at the 2026-09-12 cutover, and it carries the
+    # inbox and archive the other three have no equivalent of.
+    maint = tmp_path / "maintenance"
+    for sub in ("jobs", "inbox", "archive"):
+        (maint / sub).mkdir(parents=True)
+    (maint / "audit.md").write_text("# maintenance methodology\n", encoding="utf-8")
+    (maint / "lessons.md").write_text("# maintenance lessons\n", encoding="utf-8")
+    (maint / "state.md").write_text(
+        "---\nmode: maintenance\nbusy: false\n---\n\nnotes\n", encoding="utf-8"
+    )
 
     return tmp_path
 

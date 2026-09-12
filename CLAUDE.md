@@ -52,4 +52,4 @@ Tailwind wiring + path alias. `/impeccable init`, register as **Product** (not B
 
 **v2 hosts sessions; it does not launch them elsewhere.** The orchestrator spawns `claude -p` and streams it into the app's own transcript. A mode's identity travels in the argv (`--append-system-prompt`, `--agents`, `--settings`) — **no `CLAUDE_CONFIG_DIR` anywhere**, so every session inherits the real `~/.claude` and the plugins, skills, subagents, MCP servers and permissions installed there.
 
-v1's launch surfaces still exist in the tree, unreferenced: Faber → VS Code via a `folderOpen` task, the rest → tinted `Terminal.app`. Both pass their methodology as a flag now rather than redirecting the config root. They go at the Stage 2 cutover. Full detail: `SPEC.md`'s EDD, `wiki/Noctis OS/Interface.md`.
+v1's launch surfaces are gone as of the 2026-09-12 cutover, along with its world screen, four routers and every mode config directory. Full detail: `SPEC.md`'s EDD, `DOCUMENTATION.md` §16.

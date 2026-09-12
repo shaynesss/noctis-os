@@ -8,7 +8,7 @@ import vault_io
 
 def _seed_cursor(cursor: dict):
     vault_io.write_frontmatter(
-        "modes/settings/state.md",
+        "maintenance/state.md",
         {"mode": "settings", "busy": False, "lessons_distilled_through": cursor},
         "",
     )
@@ -17,7 +17,7 @@ def _seed_cursor(cursor: dict):
 def test_no_triggers_when_nothing_changed(vault):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:
-        vault_io.write_file(f"modes/{m}/lessons.md", "# header\n")
+        vault_io.write_file(triggers.lessons_path(m), "# header\n")
 
     result = triggers.compute_triggers()
 
@@ -31,7 +31,7 @@ def test_missing_lessons_file_does_not_500_the_poll(vault):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:
         if m != "dev":
-            vault_io.write_file(f"modes/{m}/lessons.md", "# header\n")
+            vault_io.write_file(triggers.lessons_path(m), "# header\n")
     # modes/dev/lessons.md deliberately never written.
 
     result = triggers.compute_triggers()
@@ -42,7 +42,7 @@ def test_missing_lessons_file_does_not_500_the_poll(vault):
 def test_accumulation_fires_when_lessons_grow_past_cursor(vault):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:
-        vault_io.write_file(f"modes/{m}/lessons.md", "# header\n")
+        vault_io.write_file(triggers.lessons_path(m), "# header\n")
     vault_io.write_file("modes/dev/lessons.md", "# header\n- 2026-07-21 [x]: a real lesson.\n")
 
     result = triggers.compute_triggers()
@@ -54,7 +54,7 @@ def test_accumulation_fires_when_lessons_grow_past_cursor(vault):
 def test_friction_fires_on_marker_in_new_text(vault):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:
-        vault_io.write_file(f"modes/{m}/lessons.md", "# header\n")
+        vault_io.write_file(triggers.lessons_path(m), "# header\n")
     vault_io.write_file(
         "modes/dev/lessons.md", "# header\n- 2026-07-21 [x]: FRICTION: the gate order forced a redo.\n"
     )
@@ -83,7 +83,7 @@ def test_friction_marker_before_cursor_does_not_count(vault):
 def test_suspicion_fires_for_stale_state_file(vault, monkeypatch):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:
-        vault_io.write_file(f"modes/{m}/lessons.md", "# header\n")
+        vault_io.write_file(triggers.lessons_path(m), "# header\n")
 
     stale_time = time.time() - timedelta(days=8).total_seconds()
     os.utime(vault / "modes" / "learn" / "state.md", (stale_time, stale_time))
@@ -96,7 +96,7 @@ def test_suspicion_fires_for_stale_state_file(vault, monkeypatch):
 def test_no_suspicion_for_recently_touched_state_files(vault):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:
-        vault_io.write_file(f"modes/{m}/lessons.md", "# header\n")
+        vault_io.write_file(triggers.lessons_path(m), "# header\n")
 
     result = triggers.compute_triggers()
 
@@ -105,7 +105,7 @@ def test_no_suspicion_for_recently_touched_state_files(vault):
 
 def _seed_inbox(items: list[dict]):
     vault_io.write_frontmatter(
-        "modes/nightshift/state.md",
+        "maintenance/state.md",
         {"mode": "nightshift", "busy": False, "inbox": items},
         "",
     )
@@ -131,19 +131,20 @@ def test_diffs_awaiting_review_zero_when_inbox_empty(vault):
 def test_trigger_modes_names_only_the_modes_that_fired(vault):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:
-        vault_io.write_file(f"modes/{m}/lessons.md", "# header\n")
+        vault_io.write_file(triggers.lessons_path(m), "# header\n")
     vault_io.write_file(
         "modes/research/lessons.md", "# header\n- 2026-07-22 [x]: a real lesson.\n"
     )
     vault_io.write_file(
-        "modes/settings/lessons.md",
+        "maintenance/lessons.md",
         "# header\n- 2026-07-22 [x]: FRICTION: the gate order forced a redo.\n",
     )
 
     detail = triggers.compute_trigger_modes()
 
-    assert detail["accumulation"] == ["research", "settings"]
-    assert detail["friction"] == ["settings"]
+    # Declaration order, not alphabetical: MODES is the read order.
+    assert detail["accumulation"] == ["research", "maintenance"]
+    assert detail["friction"] == ["maintenance"]
     assert detail["suspicion"] == []
     # compute_triggers() must still collapse to the same booleans callers
     # and existing tests already depend on.
