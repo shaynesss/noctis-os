@@ -525,7 +525,13 @@ def decide(item_id: str, decision: str) -> dict:
 
 
 class WorklistUpdate(BaseModel):
-    markdown: str = ""
+    # Required, with no default. It defaulted to "", which meant a request
+    # that simply omitted the field truncated the worklist and returned 200 --
+    # silent data loss on the one file here that is hand-kept rather than
+    # derived, and so the only one that cannot be regenerated. Clearing it on
+    # purpose still works: `{"markdown": ""}` says so, and `{}` no longer
+    # says anything at all.
+    markdown: str
 
 
 @router.put("/worklist")

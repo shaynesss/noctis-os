@@ -1218,3 +1218,18 @@ def test_an_emptied_worklist_is_allowed(monkeypatch, client):
 
 def test_saving_the_worklist_requires_auth(client):
     assert client.put("/v2/worklist", json={"markdown": "x"}).status_code == 401
+
+
+def test_the_worklist_cannot_be_emptied_by_omission(vault, client):
+    """It defaulted to "" and returned 200, so a request that merely forgot
+    the field truncated the file -- silent loss on the one document here that
+    is hand-kept rather than derived, and so the only one that cannot be
+    regenerated from anything."""
+    r = client.put("/v2/worklist", headers=AUTH, json={})
+    assert r.status_code == 422, "an omitted field must not mean 'erase it'"
+
+
+def test_clearing_the_worklist_on_purpose_still_works(vault, client):
+    """The distinction that matters: `{}` says nothing, `{"markdown": ""}`
+    says empty."""
+    assert client.put("/v2/worklist", headers=AUTH, json={"markdown": ""}).status_code == 200
