@@ -27,6 +27,22 @@ def _isolated_busy_marker(tmp_path, monkeypatch):
     monkeypatch.setattr(busy_marker, "RUNTIME_DIR", tmp_path / "runtime")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_settings(monkeypatch):
+    """Clear settings the suite asserts defaults for.
+
+    `main.py` loads `.env`, so anything set there is present during a test
+    run: setting NOCTIS_MAX_CONCURRENT=9 locally turned three assertions
+    about the *default* red, and the suite's result started depending on a
+    gitignored file on one machine. A test that reads the developer's
+    environment is not testing the code.
+
+    Tests that want a value set it themselves with monkeypatch, which still
+    works -- this only removes what the ambient environment supplies.
+    """
+    monkeypatch.delenv("NOCTIS_MAX_CONCURRENT", raising=False)
+
+
 @pytest.fixture
 def vault(tmp_path, monkeypatch):
     """A throwaway vault with just enough structure for the routers under

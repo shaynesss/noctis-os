@@ -35,7 +35,7 @@ import {
 import { Transcript } from './Transcript'
 import {
   EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL,
-  DEFAULT_EFFORT, EFFORT_CYCLE, patchEntry, uniqueLabel,
+  DEFAULT_EFFORT, EFFORT_CYCLE, patchEntry, recallOpenTabs, rememberOpenTabs, uniqueLabel,
   type Effort, type Mode, type Permission, type SessionState, type Tab,
 } from './domain'
 import './tokens.css'
@@ -683,6 +683,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
+  /* Remember which tabs are open, so a reload brings them all back.
+   *
+   * Written on every change rather than on unload: a crash, a force-quit or
+   * a killed backend never fires unload, and those are exactly the cases
+   * where losing the arrangement hurts. */
+  useEffect(() => {
+    rememberOpenTabs(
+      tabs
+        .filter((t) => !t.pinned)
+        .map((t) => ({
+          mode: t.mode,
+          label: t.label,
+          engineId: sessions[t.id]?.engineId,
+        })),
+    )
+  }, [tabs, sessions])
+
   /* Resume the General session on launch.
    *
    * One long-running General session that carries many tasks, not a tab per
@@ -722,45 +739,64 @@ export default function App() {
         setSessions((prev) => ({ ...prev, t0: { ...prev.t0, recap: r.recap } }))
       }
 
-      /* And the mode conversation beside it.
+      /* And every other tab that was open, not just one.
        *
-       * General reopening while a Faber session vanished made the backend
-       * restarting -- which it does on its own -- feel like losing the
-       * thread: the work was still there, but the only way back to it was
-       * remembering a phrase from it and searching. A conversation you have
-       * to hunt for is one you stop returning to.
+       * This restored exactly one -- "General plus one", which was the
+       * shell's own cap at the time and so was exactly right. The cap is
+       * gone, and this was not updated with it: open five sessions, reload,
+       * get two back and lose three.
        *
-       * Exactly one, which is the strip's own cap (General plus one), so
-       * this restores the arrangement you had rather than a list of
-       * everything you have ever opened -- the graveyard the four-tab
-       * version produced. */
-      const beside = listed.sessions.find((s) => s.mode !== 'general' && s.resumable)
-      if (!beside) return
-      const asideFull = await get<HistoryTranscript>(`/v2/sessions/history/${beside.id}`)
-      if (!live || !asideFull || asideFull.blocks.length === 0) return
+       * Restoring from the remembered arrangement rather than from "the most
+       * recent resumable rows" is the difference between reopening what you
+       * had and reopening a graveyard of everything ever typed -- which is
+       * the failure the single-tab version was itself a reaction to. A
+       * machine with nothing remembered still gets the old behaviour, one
+       * conversation beside General, so a fresh install is unchanged.
+       */
+      const remembered = recallOpenTabs()
+      const byEngine = new Map(
+        listed.sessions.filter((h) => h.engine_id).map((h) => [h.engine_id, h]),
+      )
+      const wanted = remembered.length
+        ? remembered.map((t) => byEngine.get(t.engineId!)).filter(Boolean)
+        : [listed.sessions.find((h) => h.mode !== 'general' && h.resumable)].filter(Boolean)
 
-      const tabId = `h${beside.id}`
-      setTabs((ts) => (ts.length > 1 ? ts : [ts[0], {
-        id: tabId, mode: asideFull.mode,
-        label: `${MODE_LABEL[asideFull.mode]} · ${truncate(asideFull.title)}`,
-      }]))
-      setSessions((prev) => (prev[tabId] ? prev : {
-        ...prev,
-        [tabId]: {
-          mode: asideFull.mode,
-          blocks: asideFull.blocks,
-          draft: '',
-          cwd: asideFull.cwd ?? EMPTY_SESSION.cwd,
-          engineId: asideFull.engine_id ?? undefined,
-        },
-      }))
-      setDrafts((d) => (tabId in d ? d : { ...d, [tabId]: '' }))
+      for (const beside of wanted as HistorySession[]) {
+        if (!live) return
+        const asideFull = await get<HistoryTranscript>(`/v2/sessions/history/${beside.id}`)
+        if (!live || !asideFull || asideFull.blocks.length === 0) continue
 
-      const ar = await get<{ recap: string | null }>(`/v2/sessions/history/${beside.id}/recap`)
-      if (live && ar?.recap) {
-        setSessions((prev) => (prev[tabId]
-          ? { ...prev, [tabId]: { ...prev[tabId], recap: ar.recap } }
-          : prev))
+        const tabId = `h${beside.id}`
+        setTabs((ts) => (ts.some((t) => t.id === tabId) ? ts : [...ts, {
+          id: tabId, mode: asideFull.mode,
+          label: `${MODE_LABEL[asideFull.mode]} · ${truncate(asideFull.title)}`,
+        }]))
+        setSessions((prev) => (prev[tabId] ? prev : {
+          ...prev,
+          [tabId]: {
+            mode: asideFull.mode,
+            blocks: asideFull.blocks,
+            draft: '',
+            cwd: asideFull.cwd ?? EMPTY_SESSION.cwd,
+            engineId: asideFull.engine_id ?? undefined,
+          },
+        }))
+        setDrafts((d) => (tabId in d ? d : { ...d, [tabId]: '' }))
+      }
+
+      /* Recaps last, and one request per restored tab.
+       *
+       * After the transcripts rather than interleaved with them: a recap
+       * costs an engine call and takes seconds, and blocking the thing you
+       * came back for on the sentence describing it is the wrong trade --
+       * the same reason General's recap is fetched after its transcript. */
+      for (const beside of wanted as HistorySession[]) {
+        if (!live) return
+        const tabId = `h${beside.id}`
+        const ar = await get<{ recap: string | null }>(`/v2/sessions/history/${beside.id}/recap`)
+        if (live && ar?.recap) {
+          setSessions((prev) => patchEntry(prev, tabId, (p) => ({ ...p, recap: ar.recap })))
+        }
       }
     })()
     return () => {

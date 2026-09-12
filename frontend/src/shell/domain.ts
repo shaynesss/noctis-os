@@ -117,6 +117,55 @@ export function patchEntry<T>(
   return map[key] ? { ...map, [key]: patch(map[key]) } : map
 }
 
+/* The tabs that were open, remembered across a reload.
+ *
+ * Restore used to fetch "General plus the single most recent other session",
+ * which was exactly right while the shell held exactly two tabs and wrong the
+ * moment it could hold nine: open five, reload, get two back. Nothing
+ * recorded the arrangement, so nothing could restore it.
+ *
+ * Kept per-viewer in localStorage rather than in the vault or the history
+ * database. Which tabs you had open is not knowledge and not application
+ * state either -- it is where this window was pointed, and it should not
+ * follow you to another machine.
+ *
+ * Every read and write is wrapped: storage throws outright in a private
+ * window and in some embedded contexts, and losing the arrangement is a far
+ * smaller failure than refusing to start. */
+const OPEN_TABS_KEY = 'noctis.openTabs'
+
+export interface RememberedTab {
+  mode: Mode
+  label: string
+  /** The engine's session id, which is what history rows are matched on. */
+  engineId?: string
+}
+
+export function rememberOpenTabs(tabs: readonly RememberedTab[]): void {
+  try {
+    localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(tabs))
+  } catch {
+    // A window that cannot remember its arrangement still works.
+  }
+}
+
+export function recallOpenTabs(): RememberedTab[] {
+  try {
+    const raw = localStorage.getItem(OPEN_TABS_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    // Only entries that can actually be restored. A tab with no engine id
+    // never reached the backend, so there is no transcript to fetch.
+    return parsed.filter(
+      (t): t is RememberedTab =>
+        typeof t === 'object' && t !== null && typeof (t as RememberedTab).engineId === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
 export interface Tab {
   id: string
   mode: Mode

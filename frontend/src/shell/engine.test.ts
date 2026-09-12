@@ -4,9 +4,11 @@
  * paragraph, that a result finds its call across interleaved events, and
  * that a chunk boundary landing mid-frame does not lose an event.
  */
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { emptyFold, fold, get, readSSE, type WireEvent } from './engine'
-import { DEFAULT_EFFORT, EFFORT_CYCLE, patchEntry, uniqueLabel } from './domain'
+import {
+  DEFAULT_EFFORT, EFFORT_CYCLE, patchEntry, recallOpenTabs, rememberOpenTabs, uniqueLabel,
+} from './domain'
 import type { Block, Effort } from './domain'
 
 const run = (events: WireEvent[]) => events.reduce(fold, emptyFold())
@@ -431,5 +433,64 @@ describe('patchEntry', () => {
     // closed, so there is nothing left for the update to say.
     const m: Record<string, { n: number }> = {}
     expect(patchEntry(m, 'gone', () => ({ n: 99 }))).toEqual({})
+  })
+})
+
+describe('remembering which tabs were open', () => {
+  /* A stub rather than jsdom. The suite runs in node, and the only thing
+   * under test here is the read/write/guard logic -- pulling in a DOM for a
+   * two-method object would be a dependency bought for one file. */
+  beforeEach(() => {
+    const store = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+    })
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('round-trips the arrangement', () => {
+    rememberOpenTabs([
+      { mode: 'faber', label: 'Faber · noctis-os', engineId: 'e1' },
+      { mode: 'vesper', label: 'Vesper · second-brain', engineId: 'e2' },
+    ])
+    expect(recallOpenTabs().map((t) => t.engineId)).toEqual(['e1', 'e2'])
+  })
+
+  it('drops tabs that never reached the backend', () => {
+    // No engine id means no transcript to fetch, so restoring it would add
+    // an empty tab that looks like a lost conversation rather than a new one.
+    rememberOpenTabs([
+      { mode: 'faber', label: 'a', engineId: 'e1' },
+      { mode: 'faber', label: 'b' },
+    ])
+    expect(recallOpenTabs()).toHaveLength(1)
+  })
+
+  it('survives junk in storage rather than throwing', () => {
+    localStorage.setItem('noctis.openTabs', '{not json')
+    expect(recallOpenTabs()).toEqual([])
+    localStorage.setItem('noctis.openTabs', '"a string"')
+    expect(recallOpenTabs()).toEqual([])
+  })
+
+  it('returns nothing on a fresh install', () => {
+    // Which is what keeps a first launch on the old behaviour: one
+    // conversation beside General rather than an empty restore.
+    expect(recallOpenTabs()).toEqual([])
+  })
+
+  it('survives storage being unavailable entirely', () => {
+    // A private window, or an embedded context with site data blocked, throws
+    // on access rather than returning null. Losing the arrangement is a far
+    // smaller failure than refusing to start.
+    vi.stubGlobal('localStorage', {
+      getItem: () => { throw new Error('denied') },
+      setItem: () => { throw new Error('denied') },
+    })
+    expect(() => rememberOpenTabs([{ mode: 'faber', label: 'x', engineId: 'e' }])).not.toThrow()
+    expect(recallOpenTabs()).toEqual([])
   })
 })

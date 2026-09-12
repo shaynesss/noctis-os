@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from orchestrator.manager import DEFAULT_MAX_CONCURRENT
+from orchestrator.manager import MAX_CONCURRENT_CEILING
 from orchestrator.events import (
     EngineError, Limits, SessionStart, TextDelta, ThinkingDelta,
     ThinkingProgress, ToolCall, ToolResult, TurnEnd, Usage,
@@ -169,8 +169,20 @@ def test_limits_distinguishes_unknown_from_zero(client):
 
 
 def test_session_list_reports_the_concurrency_budget(client):
+    """The route must report the cap the manager actually has.
+
+    Asserted against the live manager rather than against the default: the
+    manager is a module singleton built at import, so it captures whatever
+    NOCTIS_MAX_CONCURRENT was set to then -- and pinning the number here made
+    the suite fail on a machine whose .env raised it, which tests the
+    developer's environment rather than the code. What matters is that the
+    UI is told the truth, whatever the truth is.
+    """
+    import routers.sessions_v2 as sv2
+
     body = client.get("/v2/sessions", headers=AUTH).json()
-    assert body["max_concurrent"] == DEFAULT_MAX_CONCURRENT
+    assert body["max_concurrent"] == sv2._manager.max_concurrent
+    assert 1 <= body["max_concurrent"] <= MAX_CONCURRENT_CEILING
     assert body["running"] == 0
 
 
@@ -904,8 +916,10 @@ def test_the_session_list_reports_what_is_live_right_now(client):
     """The spec puts live/max sessions on the same status row as the limit
     windows, because together they answer one question: whether there is room
     to start something now."""
+    import routers.sessions_v2 as sv2
+
     body = client.get("/v2/sessions", headers=AUTH).json()
-    assert body["max_concurrent"] == DEFAULT_MAX_CONCURRENT
+    assert body["max_concurrent"] == sv2._manager.max_concurrent
     assert isinstance(body["live"], list)
     assert body["running"] == len([s for s in body["live"] if s["state"] == "running"])
 
