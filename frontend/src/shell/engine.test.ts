@@ -482,6 +482,23 @@ describe('remembering which tabs were open', () => {
     expect(recallOpenTabs()).toEqual([])
   })
 
+
+  it('a boot-time read is unaffected by a later write', () => {
+    // The ordering hazard this exists for. React runs effects in declaration
+    // order, and the writer is declared before the restorer -- so on the
+    // remount that follows a crash, `tabs` is the bare General seed and the
+    // writer would persist an empty list *before* the restorer reads it.
+    // The arrangement would be destroyed by the recovery meant to preserve
+    // it. Capturing at boot is what makes the read immune.
+    rememberOpenTabs([{ mode: 'faber', label: 'Faber · noctis-os', engineId: 'e1' }])
+    const atBoot = recallOpenTabs()
+
+    rememberOpenTabs([])                       // what the ungated writer did
+
+    expect(atBoot.map((t) => t.engineId)).toEqual(['e1'])
+    expect(recallOpenTabs()).toEqual([])       // storage really was cleared
+  })
+
   it('survives storage being unavailable entirely', () => {
     // A private window, or an embedded context with site data blocked, throws
     // on access rather than returning null. Losing the arrangement is a far

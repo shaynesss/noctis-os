@@ -36,6 +36,7 @@ import { Transcript } from './Transcript'
 import {
   EMPTY_SESSION, EMPTY_TAB, MODE_ACCENT, MODE_INFO, MODE_LABEL,
   DEFAULT_EFFORT, EFFORT_CYCLE, patchEntry, recallOpenTabs, rememberOpenTabs, uniqueLabel,
+  type RememberedTab,
   type Effort, type Mode, type Permission, type SessionState, type Tab,
 } from './domain'
 import './tokens.css'
@@ -683,12 +684,32 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey, true)
   }, [])
 
+  /* What was open last time, read once during the first render.
+   *
+   * Captured here rather than inside the restore effect, and this is the
+   * whole reason the arrangement survives a crash: effects run in
+   * declaration order, so the writer below fires before the restorer. On a
+   * remount -- which is exactly what the error boundary does after a crash
+   * -- `tabs` is the bare General seed, so the writer would persist an empty
+   * list and the restorer would then read it back and find nothing. The
+   * arrangement would be destroyed by the very recovery meant to preserve
+   * it. Reading during render happens before any effect at all. */
+  const rememberedAtBoot = useRef<RememberedTab[] | null>(null)
+  if (rememberedAtBoot.current === null) rememberedAtBoot.current = recallOpenTabs()
+
+  /* Set once the restore has run, whatever it found. Until then the writer
+   * stays quiet: a slow transcript fetch must not be overtaken by a write
+   * describing the half-built arrangement it is still assembling. */
+  const restored = useRef(false)
+
   /* Remember which tabs are open, so a reload brings them all back.
    *
    * Written on every change rather than on unload: a crash, a force-quit or
    * a killed backend never fires unload, and those are exactly the cases
-   * where losing the arrangement hurts. */
+   * where losing the arrangement hurts. By the time anything goes wrong the
+   * record is already on disk. */
   useEffect(() => {
+    if (!restored.current) return
     rememberOpenTabs(
       tabs
         .filter((t) => !t.pinned)
@@ -714,6 +735,7 @@ export default function App() {
   useEffect(() => {
     let live = true
     void (async () => {
+      try {
       const listed = await get<{ sessions: HistorySession[] }>('/v2/sessions/history?limit=20')
       if (!live || !listed) return
       const latest = listed.sessions.find((s) => s.mode === 'general' && s.resumable)
@@ -753,7 +775,7 @@ export default function App() {
        * machine with nothing remembered still gets the old behaviour, one
        * conversation beside General, so a fresh install is unchanged.
        */
-      const remembered = recallOpenTabs()
+      const remembered = rememberedAtBoot.current ?? []
       const byEngine = new Map(
         listed.sessions.filter((h) => h.engine_id).map((h) => [h.engine_id, h]),
       )
@@ -797,6 +819,17 @@ export default function App() {
         if (live && ar?.recap) {
           setSessions((prev) => patchEntry(prev, tabId, (p) => ({ ...p, recap: ar.recap })))
         }
+      }
+      } finally {
+        /* On every path, including the early returns above.
+         *
+         * This body returns early for a backend that is down, a history with
+         * nothing resumable, and an empty transcript. If the flag only set on
+         * the happy path, the writer would stay silent forever on exactly
+         * those launches -- and the arrangement would stop being recorded
+         * from then on, which is the failure this whole mechanism exists to
+         * prevent, arrived at from the other side. */
+        restored.current = true
       }
     })()
     return () => {
