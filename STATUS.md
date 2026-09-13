@@ -186,7 +186,7 @@ wrapper does not take the window with it.
 Not a numbered item. Shayne's brief was "run a lot more debugging tests";
 the method was to run the whole loop for real — argv → PTY → turn → exit →
 index → recap → search — and follow whatever the run said rather than what
-the code said. Nine defects, each committed with its proof:
+the code said. Eleven defects, each committed with its proof:
 
 - **Terminal sessions attribute to their own mode** (`faaf846`). Hooks read
   `NOCTIS_MODE`; a PTY child inherited the shell's. `interactive-args` now
@@ -207,10 +207,14 @@ the code said. Nine defects, each committed with its proof:
 - **The terminal ceiling said nothing** and **resuming a deleted conversation
   hid it for good** (`bd4ad3d`).
 - **A web-view reload leaked every running session** (`97136e3`).
+- **A handoff opening with a bullet killed its session** (`f6df63e`). The
+  positional prompt now sits behind `--`; proven in a PTY.
+- **A malformed status-line report answered 500 every five seconds**
+  (`d71c084`), and `history?limit=-1` returned every conversation ever.
 - The Cargo feature the glass window needed had been left out of the
   manifest (`cf4584f`).
 
-Verified after: 304 backend tests, 60 frontend, `tsc -b` clean; the four
+Verified after: 306 backend tests, 60 frontend, `tsc -b` clean; the four
 scratch sweeps green — routes 102/102, indexer 14/14, resume 12/12,
 end-to-end 29/29 — and a PTY probe calling both `noctis` MCP tools. The
 action feed (`runtime/<mode>__<job>.log`) is written correctly now and

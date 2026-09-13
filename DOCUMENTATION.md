@@ -48,7 +48,7 @@ Built by `backend/interactive.py`, served by `GET /v2/sessions/interactive-args?
 | `--append-system-prompt` | The mode's identity, as text in the argv. Nothing per-mode is written to disk, so two sessions of one mode cannot race, and an edited methodology reaches a resumed session. |
 | `--settings` | The tracked policy plus a `statusLine` command that POSTs the CLI's own report — windows, context, model, session id, transcript path — to `/v2/sessions/statusline` every five seconds. |
 | `--add-dir <vault>` | The engine sandboxes file access to the working directory; a Faber session in a repo could not read its own methodology without this. |
-| positional prompt | A handoff's carried summary, submitted as the session's first message. |
+| `--` + positional prompt | A handoff's carried summary, submitted as the session's first message. Behind the terminator, because a summary that opens with a bullet is an argument that opens with a dash, and the option parser exited on one. |
 
 **Three things the PTY host has to get right**, each found by testing rather than reasoning: size the PTY *before* spawning (at 0×0 the TUI exits instantly with no output); coalesce output into ~16ms frames *and flush on silence* (a flush that only runs on the next read strands the tail of a prompt that then blocks for input); kill the session, not the immediate child. Bytes cross Tauri's IPC base64-encoded, because a read can split a multi-byte character and xterm.js decodes UTF-8 itself. Measured 2026-09-14 with the batcher isolated under `seq` as the program: 7MB byte-exact and in order in 820ms (51 frames), and a program that prints then goes quiet gets its last frame **20ms** after its last byte rather than when it exits.
 
