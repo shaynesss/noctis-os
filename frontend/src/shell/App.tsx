@@ -144,6 +144,28 @@ export default function App() {
     { five_hour: Window; seven_day: Window; using_overage?: boolean } | null
   >(null)
 
+  /* Seed it from the backend, which has been remembering this all along.
+   *
+   * The only writer used to be the stream event below, so the windows read
+   * `—` until the first turn of each page load and then stayed right for as
+   * long as the window lived. That looked permanent because the window
+   * lived for days; restarting to pick up a backend change is now routine,
+   * and the bar went blank every time -- for state that is a property of
+   * the account, not of this page load.
+   *
+   * Only ever a seed. A stream event is newer by definition, and the fetch
+   * resolving late must not overwrite one, so the write is guarded on the
+   * slot still being empty. */
+  useEffect(() => {
+    let live = true
+    void get<{ known: boolean; five_hour: Window; seven_day: Window
+               using_overage: boolean }>('/v2/sessions/limits').then((d) => {
+      if (!live || !d?.known) return
+      setLimits((prev) => prev ?? d)
+    })
+    return () => { live = false }
+  }, [])
+
   /* Dismissed for this window only, and re-armed if overage clears and
    * returns. Persisting the dismissal would mean a later, real overage
    * arriving silently because of a click made days ago. */
@@ -272,6 +294,25 @@ export default function App() {
           ranModel: state.model ?? prev.ranModel,
           engineId: state.sessionId ?? prev.engineId,
         }))
+      }
+    } catch (e) {
+      /* Belt to `runSession`'s braces, and not redundant: this catches the
+       * class of fault that never reaches the stream at all -- a throw in
+       * `fold`, in `patchSession`, in a render triggered by them.
+       *
+       * Without it those became an unhandled rejection, because every caller
+       * of `turn` uses `void turn(...)`. The `finally` below then cleared
+       * `busy`, so the interface looked idle and finished while the
+       * transcript had simply stopped. A turn that fails has to leave
+       * something behind saying so -- the same rule the session prompt puts
+       * on a model, applied to the surface hosting it. */
+      if (!ctrl.signal.aborted) {
+        state = fold(state, {
+          t: 'error',
+          message: `the interface dropped this turn: ${(e as Error).message}`,
+          fatal: true,
+        })
+        patchSession(tabId, (prev) => ({ ...prev, blocks: state.blocks }))
       }
     } finally {
       // In `finally` so an abort or a throw cannot strand a session as

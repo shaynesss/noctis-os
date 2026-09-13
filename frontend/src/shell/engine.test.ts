@@ -5,7 +5,7 @@
  * that a chunk boundary landing mid-frame does not lose an event.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { emptyFold, fold, get, readSSE, type WireEvent } from './engine'
+import { emptyFold, fold, get, readSSE, runSession, type WireEvent } from './engine'
 import {
   DEFAULT_EFFORT, EFFORT_CYCLE, patchEntry, recallOpenTabs, rememberOpenTabs, uniqueLabel,
 } from './domain'
@@ -536,5 +536,78 @@ describe('retry backoff', () => {
       expect(backoff(n)).toBeGreaterThan(0)
       expect(backoff(n)).toBeLessThanOrEqual(15000)
     }
+  })
+})
+
+describe('runSession when the connection dies mid-turn', () => {
+  const withFetch = async (impl: typeof fetch, run: () => Promise<unknown>) => {
+    const real = globalThis.fetch
+    globalThis.fetch = impl
+    try {
+      return await run()
+    } finally {
+      globalThis.fetch = real
+    }
+  }
+
+  /* A stream that delivers a few frames and then fails, which is what a
+   * dropped connection actually looks like -- not a rejected fetch. The
+   * opening request succeeded; the failure is in `reader.read()`. */
+  const dyingStream = (err: Error): ReadableStream<Uint8Array> => {
+    const enc = new TextEncoder()
+    let sent = false
+    return new ReadableStream({
+      pull(c) {
+        if (!sent) {
+          sent = true
+          c.enqueue(enc.encode('data: {"t":"text","text":"working"}\n\n'))
+          return
+        }
+        c.error(err)
+      },
+    })
+  }
+
+  const respondWith = (body: ReadableStream<Uint8Array>) =>
+    (() => Promise.resolve({ ok: true, body } as Response)) as unknown as typeof fetch
+
+  it('reports the drop instead of throwing past the caller', async () => {
+    // The whole defect: this rejection used to escape `runSession`, and the
+    // caller's try/finally has no catch -- so `busy` cleared, the composer
+    // unlocked, and nothing was written. The turn appeared to be ignored.
+    const events = await withFetch(
+      respondWith(dyingStream(new TypeError('Load failed'))),
+      async () => {
+        const out: WireEvent[] = []
+        for await (const e of runSession({ mode: 'noctua', prompt: 'x', cwd: '/tmp', permission_mode: 'manual' })) out.push(e)
+        return out
+      },
+    ) as WireEvent[]
+
+    expect(events[0]).toEqual({ t: 'text', text: 'working' })
+    const last = events[events.length - 1]
+    expect(last.t).toBe('error')
+    expect(last).toMatchObject({ fatal: true })
+    expect((last as { message: string }).message).toContain('connection lost')
+  })
+
+  it('says nothing when the reader was aborted on purpose', async () => {
+    // Escape aborts the stream. Reporting the user's own action back to them
+    // as a fatal error is noise, and would make stopping look like breaking.
+    const ctrl = new AbortController()
+    const events = await withFetch(
+      respondWith(dyingStream(new DOMException('aborted', 'AbortError'))),
+      async () => {
+        const out: WireEvent[] = []
+        for await (const e of runSession({ mode: 'noctua', prompt: 'x', cwd: '/tmp', permission_mode: 'manual' },
+                                  ctrl.signal)) {
+          out.push(e)
+          ctrl.abort()
+        }
+        return out
+      },
+    ) as WireEvent[]
+
+    expect(events.some((e) => e.t === 'error')).toBe(false)
   })
 })

@@ -145,7 +145,35 @@ export async function* runSession(
     return
   }
 
-  yield* readSSE(res.body, signal)
+  /* A stream that dies mid-turn has to say so.
+   *
+   * The opening fetch was already guarded; this was not, and the difference
+   * mattered because the two failures do not look alike. A backend that is
+   * down fails at the fetch, loudly. A connection dropped *after* the first
+   * byte fails inside `reader.read()`, and that rejection used to travel out
+   * through the caller's `for await` -- which has a `finally` that clears
+   * `busy` and no `catch`. So the composer unlocked, no error was written,
+   * and the turn simply stopped mid-sentence: the model appeared to ignore
+   * you. Observed on 2026-09-13 as `TypeError: Load failed` in the WebView,
+   * four times in seven minutes, each one costing a turn silently.
+   *
+   * It cannot be left to the manager's closing pass either. That hangs off
+   * `TurnEnd`, and a dropped stream never produces one -- the guard for a
+   * model that goes quiet is structurally blind to a transport that does.
+   */
+  try {
+    yield* readSSE(res.body, signal)
+  } catch (e) {
+    // Stopping is not failing. `Escape` aborts the reader on purpose, and
+    // reporting the user's own action back as an error is noise.
+    if (signal?.aborted) return
+    yield {
+      t: 'error',
+      message: `connection lost mid-turn: ${(e as Error).message}. `
+             + 'The engine may have kept working — check history before resending.',
+      fatal: true,
+    }
+  }
 }
 
 /* -------------------------------------------------------------- reducer */
