@@ -142,7 +142,12 @@ export function Terminal({
          * working for an hour should still be scrollable back to what it did
          * at the start, which is the whole reason to watch it. */
         scrollback: 20000,
-        allowTransparency: false,
+        /* The window is a macOS vibrancy material with the desktop showing
+         * through, and the ground token is translucent to let it. A terminal
+         * that painted an opaque black rectangle over that would be the one
+         * solid slab in a glass window. Costs the WebGL renderer some
+         * optimisations; the DOM renderer does not care. */
+        allowTransparency: true,
         /* Box-drawing glyphs are drawn rather than taken from the font, so
          * the CLI's own rules and frames stay unbroken at any size. */
         customGlyphs: true,

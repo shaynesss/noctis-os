@@ -279,13 +279,15 @@ Full reasoning: `second-brain/wiki/Harness Portability.md`.
 
 **An IDE, not a world.** v1's pixel scene is retired. v2 is a surface you sit inside for hours, so it takes the look of the tools that job already lives in. Sober, near-black, dense, keyboard-first. The characters survive and, with the world gone, are the only carrier of Noctis's identity.
 
+**Glass, 2026-09-14.** The window is a macOS vibrancy material — `windowEffects: hudWindow` with `transparent: true` in `tauri.conf.json` — so the desktop shows through, blurred, the way Finder's sidebar and Spotlight do. The ground tokens are translucent to let it: ground most open, surface and elevated progressively more opaque so text stays readable whatever is behind the window. The terminal paints with `allowTransparency`, so it is not the one solid slab in a glass window. **This requires `macOSPrivateApi: true`**, which uses a private Apple API — a deliberate choice, recorded as one: it closes the App Store door and nothing else, and Noctis has no distribution story that would open it. On Intel a large vibrant window is a visible GPU tax; on Apple Silicon it is nothing.
+
 **Palette** — verified against `frontend/src/shell/tokens.css`.
 
-| Token | Hex | Use |
+| Token | Value | Use |
 |---|---|---|
-| `--color-ground` | `#0f0f0f` | app background |
-| `--color-surface` | `#161616` | panels, rail, cards |
-| `--color-elevated` | `#1c1c1c` | inputs, hover, active tab |
+| `--color-ground` | `rgba(15,15,15,0.72)` | app background, over the material |
+| `--color-surface` | `rgba(22,22,22,0.80)` | panels, rail, cards |
+| `--color-elevated` | `rgba(28,28,28,0.88)` | inputs, hover, active tab |
 | `--color-line` | `#2a2a2a` | dividers |
 | `--color-ink` | `#cccccc` | primary text |
 | `--color-ink-dim` | `#8a8a8a` | secondary |

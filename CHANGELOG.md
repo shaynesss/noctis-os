@@ -9,6 +9,20 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Glass (2026-09-14)
+
+The window is a macOS vibrancy material — `windowEffects: hudWindow`,
+`transparent: true` — with the desktop blurred behind it, the way Finder's
+sidebar and Spotlight are. Native, not a CSS imitation. The three ground
+tokens are translucent to let it show: ground most open, surface and elevated
+progressively more opaque so text stays readable whatever is behind the
+window, and heavier than the effect looks like it needs, because text on a
+blurred desktop wants a darker tint than the same text on black. The terminal
+paints with `allowTransparency`, so it is not the one solid slab.
+
+Requires `macOSPrivateApi: true` — a private Apple API, recorded in the spec
+as a deliberate choice: it closes the App Store door and nothing else.
+
 ### The session is a terminal; the orchestrator is gone (2026-09-14)
 
 **Steps 4–5 of `PTY-MIGRATION.md` §7, in three commits that each left the

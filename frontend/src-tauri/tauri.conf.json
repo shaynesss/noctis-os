@@ -10,6 +10,7 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "title": "Noctis",
@@ -23,7 +24,11 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "visible": false,
-        "skipTaskbar": false
+        "skipTaskbar": false,
+        "transparent": true,
+        "windowEffects": {
+          "effects": ["hudWindow"]
+        }
       }
     ],
     "security": {

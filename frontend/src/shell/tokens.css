@@ -42,10 +42,22 @@
 }
 
 @theme {
-  /* ground — deliberately unsaturated so accents are the only colour */
-  --color-ground: #0f0f0f;
-  --color-surface: #161616;
-  --color-elevated: #1c1c1c;
+  /* ground — deliberately unsaturated so accents are the only colour.
+   *
+   * Translucent, not solid. The window is a macOS vibrancy material
+   * (`windowEffects: hudWindow` in tauri.conf.json) with the desktop blurred
+   * behind it, and these three alphas are what let it show: ground is the
+   * most open, surfaces and raised panels progressively more opaque so text
+   * over them stays readable whatever is behind the window. Heavier than
+   * the effect looks like it needs -- text on a blurred desktop wants a
+   * darker tint than the same text on black.
+   *
+   * The body must keep painting `--color-ground`. A transparent body would
+   * show the raw material with no tint at all, which reads as a bug rather
+   * than as glass. */
+  --color-ground: rgba(15, 15, 15, 0.72);
+  --color-surface: rgba(22, 22, 22, 0.80);
+  --color-elevated: rgba(28, 28, 28, 0.88);
   --color-line: #2a2a2a;
   --color-line-soft: #212121;
 
