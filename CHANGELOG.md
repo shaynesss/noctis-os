@@ -5,8 +5,53 @@
 **v2 replaces Claude Desktop as the entry point. The app drives Claude Code as
 a subprocess, so it runs on the existing subscription with no API billing.**
 
-Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5
-and 7 are complete and verified live. Item 6 is done except its scheduler.
+Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
+7, 8 and 9 are complete and verified live. Item 6 is done except its
+scheduler, which is the only feature left in the build order.
+
+### One command to run Noctis, and it opens the app (2026-09-13)
+
+**`make app` is now `make dev`.** The naming had it backwards: the command with
+the obvious name opened a browser tab, and the app was the thing you had to
+know to ask for. You develop in the window you use, so a bug found while
+working is a bug found in the real surface.
+
+| before | after | |
+|---|---|---|
+| `make app` | **`make dev`** | Tauri window, supervised backend, `[tsc]` stream |
+| `make dev` | `make browser` | browser tab at `:5180`, `uvicorn --reload`, no Rust build |
+| `make backend` | `make reload` | kills uvicorn; the supervisor brings it back on current code |
+
+`make browser` stays for backend-only work, where a Rust build is not worth
+paying for. Product capabilities are identical across the two — everything
+else is backend or frontend code.
+
+`make reload` replaces `make backend`, which started a *second* uvicorn beside
+the supervised one and clashed on the port. Killing it instead means a
+deliberate restart and a crash take the same path, which is what crash-only
+design is for rather than a special case bolted beside it.
+
+**Fixed in the same pass, all found by sweeping rather than assumed:**
+
+- **`desktop/NoctisOS.app` was broken.** Its launcher still ran `make app` — a
+  target that no longer existed — so every double-click would have failed into
+  `backend/runtime/desktop.log`, which nobody reads.
+- **`test_the_supervised_backend_does_not_reload` had stopped running.** It
+  sliced the Makefile at `\napp:` and threw `ValueError: substring not found`,
+  so the "supervisor and reloader are alternatives, not layers" invariant was
+  unchecked. It reads the `dev:` target now.
+- **`supervise.py` pointed the wrong way twice** — its docstring and its
+  already-answering error both told you to use `make dev` to get the reloader,
+  which is now the opposite of what `make dev` is.
+- **`DOCUMENTATION.md`'s troubleshooting table** still prescribed `make backend`
+  for an absent backend.
+- **`desktop/README.md`** described the pywebview shell deleted on 2026-09-12.
+  Rewritten: the bundle is a double-click wrapper around `make dev`, plus the
+  two lessons from that shell which still hold — cleanup needs process groups,
+  and you verify by actually closing the window.
+
+`CHANGELOG.md` and `STATUS.md` entries dated before today keep saying
+`make app`; they are records of what the commands were at the time.
 
 ### The v1 cutover (2026-09-12)
 

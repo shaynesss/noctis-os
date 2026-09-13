@@ -1,11 +1,13 @@
 # STATUS.md
 
-Last updated: 2026-09-12
+Last updated: 2026-09-13
 
 ## Current state
 
 **v2 is the system. v1 is gone.** Stage 1 complete. Stage 2 items 1-5, 7, 8
-and 9 closed; item 6 done except its scheduler. **The launchd-on-wake
+and 9 closed; item 6 done except its scheduler. `compose()`'s `job_context`
+now reaches every session (`sessions_v2.py:145`), closing what stood here as
+Next item 2; item 8 was removed rather than defined. **The launchd-on-wake
 scheduler is the only feature left in the build order.**
 
 The 2026-09-12 cutover removed v1 entirely: its world screen, profile overlay,
@@ -15,9 +17,16 @@ closing item 9 and the two MOVED.md markers that had deferred it. Item 8
 ("tiered loading policy") was removed rather than defined — see SPEC.md's
 Open questions.
 
-Verified 2026-09-12: working tree clean, 426 backend tests, 79 frontend,
-`tsc -b` clean, `make doctor` reporting no capability gaps. 130 commits
-unpushed on `main` — the manual-push rule working as designed, not drift.
+Verified 2026-09-13: 382 backend tests, 97 frontend, `tsc -b` clean, `make
+doctor` reporting no capability gaps, and `make dev` running the stack it now
+names — supervised backend, one Tauri window. 131 commits unpushed on `main`
+— the manual-push rule working as designed, not drift.
+
+*(The backend count fell from the 426 recorded on 09-12 because that figure
+predated the cutover in the same day's `5b59471`, which deleted five test
+files — `test_design_lodge`, `test_launch_surfaces`, `test_mode_router`,
+`test_nightshift_router`, `test_session_router` — along with the routers they
+covered. Nothing was lost that still had code behind it.)*
 
 **2026-09-11/12 was not a numbered item.** It was infrastructure debt that
 had been silently costing every session, found by asking why Claude behaved
@@ -91,8 +100,9 @@ Not a numbered item. Debt that was capping the ceiling on every one of them.
   `tsc -b` and vitest. `tsc --noEmit -p tsconfig.json` checks *zero* files
   against this repo's solution-style config and exits 0 — it reported a clean
   typecheck on a broken tree, which is why the `typecheck` script exists.
-- **`make doctor` / `make backend`** (`0f3d69f`). The backend dying leaves vite
-  serving a UI pointed at a closed port, so "broken" is usually "absent".
+- **`make doctor` / `make reload`** (`0f3d69f`, renamed `7e15fb5`). The backend
+  dying leaves vite serving a UI pointed at a closed port, so "broken" is
+  usually "absent".
 
 Verified by spawning real sessions through the production driver, not by
 reading argv: Faber reached its plugins, its Critic and `dev.md`; all four
@@ -125,6 +135,49 @@ Verified live, not only by tests.
   curated note. The store is a cache of what was said; the vault is what was
   decided, and only a person can tell those apart, so nothing is automatic.
 
+## Done this pass — one command, and it opens the app (2026-09-13)
+
+**The run paths were named backwards.** `make app` opened the Tauri window and
+`make dev` opened a browser tab, so the command with the obvious name gave you
+the surface you were not shipping. Renamed (`7e15fb5`):
+
+| before | after | |
+|---|---|---|
+| `make app` | **`make dev`** | Tauri window, supervised backend, `[tsc]` stream |
+| `make dev` | `make browser` | browser tab, `uvicorn --reload`, no Rust build |
+| `make backend` | `make reload` | kills uvicorn; the supervisor restarts it |
+
+You develop in the window you use, so a bug found while working is a bug found
+in the real surface. `make browser` stays for backend-only work where a Rust
+build is not worth paying for.
+
+**Three things the sweep found that were already broken, not caused by the
+rename:**
+
+- **`desktop/NoctisOS.app` could not launch.** Its script ran `make app` after
+  that target stopped existing, failing into `backend/runtime/desktop.log`.
+- **`test_the_supervised_backend_does_not_reload` was not running.** It sliced
+  the Makefile at `\napp:` and raised `ValueError: substring not found`, so the
+  supervisor-vs-reloader invariant went unchecked. Points at `dev:` now.
+- **`desktop/README.md` documented a deleted shell** — pywebview, gone
+  2026-09-12. Rewritten around the bundle that actually exists.
+
+`supervise.py`'s docstring and error message, `DOCUMENTATION.md`'s
+troubleshooting row and `SETUP.md`'s heading all pointed the wrong way after
+the rename and were repaired. Dated `CHANGELOG.md`/`STATUS.md` entries keep
+saying `make app`: they record what the commands were at the time.
+
+**Verified live, not just committed.** The stack running until today was a
+mismatch — a Tauri window from 7 September and a `uvicorn --reload` backend
+from the old `make dev`, with no supervisor anywhere. Killed both and started
+`make dev`: `supervise.py` owns a uvicorn with no `--reload`, `[tsc]` reports
+0 errors, vite answers on `:5180`, `/health` is ok, one window. An orphaned
+`target/debug/noctis` from the September 7 launch survived its parents' kill
+and had to be reaped by hand — worth knowing, since killing the `tauri dev`
+wrapper does not take the window with it.
+
+382 backend tests, 97 frontend, `tsc -b` clean.
+
 ## Next
 
 **0. The MCP server travels as three directories, not one file.**
@@ -138,22 +191,23 @@ for. This is the last piece of item 6. Email was deliberately left out of
 v1 — the vault-only brief is useful on its own, and it unblocked everything
 downstream.
 
-**2. `compose()`'s `job_context` parameter is never passed.**
-`backend/prompts/render.py:41` accepts it and line 61 would splice a
-`## This session's job` block into the rendered prompt, but both callers —
-`routers/sessions_v2.py:139` and `routers/panels.py:413` — call `render(mode)`
-with nothing. No session has ever received its job context. Same never-called
-shape as the defects found on 09-11: built, wired to nothing, and silent
-about it.
+**2. The brief page shows stale content and does not say so.**
+`brief/generate.py` writes `brief/today.md` and `POST /v2/brief/generate`
+exposes it, but nothing in the shell calls either — so the page renders
+whatever was last written, dated 10 September, looking exactly like a current
+brief. The scheduler above is the real fix; a staleness indicator and a
+regenerate control are worth having regardless, because otherwise the
+scheduler's first failure will be silent in exactly this way.
 
 *(The worklist question that stood here is settled: hand-kept, not generated,
 and editable in place since `0839e38`. A generated worklist is the job list
 again under a second name.)*
 
-**3. Item 8, "tiered loading policy", is undefined.** It appears in the
-build-order table and nowhere else in the spec — no description, no
-reasoning, no acceptance condition. It cannot be built from what is written,
-so it needs either a definition or removal.
+**3. `history.db` sits in two unpushed commits.** `2856b5a` and `ddb2f6e`
+carry a binary blob of real transcripts, and `noctis-os` is a public repo.
+Both are local, so this is a rebase today and a force-push over shared
+history once they are pushed — see the open decision below. It is a
+before-you-push item, not an urgent one, but 130 commits are already waiting.
 
 **4. Running the regression suite from Settings.** The cases are listed with
 what running them would cost; firing them needs the orchestrator to host

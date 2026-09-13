@@ -441,7 +441,7 @@ not prevent loss. See §18.
 ## 17. What v1 left behind
 
 Removed at the 2026-09-12 cutover: `desktop/app.py` (the pywebview shell,
-which `make dev` still pointed at for five days after Tauri shipped),
+which `make app` still pointed at for five days after Tauri shipped),
 `World.tsx`, `ProfileOverlay.tsx`,
 `DesignLodge.tsx`, `modes.ts`, `api.ts`, v1's `index.css` and `App.tsx`; the
 `mode`, `session`, `nightshift` and `design_lodge` routers; `launch_surfaces.py`
@@ -562,6 +562,7 @@ make test        # pytest + tsc -b + vitest
 
 **Known and accepted:**
 - `--effort` and `--agents` reach in-app sessions only, not the Terminal or VS Code surfaces.
+- The brief page renders whatever `brief/today.md` last held, with no staleness indicator. `POST /v2/brief/generate` exists and nothing in the shell calls it, so a brief only refreshes when something asks — which today is nothing. The scheduler is the fix; until it lands, a stale brief looks exactly like a current one.
 - Whitespace-only text counts as speech — judging quality would be the guesswork §7 replaced.
 - `seven_day_opus` is in the CLI binary and absent from an observed Haiku run. Unverified.
 - `--input-format stream-json` as a persistent bidirectional session is untested; it would address ~1.9s spawn-per-turn latency.
