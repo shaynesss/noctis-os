@@ -181,6 +181,41 @@ wrapper does not take the window with it.
 
 382 backend tests, 97 frontend, `tsc -b` clean.
 
+## Done this pass — the debugging sweep (2026-09-14)
+
+Not a numbered item. Shayne's brief was "run a lot more debugging tests";
+the method was to run the whole loop for real — argv → PTY → turn → exit →
+index → recap → search — and follow whatever the run said rather than what
+the code said. Nine defects, each committed with its proof:
+
+- **Terminal sessions attribute to their own mode** (`faaf846`). Hooks read
+  `NOCTIS_MODE`; a PTY child inherited the shell's. `interactive-args` now
+  returns an `env` map beside the argv; `pty_spawn` applies it.
+- **Recaps left transcripts and fired the repo's hooks** (`063a047`).
+  Twenty-seven recap transcripts, twenty-six filed in history as `general`
+  conversations; sixteen `dev` SessionEnds in a day clearing the busy marker.
+  `--no-session-persistence --setting-sources user`; the strays tombstoned.
+- **The backend sat at 644MB** (`7e358fe`). The lifetime figure built every
+  transcript's full conversation. A usage-only scan over a streamed reader:
+  78MB, and it stays there.
+- **A failed spawn ate every keystroke** (`bcf5842`). `r` now restarts a
+  session that never started, and a backend that refused is told apart from
+  one that is down.
+- **History froze a session filed mid-life** (`4b96cc8`). This very session
+  sat at 3,387 messages of 4,219. Rows record `indexed_bytes`; grown
+  transcripts are re-read in place.
+- **The terminal ceiling said nothing** and **resuming a deleted conversation
+  hid it for good** (`bd4ad3d`).
+- **A web-view reload leaked every running session** (`97136e3`).
+- The Cargo feature the glass window needed had been left out of the
+  manifest (`cf4584f`).
+
+Verified after: 304 backend tests, 60 frontend, `tsc -b` clean; the four
+scratch sweeps green — routes 102/102, indexer 14/14, resume 12/12,
+end-to-end 29/29 — and a PTY probe calling both `noctis` MCP tools. The
+action feed (`runtime/<mode>__<job>.log`) is written correctly now and
+read by nothing in the shell; that is an observation, not a defect.
+
 ## Next
 
 **0. The MCP server travels as three directories, not one file.**
