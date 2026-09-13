@@ -14,7 +14,7 @@
  * `tokens.css` rather than written twice — one source of truth for what
  * `ink-dim` is, whether it lands in a card or in a terminal cell.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal as Xterm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
@@ -76,6 +76,12 @@ export function Terminal({
   onExit?: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
+  /* Restarting reuses the mount path rather than adding a second one.
+   * Bumping this re-runs the effect below, which tears the old session down
+   * and spawns a fresh one through exactly the code that opened the first. */
+  const [generation, setGeneration] = useState(0)
+  const dead = useRef(false)
+  const setDead = (v: boolean) => { dead.current = v }
 
   useEffect(() => {
     const el = host.current
@@ -162,6 +168,20 @@ export function Terminal({
         // DOM renderer stays; nothing to report to the person using it.
       }
 
+      /* Fit twice, a frame apart.
+       *
+       * The first fit runs before the browser has finished laying the host
+       * element out, so it measures a box that is not its final size and the
+       * terminal opens too narrow — the CLI then wraps its first paint to
+       * that width and the prompt arrives with its options cut off. The
+       * second fit lands after layout has settled, and the size the engine is
+       * told about below is the one from that.
+       *
+       * `requestAnimationFrame` rather than a timeout: the thing being waited
+       * for is a layout pass, which is exactly what rAF is scheduled behind. */
+      safely('fit', () => fit.fit())
+      await new Promise(requestAnimationFrame)
+      if (!live) return
       safely('fit', () => fit.fit())
       // Unmounted while the renderer was attaching — StrictMode does exactly
       // this. Stop before touching a terminal the cleanup has already taken.
@@ -189,7 +209,20 @@ export function Terminal({
       })
       const unExit = await listen<{ id: string }>('pty:exit', (e) => {
         if (e.payload.id !== id) return
-        term_.writeln('\r\n\x1b[2m  session ended\x1b[0m')
+        /* A dead pane needs a way out of itself.
+         *
+         * A session ends for ordinary reasons -- answering "No, exit" at the
+         * trust prompt, typing `exit`, `/quit` -- and the first version left
+         * nothing behind but the words "session ended". The terminal was
+         * still there, still focused, and every keystroke went nowhere. The
+         * only recovery was clicking to another rail item and back, which is
+         * not a thing anyone should have to discover.
+         *
+         * Deliberately a keypress rather than a button: focus is already in
+         * the terminal, so the cheapest possible next action is the one your
+         * hands are on. */
+        term_.writeln('\r\n\x1b[2m  session ended — press \x1b[0mr\x1b[2m to start a new one\x1b[0m')
+        setDead(true)
         onExit?.()
       })
       cleanups.push(unData, unExit)
@@ -208,7 +241,15 @@ export function Terminal({
         return
       }
 
-      term_.onData((d) => { void invoke('pty_write', { id, data: d }) })
+      term_.onData((d) => {
+        // Once the engine is gone there is nothing to write to, so the
+        // terminal's own keys become the restart control.
+        if (dead.current) {
+          if (d === 'r' || d === 'R') { setDead(false); setGeneration((g) => g + 1) }
+          return
+        }
+        void invoke('pty_write', { id, data: d })
+      })
 
       const ro = new ResizeObserver(() => {
         fit.fit()
@@ -245,10 +286,11 @@ export function Terminal({
         term = undefined
       }
     }
-    // Deliberately once per tab: re-running would kill and respawn the
-    // session on a prop change, losing the conversation.
+    // Deliberately narrow: re-running on any prop change would kill and
+    // respawn a live session, losing the conversation. `generation` is the
+    // one intentional re-run, and it means restart.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id])
+  }, [id, generation])
 
   return <div ref={host} className="h-full w-full overflow-hidden px-[10px] py-[8px]" />
 }
