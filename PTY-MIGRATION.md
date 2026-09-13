@@ -1,9 +1,13 @@
 # Running the real CLI: a PTY instead of `stream-json`
 
-> **Status: proposed, undecided.** Written 2026-09-13 for review. Nothing here
-> is built. `SPEC.md`'s Open questions item 7 is the decision; this is the
-> impact review behind it. If the answer is no, this file gets deleted and
-> item 7 records why.
+> **Status: spikes complete, recommended, awaiting your decision.** Written
+> 2026-09-13. Nothing is built — the spike code is throwaway and lives in the
+> session scratchpad. `SPEC.md`'s Open questions item 7 is the decision; this
+> is the review behind it.
+>
+> **Every assumption this rests on has now been tested against the installed
+> CLI (2.1.263) rather than argued.** §3 is the evidence. §8 is what remains
+> unproven, and it is wiring rather than architecture.
 
 ---
 
@@ -100,6 +104,38 @@ tokens.
 
 **The subscription premise is unchanged.** `/status` from the interactive
 session: `Login method: Claude Pro account`.
+
+**Transcripts survive every failure shape.** The named blocker, run against
+three real sessions:
+
+| shape | result |
+|---|---|
+| short session, one turn, clean exit | transcript written, usage records, CLI's own `aiTitle` |
+| **SIGKILL mid-generation** | partial output `'1\n2\n3…27'` already on disk, plus usage and title |
+| resumed with `--resume` | appends to the same file — 2 user turns, 4 usage records, no fork |
+
+The middle row is the one that matters: the transcript is written
+**incrementally, not flushed at exit**, so a crash keeps its history. That is
+the property the whole "history is read, not recorded" premise needs.
+
+*(A fourth check reported a spurious fork. It was the test, not the CLI —
+the mtime filter caught the transcript of the session running the test.)*
+
+**`portable-pty` builds and runs.** Not just "the crate exists" — a Rust
+binary on this project's toolchain (cargo 1.98.1, edition 2021, same
+`rust-version = "1.77.2"` as the Tauri crate):
+
+```
+1. TUI painted: 2839 bytes, esc=144
+2. injected /status: 1601 bytes back, recognised ["Version","Model","Session"]
+3. resize: redrew 1763 bytes
+4. exited: ExitStatus { signal: Some("Killed: 9") }     orphans: none
+```
+
+`portable-pty 0.9` pulls **20 transitive dependencies** and the
+size-optimised release binary is **773 KB** including the Rust runtime — well
+inside the "don't ship 40MB to host a webview" line in `Cargo.toml`'s release
+profile.
 
 ---
 
@@ -266,3 +302,53 @@ Sequence, and never a cutover:
 Steps 2 and 3 are worth doing **regardless of the decision**: the status bar
 should survive a reload today, and an indexer that agrees with the recorder is
 the cheapest possible proof that step 4 is safe.
+
+---
+
+## 8. What the terminal looks like, and what is still unproven
+
+### It has no taste of its own
+
+xterm.js is a renderer, not a designer — it ships no opinion you have to
+accept. What you supply:
+
+| you control | the CLI controls |
+|---|---|
+| all 16 ANSI colours + bright variants | *which* slot it prints in |
+| foreground, background, cursor, selection | where it draws boxes and rules |
+| font family, size, weight, line height, letter spacing | its own input prompt layout |
+| cursor style (block/bar/underline) and blink | its spinners and progress glyphs |
+| padding, scrollback, density | |
+
+So `tokens.css` maps straight on: ground `#0f0f0f`, ink `#cccccc`, dim
+`#8a8a8a`, Cascadia Code at the shell's own size and leading. It will not look
+like Terminal.app.
+
+The right-hand column is the "quirks", and it is inherent — when Claude Code
+prints something in yellow you decide what yellow *is*, not that it chose
+yellow. That is the deal: you are running the real thing, so its visual
+grammar comes with it. Which is the stated goal.
+
+One thing this buys that today's setup cannot: because the palette is
+per-instance, **a tab's terminal can be tinted with its mode's accent** —
+Faber's red, Noctua's amber, Vesper's purple. More design control over the CLI
+than VS Code gives you, not less.
+
+### Still unproven — wiring, not architecture
+
+Everything in §3 is tested. These are not, and they are the honest remainder:
+
+1. **xterm.js inside the Tauri WebView.** Conventional, but this is WKWebView
+   rather than Chromium, and the renderer's canvas/WebGL addons are the part
+   most likely to differ. Falls back to the DOM renderer if so.
+2. **Byte throughput over Tauri IPC.** A session printing fast — a long build
+   log — is the load case. Needs a batching window rather than an event per
+   read, and the size of that window is a measurement, not a guess.
+3. **Keystroke routing.** Which keys belong to the terminal and which to the
+   app. `⌘K`, `⌘T` and `⇧⇥` currently belong to the shell; inside a focused
+   terminal most keys must reach the CLI instead. A real design question,
+   though a small one, and VS Code's answer (a small reserved set, everything
+   else passes through) is the obvious starting point.
+
+None of these can invalidate the architecture. They are cost, and they belong
+to step 1 of §7's sequence.

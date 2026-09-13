@@ -346,11 +346,24 @@ trade worth making at that scale — and a footnote on a number this accurate
 would make it read as less trustworthy than it is. The `aux_input_tokens` /
 `aux_output_tokens` columns retire with the migration.
 
-**The open risk is transcript coverage, not tokens.** 23 of 73 stored sessions
-have a JSONL on disk; the other 50 are `-p` spawns, the mode being left. History
-would move from something Noctis records to something it reads, so the spike
-must show that every PTY session writes a transcript — including a short one,
-one killed mid-turn, and a resumed one.
+**Transcript coverage — the open risk — cleared 2026-09-13.** Three real
+sessions: a short one exits with its transcript, usage and the CLI's own
+`aiTitle`; one **SIGKILLed mid-generation** already had its partial output on
+disk, so transcripts are written incrementally rather than flushed at exit; a
+`--resume` appends to the same file without forking. (23 of 73 stored sessions
+lack a JSONL, but all 50 missing are `-p` spawns — the mode being left.)
+
+**`portable-pty` builds and runs on this project's toolchain**: a Rust binary
+spawned `claude`, took an injected `/status`, resized, and exited with no
+orphans. 20 transitive dependencies, 773 KB size-optimised, inside the release
+profile's bundle-size intent.
+
+**All spikes pass; recommended, pending your decision.** What remains untested
+is wiring rather than architecture: xterm.js under WKWebView specifically,
+byte throughput over Tauri IPC, and keystroke routing between terminal and app
+shortcuts. Sequence in `PTY-MIGRATION.md` §7, and steps 2–3 (statusLine
+receiver, JSONL indexer running beside the recorder) are worth doing either
+way.
 
 Full impact review, capability by capability: `PTY-MIGRATION.md`. Not decided,
 and deliberately not started — the spike code is throwaway.
