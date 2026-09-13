@@ -48,6 +48,12 @@ from dotenv import load_dotenv
 
 RUNTIME_DIR = Path(__file__).parent.parent / "runtime"
 
+# Imported at module scope, unlike busy_marker below: this is the last-resort
+# handler, and a NameError raised while recording a failure would be a crash
+# inside the thing that exists to stop crashes being invisible.
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from hooks import failure_log  # noqa: E402
+
 # Reasons that mean the session was recycled in place, not actually closed --
 # see the module docstring.
 NON_TERMINAL_REASONS = {"clear", "resume"}
@@ -114,5 +120,8 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        pass  # a hook must never break session shutdown
+    except Exception as exc:  # noqa: BLE001
+        # Never breaks the session -- but never silently, either: a hook
+        # that stops firing is indistinguishable from a session that used
+        # no tools, so the fault goes where `make doctor` will find it.
+        failure_log.record("SessionEnd", exc)

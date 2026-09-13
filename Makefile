@@ -77,6 +77,16 @@ doctor:
 	@cd backend && .venv/bin/python -c 'import main' >/dev/null 2>&1 \
 		&& echo 'ok    (if backend is DOWN it is absent, not broken)' \
 		|| echo 'FAIL  -> cd backend && .venv/bin/python -c "import main"'
+# A hook may never break the session it observes, so both end in a swallow.
+# This is where the swallowed faults surface: without it a hook that stops
+# firing looks identical to a session that used no tools, and the action feed
+# just goes quiet.
+	@printf 'hooks    '
+	@cd backend && .venv/bin/python -c \
+		'from hooks import failure_log as f; r = f.recent(3); \
+		 print("ok    no swallowed failures recorded") if not r else \
+		 print("FAIL  " + str(len(r)) + " recent:\n    " + "\n    ".join(r))' \
+		2>/dev/null || echo 'could not probe -- is the venv built?'
 	@echo
 	@echo 'capabilities  (what each mode needs vs what this harness has)'
 	@cd backend && .venv/bin/python -m capabilities 2>/dev/null | sed 's/^/  /' \

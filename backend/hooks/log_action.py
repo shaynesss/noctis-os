@@ -21,6 +21,7 @@ RUNTIME_DIR = Path(__file__).parent.parent / "runtime"
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import busy_marker  # noqa: E402
+from hooks import failure_log  # noqa: E402
 
 
 def _summarize(tool_input: dict) -> str:
@@ -89,5 +90,8 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        pass  # a hook must never break the session it's observing
+    except Exception as exc:  # noqa: BLE001
+        # Never breaks the session -- but never silently, either: a hook
+        # that stops firing is indistinguishable from a session that used
+        # no tools, so the fault goes where `make doctor` will find it.
+        failure_log.record("PostToolUse", exc)
