@@ -57,6 +57,20 @@ exit → index → recap — rather than by reading:
   takes the mode once known. Recorder-era rows are left alone. The first
   pass after upgrading re-reads every transcript row once — 95 in 0.8s.
 
+- **The terminal ceiling says so.** Past nine terminals — the reach of ⌘1–9
+  and the backend's concurrency cap — the launcher's Start and history's
+  *resume in a terminal* opened a tenth slot no key could reach, under a bar
+  reading 10 / 9. Both now show the reason in place of the button.
+- **Resuming lifts a tombstone.** A conversation deleted from history, then
+  resumed from a remembered slot, went on growing behind its tombstone and
+  could never be filed again. Asking for a resumed session's argv is asking
+  for it back.
+- **A reload reaps its strays.** The PTY registry lives in the Rust process
+  and a web-view reload does not touch it: the shell came back with fresh
+  slot ids and every session from before kept running — 300MB each,
+  counted live, eating the cap. On mount, anything registered that the
+  mount did not bring back is killed and closed out of the live count.
+
 And one lesson for the probes rather than the product: a long burst of input
 ending in `\r` trips the CLI's paste detection, and Enter becomes a newline.
 The e2e probe sends the text, waits, then sends Enter — which is what a person

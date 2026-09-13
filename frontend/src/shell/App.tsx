@@ -11,6 +11,7 @@
  * scripting mode, and the CLI does its own loop better in a terminal.
  * `PTY-MIGRATION.md` is the record; `DOCUMENTATION.md` §24 is the shape.
  */
+import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { Unreachable } from './Async'
@@ -116,6 +117,31 @@ export function App() {
     read()
     const id = setInterval(read, 4000)
     return () => { alive = false; clearInterval(id) }
+  }, [])
+
+  /* Strays from before a reload.
+   *
+   * The PTY registry lives in the Rust process, and a reload of the web
+   * view -- ⌘R in development, a recovery from a crashed page -- does not
+   * touch it. The shell comes back with fresh slot ids, spawns fresh
+   * sessions for them, and every session from before is still running:
+   * 300MB each, reporting to the backend under slot names nothing shows,
+   * counted live, and eating the concurrency cap until "9 of 9 open" with
+   * three terminals on screen. Anything registered that this mount did not
+   * bring back is one of those. Killed and closed out of the live count
+   * here, once, before the four-second poll can count it. */
+  const slotsAtMount = useRef(slots)
+  useEffect(() => {
+    const keep = new Set(slotsAtMount.current.map((s) => s.id))
+    void invoke<string[]>('pty_list').then((ids) => {
+      for (const id of ids) {
+        if (keep.has(id)) continue
+        void invoke('pty_kill', { id }).catch(() => {})
+        void del(`/v2/sessions/statusline/${encodeURIComponent(id)}`)
+      }
+    }).catch(() => {
+      // Not under Tauri (a browser tab in development): nothing to reap.
+    })
   }, [])
 
   /* Remember the arrangement on every change, not on unload: a crash or a
