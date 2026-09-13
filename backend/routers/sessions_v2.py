@@ -128,10 +128,16 @@ def interactive_args(mode: str, cwd: str, resume_id: str | None = None,
     # directory and does not expand `~`, so a remembered "~/Developer/x"
     # would otherwise be a literal directory called "~".
     try:
-        return interactive.spawn_args(mode, str(_safe_cwd(cwd)), resume_id,
+        args = interactive.spawn_args(mode, str(_safe_cwd(cwd)), resume_id,
                                       slot=slot, prompt=prompt)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    if resume_id:
+        # A conversation deleted from history and then resumed is wanted
+        # again; without this its transcript would grow behind a tombstone
+        # and never be filed. See `store.unforget`.
+        _store.unforget(resume_id)
+    return args
 
 
 # The most recent status-line payload, and the session it came from.

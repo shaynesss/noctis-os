@@ -1231,3 +1231,18 @@ def test_the_shell_can_close_a_slot_out_of_the_live_count(client):
     assert client.get("/v2/sessions", headers=AUTH).json()["running"] == 0
     # Closing a slot that is not there is not an error.
     assert client.delete("/v2/sessions/statusline/term-never", headers=AUTH).status_code == 200
+
+
+def test_interactive_args_with_a_resume_id_lifts_its_tombstone(client, monkeypatch):
+    """The shell asks for a resumed session's argv; that is the moment a
+    conversation deleted from history is being asked for again."""
+    from routers import sessions_v2
+    lifted = []
+    monkeypatch.setattr(sessions_v2._store, "unforget", lambda eid: lifted.append(eid))
+    r = client.get("/v2/sessions/interactive-args", headers=AUTH,
+                   params={"mode": "general", "cwd": "~", "resume_id": "abc-123"})
+    assert r.status_code == 200
+    assert lifted == ["abc-123"]
+    r = client.get("/v2/sessions/interactive-args", headers=AUTH,
+                   params={"mode": "general", "cwd": "~"})
+    assert r.status_code == 200 and lifted == ["abc-123"], "no resume, nothing lifted"

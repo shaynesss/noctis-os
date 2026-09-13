@@ -35,11 +35,18 @@ export interface LaunchRequest {
 
 export function Launcher({
   handoff,
+  full,
   onLaunch,
   onClose,
 }: {
   /** Present when handing off: the source session and what it carries. */
   handoff?: { mode: Mode; label: string; cwd: string; carried: string }
+  /** Set when every terminal slot is taken: the reason nothing can start.
+   *  Shown in place of the hint, and the button is disabled, because the
+   *  ceiling is real (⌘1–9 and the backend's concurrency cap) and a Start
+   *  that silently did nothing is the failure this launcher already fixed
+   *  once for the empty prompt. */
+  full?: string
   onLaunch: (req: LaunchRequest) => void
   onClose: () => void
 }) {
@@ -89,6 +96,7 @@ export function Launcher({
    * exactly what the General tab does. With no prompt the session simply is
    * not spawned yet; the first message starts it. */
   const launch = () => {
+    if (full) return
     onLaunch({
       mode,
       cwd,
@@ -257,12 +265,13 @@ export function Launcher({
         </div>
 
         <div className="flex items-center gap-[10px] border-t border-line px-[14px] py-[10px]">
-          <span className="font-mono text-[10.5px] text-ink-faint">
-          ⌘↵ to start · ⌘1–5 to pick{prompt.trim() ? '' : ' · opens empty, type when ready'}
+          <span className={`font-mono text-[10.5px] ${full ? 'text-ink' : 'text-ink-faint'}`}>
+          {full ?? `⌘↵ to start · ⌘1–5 to pick${prompt.trim() ? '' : ' · opens empty, type when ready'}`}
         </span>
           <button
             type="button"
             onClick={launch}
+            disabled={!!full}
 
             className="ml-auto rounded-[4px] px-[13px] py-[6px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
             style={{ background: MODE_ACCENT[mode] }}

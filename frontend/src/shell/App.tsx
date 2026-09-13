@@ -67,7 +67,15 @@ export function App() {
   const mode: Mode = shown?.mode ?? 'general'
   const accent = MODE_ACCENT[mode]
 
+  // Read by `open` without being a dependency of it: the callback identity
+  // is what every ⌘-shortcut effect below hangs on.
+  const slotCount = useRef(0)
+  const maxSlotsRef = useRef(9)
+
   const open = useCallback((slot: Slot) => {
+    // The ceiling, kept here too: the launcher and the history view say why
+    // before it is reached, and this is what makes "why" never a lie.
+    if (slotCount.current >= maxSlotsRef.current) return
     setSlots((all) => [...all, slot])
     setActive(slot.id)
     setView('terminal')
@@ -93,6 +101,8 @@ export function App() {
   const [reports, setReports] = useState<Record<string, TermReport>>({})
   const [limits, setLimits] = useState<LiveLimits | null>(null)
   const [maxSlots, setMaxSlots] = useState(9)
+  maxSlotsRef.current = maxSlots
+  slotCount.current = slots.length
   useEffect(() => {
     let alive = true
     const read = () => {
@@ -135,6 +145,15 @@ export function App() {
   const [viewing, setViewing] = useState<HistoryTranscript | null>(null)
   const overlayRef = useRef(false)
   overlayRef.current = palette || doc !== null || launcher !== null || viewing !== null
+
+  /* The ceiling is ⌘1–9 and the backend's concurrency cap, whichever is
+   * lower. Past it a tenth terminal would exist with no key to reach it and
+   * a status bar reading "10 / 9". Every way in -- the launcher, a handoff,
+   * resuming from history -- shows this instead of a button that does
+   * nothing. */
+  const full = slots.length >= maxSlots
+    ? `${slots.length} of ${maxSlots} terminals open · ⌘W closes one`
+    : undefined
 
   const launch = useCallback((req: LaunchRequest) => {
     /* A handoff carries a summary the person wrote in the launcher; it
@@ -291,13 +310,14 @@ export function App() {
       {launcher && (
         <Launcher
           handoff={launcher.handoff}
+          full={full}
           onLaunch={launch}
           onClose={() => setLauncher(null)}
         />
       )}
 
       {viewing && (
-        <HistoryView transcript={viewing} onResume={resumeHistory} onClose={() => setViewing(null)}
+        <HistoryView transcript={viewing} full={full} onResume={resumeHistory} onClose={() => setViewing(null)}
                      onOpenDoc={setDoc} />
       )}
     </div>
@@ -309,8 +329,10 @@ export function App() {
  * Read-only: the transcript component renders the stored blocks, and the
  * one action is to continue the session in a terminal, which `--resume`
  * does with the engine id the row kept. */
-function HistoryView({ transcript, onResume, onClose, onOpenDoc }: {
+function HistoryView({ transcript, full, onResume, onClose, onOpenDoc }: {
   transcript: HistoryTranscript
+  /** Every terminal slot is taken; the reason resuming is not on offer. */
+  full?: string
   onResume: (t: HistoryTranscript) => void
   onClose: () => void
   onOpenDoc: (path: string) => void
@@ -322,13 +344,15 @@ function HistoryView({ transcript, onResume, onClose, onOpenDoc }: {
         <span className="text-ink">{MODE_LABEL[transcript.mode]}</span>
         <span className="min-w-0 truncate text-ink-dim">· {transcript.title}</span>
         <span className="ml-auto flex items-center gap-[8px]">
-          {transcript.resumable && transcript.engine_id && (
+          {transcript.resumable && transcript.engine_id && (full ? (
+            <span className="text-ink-dim">{full}</span>
+          ) : (
             <button type="button" onClick={() => onResume(transcript)}
                     className="rounded-[4px] px-[10px] py-[4px] text-ground"
                     style={{ background: MODE_ACCENT[transcript.mode] }}>
               resume in a terminal
             </button>
-          )}
+          ))}
           <button type="button" onClick={onClose} className="px-[8px] text-ink-faint hover:text-ink" aria-label="close">
             esc
           </button>

@@ -253,3 +253,19 @@ def test_a_recorder_row_is_never_refreshed_from_a_transcript(store, tmp_path, mo
     store.db.commit()
     assert jsonl.index_new(store, {}) == ([], [])
     assert store.db.execute("SELECT count(*) FROM messages").fetchone()[0] == 0
+
+
+def test_resuming_a_forgotten_conversation_lifts_the_tombstone(store, tmp_path, monkeypatch):
+    """Delete from history, resume from a remembered slot: the transcript
+    keeps growing and, with the tombstone in place, would never be filed
+    again. Resuming is asking for it back."""
+    proj = tmp_path / "-Users-x-repo"; proj.mkdir()
+    (proj / "back.jsonl").write_text(_rec("one") + "\n", encoding="utf-8")
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    assert jsonl.index_new(store, {}).taken == ["back"]
+    store.forget("back")
+    store.db.execute("DELETE FROM sessions WHERE engine_session_id='back'"); store.db.commit()
+    assert jsonl.index_new(store, {}).taken == []
+    store.unforget("back")
+    assert jsonl.index_new(store, {}).taken == ["back"]
+    store.unforget("back")                       # idempotent

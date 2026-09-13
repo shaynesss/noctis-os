@@ -366,6 +366,20 @@ class ConversationStore:
             (engine_session_id, _now()))
         self.db.commit()
 
+    def unforget(self, engine_session_id: str) -> None:
+        """Resuming a deleted conversation is asking for it back.
+
+        A tombstone keeps the indexer from re-filing a transcript the person
+        deleted from history. The transcript itself is the CLI's and stays,
+        so the session can still be resumed -- from a remembered slot, or
+        from a terminal outside Noctis -- and then it goes on growing with
+        the tombstone holding it out of history for good. Lifting it on
+        resume is the reading that matches the gesture. Idempotent.
+        """
+        self.db.execute("DELETE FROM forgotten WHERE engine_session_id=?",
+                        (engine_session_id,))
+        self.db.commit()
+
     def is_forgotten(self, engine_session_id: str) -> bool:
         return self.db.execute(
             "SELECT 1 FROM forgotten WHERE engine_session_id=?",
