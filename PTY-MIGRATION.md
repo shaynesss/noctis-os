@@ -1,10 +1,14 @@
 # Running the real CLI: a PTY instead of `stream-json`
 
-> **Status: steps 1–3 shipped 2026-09-13. Steps 4–5 deliberately not started.**
-> The Terminal runs beside the `stream-json` transcript; nothing was deleted,
-> and switching the default is gated on the two agreeing over real use.
-> `DOCUMENTATION.md` §24 is the reference for what exists; this file is the
-> reasoning and the sequence. `SPEC.md` Open questions 7 is the decision record.
+> **Status: complete, 2026-09-14.** Steps 1–3 shipped 09-13; steps 4–5 —
+> the shell rewritten terminal-first, Stats reading the transcripts, the
+> orchestrator deleted — landed 09-14 in three commits that each left the
+> tree working: `fb931f6` (relocate what everything else depended on),
+> `092798b` (the shell), `7ba58e9` (delete). The gate was not "the diff is
+> boring": it was 1/16 agreeing, and the recorder being the one that was
+> wrong. `DOCUMENTATION.md` §2 and §24 are the reference for what exists;
+> this file is the reasoning and the record. `SPEC.md` Open questions 7 is
+> closed.
 >
 > **Every assumption this rests on has now been tested against the installed
 > CLI (2.1.263) rather than argued.** §3 is the evidence. §8 is what remains

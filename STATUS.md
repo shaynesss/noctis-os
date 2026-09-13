@@ -1,14 +1,17 @@
 # STATUS.md
 
-Last updated: 2026-09-13
+Last updated: 2026-09-14
 
 ## Current state
 
-**v2 is the system. v1 is gone.** Stage 1 complete. Stage 2 items 1-5, 7, 8
-and 9 closed; item 6 done except its scheduler. `compose()`'s `job_context`
-now reaches every session (`sessions_v2.py:145`), closing what stood here as
-Next item 2; item 8 was removed rather than defined. **The launchd-on-wake
-scheduler is the only feature left in the build order.**
+**v2 is the system, and the session is a real terminal.** Stage 1 complete.
+Stage 2 items 1-5, 7, 8 and 9 closed; item 6 done except its scheduler. On
+2026-09-13/14 the `-p` orchestrator -- driver, manager, parser, wire, events,
+the permission host -- was replaced by the interactive CLI hosted in a
+pseudo-terminal and then deleted, in three commits that each left the tree
+working (`fb931f6`, `092798b`, `7ba58e9`). `PTY-MIGRATION.md` is the record.
+**The launchd-on-wake scheduler is the only feature left in the build
+order.**
 
 The 2026-09-12 cutover removed v1 entirely: its world screen, profile overlay,
 launch surfaces, four routers and `launch_config/`. Maintenance's state moved
@@ -209,17 +212,10 @@ Both are local, so this is a rebase today and a force-push over shared
 history once they are pushed — see the open decision below. It is a
 before-you-push item, not an urgent one, but 130 commits are already waiting.
 
-**4. The PTY migration — steps 1-3 shipped; step 3 found the recorder wrong.**
-Noctis drives `-p`, the CLI's scripting mode, once per turn. Running the real
-interactive CLI in a pseudo-terminal would delete the closing pass, the
-per-turn respawn, the permission host and the whole dropped-stream class of
-bug. Every assumption is tested rather than argued: a slash command injected
-into a PTY renders, `statusLine` delivers the full status bar including 5h/7d,
-the CLI writes its own transcripts incrementally (a SIGKILL mid-turn keeps its
-partial output), and `portable-pty` builds on this toolchain at 773 KB. The
-review is `PTY-MIGRATION.md`; the decision is `SPEC.md` Open questions 7.
-Steps 2 and 3 of its sequence — a `statusLine` receiver and a JSONL indexer
-running beside the recorder — are worth doing whatever is decided.
+**4. Effort at spawn.** `interactive-args` does not take `--effort` yet, so
+a terminal session runs at the CLI's default. The chip that set it per turn
+went with the composer; the setting should come back as a launcher option
+and a default in Settings. Small.
 
 **5. Running the regression suite from Settings.** The cases are listed with
 what running them would cost; firing them needs the orchestrator to host

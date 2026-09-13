@@ -50,6 +50,6 @@ Tailwind wiring + path alias. `/impeccable init`, register as **Product** (not B
 
 ## Launch surfaces
 
-**v2 hosts sessions; it does not launch them elsewhere.** The orchestrator spawns `claude -p` and streams it into the app's own transcript. A mode's identity travels in the argv (`--append-system-prompt`, `--agents`, `--settings`) — **no `CLAUDE_CONFIG_DIR` anywhere**, so every session inherits the real `~/.claude` and the plugins, skills, subagents, MCP servers and permissions installed there.
+**v2 hosts sessions; it does not launch them elsewhere.** A session is the real interactive `claude` in a pseudo-terminal the shell owns (`src-tauri/src/pty.rs`), rendered by xterm.js in the app's own palette. A mode's identity travels in the argv (`--append-system-prompt`, `--agents`, `--settings`, `--add-dir`) — **no `CLAUDE_CONFIG_DIR` anywhere**, so every session inherits the real `~/.claude` and the plugins, skills, subagents, MCP servers and permissions installed there. `backend/interactive.py` builds that argv; it knows nothing about terminals, and the Rust side knows nothing about modes.
 
-v1's launch surfaces are gone as of the 2026-09-12 cutover, along with its world screen, four routers and every mode config directory. Full detail: `SPEC.md`'s EDD, `DOCUMENTATION.md` §16.
+The `-p` orchestrator that streamed `stream-json` into an in-app transcript (2026-09-11 → 09-13) is deleted, as are v1's launch surfaces before it. `one_shot` in `engine.py` is the one `-p` left — a script, for recap and the brief. Full detail: `SPEC.md`'s EDD, `DOCUMENTATION.md` §2 and §24, `PTY-MIGRATION.md`.

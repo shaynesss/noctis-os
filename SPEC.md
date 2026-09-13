@@ -120,19 +120,25 @@ Five session configurations. They differ by **methodology and model, never by ca
       vault (files) + history (SQLite/FTS5)
 ```
 
-### Session orchestrator
+### Session host
 
-`claude -p --output-format stream-json --verbose`, one JSON event per line, parsed into an internal `Event` union: `SessionStart` · `TextDelta` · `ThinkingDelta` · `ThinkingProgress` · `ToolCall` · `ToolResult` · `ContextSnapshot` · `Limits` · `TurnEnd` · `EngineError`. `session_id` + `--resume` gives continuity.
+**A session is a real interactive `claude` in a pseudo-terminal.** The shell's Rust side (`src-tauri/src/pty.rs`) owns the PTY — spawn, write, resize, kill — and knows nothing about modes; `backend/interactive.py` owns the mode and knows nothing about terminals. The shell asks `GET /v2/sessions/interactive-args` for an argv and hands it to `pty_spawn`. xterm.js renders the CLI's own TUI, themed from `tokens.css`.
 
-**Identity travels in the argv, not on disk.** `--append-system-prompt` carries the composed methodology, `--agents` the mode's subagent roster, `--settings` the shared permissions and telemetry hooks.
+**Identity travels in the argv, not on disk.** `--append-system-prompt` carries the composed methodology and the job brief, `--agents` the mode's subagent roster, `--settings` the shared permissions plus the status-line command, `--add-dir` the vault. `--resume` gives continuity: a remembered terminal comes back resumed, a history row reopens in a terminal.
 
-> **Supersedes the vault spec (2026-09-11/12).** It specifies a per-mode `CLAUDE_CONFIG_DIR` whose `CLAUDE.md` is rewritten per launch, and calls separate dirs "required, not tidy" because two concurrent sessions would race on that file. **That is no longer how it works.** The config root is where plugins, skills, subagents, MCP servers, accumulated permissions and memory live, so redirecting it replaced the whole surface with an empty one — Faber was reading a methodology naming seven tools it could not reach. Sessions now use the real `~/.claude` and inherit all of it. The race the split existed to prevent is gone because nothing per-mode is written to disk. The Keychain-per-dir login constraint goes with it.
+**What the CLI reports, the shell reads.** `statusLine` runs every five seconds inside the session and POSTs its payload to `/v2/sessions/statusline` — the 5h/7d windows, context occupancy, model, effort, the session id and its transcript path. That is the status bar's source, and it survives a reload.
 
-**`~/.claude/CLAUDE.md` is the universal prompt** (`prompts/system.md`), not a mode. Pointing it at `dev.md` made the machine itself Faber and leaked the build process into every other mode.
+**History is read, not recorded.** The CLI writes a complete transcript per session to `~/.claude/projects/**/*.jsonl`, incrementally; `orchestrator/jsonl.py` indexes those into the same SQLite tables search and Stats read. It counts every session on the machine, not only the ones Noctis hosted.
 
-**Concurrency cap: 2 live sessions**, queued beyond. A budget on the 5h window, not a resource limit.
+> **Supersedes the `-p` orchestrator (2026-09-14).** From 09-11 to 09-13 Noctis drove `claude -p --output-format stream-json` once per turn and rebuilt the interactive loop on top of a scripting mode: a closing pass because `Stop` does not fire under `--print`, a permission host because `-p` has no dialog, per-turn respawn, `TurnEnd` bookkeeping. A pseudo-terminal was rejected twice before (`Modes.md`, the v2 deferral table) under the fire-and-forget premise, where it would have meant scraping a terminal Noctis did not own; v2 hosts its sessions, and under hosting a PTY is simply how an interactive process is run. Every assumption was tested before the switch (`PTY-MIGRATION.md` §3), and the recorder-vs-transcript diff that gated it found the recorder undercounting every session it saw. The orchestrator — `driver`, `manager`, `parser`, `wire`, `events`, the permission host — is deleted.
 
-**Engine seam — demoted deliberately.** Kept: `Event` normalization, which the frontend needs anyway. Dropped: the multi-adapter abstraction. Adaptability lives at the MCP layer.
+> **Supersedes the vault spec (2026-09-11/12).** It specifies a per-mode `CLAUDE_CONFIG_DIR` whose `CLAUDE.md` is rewritten per launch. The config root is where plugins, skills, subagents, MCP servers, accumulated permissions and memory live, so redirecting it replaced the whole surface with an empty one. Sessions use the real `~/.claude` and inherit all of it; nothing per-mode is written to disk.
+
+**`~/.claude/CLAUDE.md` is the universal prompt** (`prompts/system.md`), not a mode.
+
+**Concurrency is advisory.** `NOCTIS_MAX_CONCURRENT` (ceiling 9) is what the shell reports; a terminal is a process the shell owns, and a backend that does not own the process would be lying if it enforced a cap. What is live is what the terminals themselves report — a status line silent for half a minute is a session that has gone.
+
+**`one_shot` is the one place `-p` remains**, and it is the right use of it: a scripting mode used for a script, summarising text it is handed on the cheap tier with every tool refused.
 
 ### Desktop shell and supervision
 
@@ -184,17 +190,15 @@ backend restart still kills any turn in flight. This shortens how long you are
 down; it does not stop work being lost. That needs sessions to outlive the
 request, with the orphan questions recorded under Open questions.
 
-### Permissions and turn integrity
+### Permissions
 
-**Every mode gets the same tool surface.** No mode is spawned with `--disallowedTools`. (The recap summariser uses it — it is handed text and a summariser that can read the filesystem is a larger thing than the job needs. A cage on a helper, not on a mode.) Capability was the wrong axis to vary on: a mode handed work it cannot perform ends its turn with nothing done and no way to say so. Maintenance's propose-never-apply now rests on its methodology and the permission chip rather than a tool cage — a deliberate trade, recorded as one.
+**Every mode gets the same tool surface.** `permissions.json` pre-approves the ordinary tools and Noctis's own retrieval for every mode; anything outside it the CLI asks about in its own terminal, which is where a person is looking. Capability was the wrong axis to vary on: a mode handed work it cannot perform ends with nothing done and no way to say so. Maintenance's propose-never-apply rests on its methodology.
 
 **Denied outright, for every mode:** `git push`. Commits happen; pushing is manual.
 
-**Permission requests are answered.** `--permission-prompts host` names the Noctis MCP server as `--permission-prompt-tool`; a request surfaces as a dialog and waits.
+**`crossSessionInbound` is `accept`**, so a peer session's message is delivered rather than held five minutes and expired. Bounded by the socket, which is user-only.
 
-**Effort is a per-turn control** — `low`/`medium`/`high`/`xhigh`, default `high`, on the composer chip. `max` is settable but outside the cycle.
-
-**A turn that does not close itself is closed.** `Stop` — the hook that can refuse a stop — does not fire under `--print`, and the Agent SDK that supports hooks requires API-key auth. So the manager resumes any turn that used tools and asks for a handback; one that already closed answers `closed`, which never reaches the transcript. Silence, refusal and truncation each render as their own transcript state rather than as a blank screen.
+**Effort and permission mode are the CLI's own.** Shift+Tab cycles the permission mode inside the terminal, as it does anywhere; effort is set at spawn. The closing pass, the silent-turn states and the permission dialog existed to patch what `-p` could not do, and went with it.
 
 ### Noctis MCP server
 
@@ -220,7 +224,7 @@ A hosted embeddings API over vault content is ruled out: nothing vault-touching 
 
 **The vault is sole source of truth for knowledge.** Markdown with YAML frontmatter, one directory per mode. `vault_io.py` is fully native — no Obsidian dependency; Obsidian is an optional viewer.
 
-**History lives in SQLite, not the vault.** Transcripts are application data; the index is a derived cache, rebuildable, and deleting it loses nothing. Worth-keeping material is **promoted** into the vault as a note. Markdown transcripts would make every message a git diff.
+**History lives in SQLite, not the vault, and is indexed from the CLI's own transcripts.** The index is a derived cache, rebuildable from `~/.claude/projects/` by `POST /v2/sessions/index`, and deleting it loses nothing. Worth-keeping material is **promoted** into the vault as a note. Markdown transcripts would make every message a git diff.
 
 ### Cost and licensing
 
@@ -307,8 +311,7 @@ Genuinely unresolved. Not gaps to silently fill.
 3. ~~**The v2 checkpoint** — *"do I still open Desktop?"*~~ **Closed 2026-09-12: passed.** The shell has been the daily driver since 2026-09-08. Recorded late deliberately — until 09-11 the answer was contaminated, because Faber inside Noctis could not do build work and the fallback to Desktop was therefore forced rather than chosen. With that fixed the question could be asked cleanly, and the answer held.
 4. **`seven_day_opus` window** — present in the CLI binary and the statusline schema, absent from an observed Haiku run. Unverified.
 5. **`--input-format stream-json` as a persistent bidirectional session** — untested. Would address spawn-per-turn latency (~1.9s).
-7. **Should the conversation surface be a PTY rather than `stream-json`?** *Opened
-2026-09-13, undecided, and the largest question on this list.* Noctis does not
+7. ~~**Should the conversation surface be a PTY rather than `stream-json`?**~~ **Closed 2026-09-14: yes, and done.** *Opened 2026-09-13.* Noctis does not
 stream a running CLI — it drives `-p`, which the CLI's own help calls "print
 response and exit", once per turn. Most of the orchestrator exists to rebuild,
 on top of a scripting mode, the loop the interactive mode already has. Running

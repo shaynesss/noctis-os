@@ -25,84 +25,48 @@ The body is replaceable and built to be. The brain is meant to outlive it. Every
 
 ---
 
-## 2. Anatomy of a spawn
+## 2. Anatomy of a session
 
-Every turn is its own process. `build_command()` is pure, so the argv can be asserted on directly.
+A session is a real interactive `claude` in a pseudo-terminal. The shell's Rust side (`frontend/src-tauri/src/pty.rs`) opens the PTY and spawns:
 
 ```
-claude -p "<prompt>"
-  --model claude-opus-5
-  --output-format stream-json --verbose
-  --permission-mode manual
-  --permission-prompts host
-  --permission-prompt-tool mcp__noctis__permission_prompt
-  --mcp-config {"mcpServers":{"noctis":{...}}}
-  --settings {"permissions":{...},"hooks":{...}}
-  --effort high
-  --append-system-prompt "<system.md + overlay + job context + vault root>"
-  --agents {"critic":{...}}
-  --allowedTools "Read Grep Glob WebSearch WebFetch Edit Write Bash NotebookEdit TodoWrite Task mcp__noctis__*"
+claude
+  --model <mode's model>
+  --append-system-prompt "<system.md + overlay + job brief>"
+  --agents '<the mode's subagents, JSON>'
+  --mcp-config '<Noctis MCP server, JSON>'
+  --settings '<permissions.json + statusLine + crossSessionInbound, JSON>'
   --add-dir <vault>
-  [--resume <session_id>]
+  [--resume <engine session id>]
+  ["<first message>"]
 ```
+
+Built by `backend/interactive.py`, served by `GET /v2/sessions/interactive-args?mode&cwd&slot[&resume_id][&prompt]`. The Rust side knows nothing about modes; the Python side knows nothing about terminals.
 
 | Flag | Why |
 |---|---|
-| `-p` | Print mode. One invocation is one turn. |
-| `--output-format stream-json --verbose` | `--verbose` is required or the stream emits nothing useful. Easy to lose in a refactor; the failure looks like an empty session. |
-| `--permission-prompts host` | Names *who answers* a permission request. Defaults to `host` — a promise the driver must keep. See §6. |
-| `--mcp-config` | Inline JSON, not a file: keeps the spawn self-describing with nothing on disk to drift. |
-| `--settings` | Also inline, because the telemetry hooks need absolute machine paths that cannot be committed. |
-| `--append-system-prompt` | The mode. Appending also turns off system-prompt snapshotting, so an edited methodology reaches a *resumed* session. |
-| `--agents` | The mode's subagent roster, as inline JSON. |
-| `--add-dir` | The vault, as a second readable root. Without it a session cannot read its own methodology. |
+| `--append-system-prompt` | The mode's identity, as text in the argv. Nothing per-mode is written to disk, so two sessions of one mode cannot race, and an edited methodology reaches a resumed session. |
+| `--settings` | The tracked policy plus a `statusLine` command that POSTs the CLI's own report — windows, context, model, session id, transcript path — to `/v2/sessions/statusline` every five seconds. |
+| `--add-dir <vault>` | The engine sandboxes file access to the working directory; a Faber session in a repo could not read its own methodology without this. |
+| positional prompt | A handoff's carried summary, submitted as the session's first message. |
 
-**No `CLAUDE_CONFIG_DIR`.** `build_env()` strips it even if the environment sets one. The config root is where plugins, skills, subagents, slash commands, MCP servers, accumulated permissions and memory all live — redirecting it does not override some settings, it replaces the whole surface. Every session uses the real `~/.claude`.
+**Three things the PTY host has to get right**, each found by testing rather than reasoning: size the PTY *before* spawning (at 0×0 the TUI exits instantly with no output); coalesce output into ~16ms frames *and flush on silence* (a flush that only runs on the next read strands the tail of a prompt that then blocks for input); kill the session, not the immediate child. Bytes cross Tauri's IPC base64-encoded, because a read can split a multi-byte character and xterm.js decodes UTF-8 itself.
 
-**`NOCTIS_MODE`** is set for the telemetry hooks. That is the only variable added.
+**Finding the binary.** PATH first, then `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.claude/local`, in both `engine.py` and `pty.rs`; `NOCTIS_CLAUDE_BIN` overrides. `launchd` starts processes with a bare `PATH` containing no Homebrew.
 
-**Finding the binary.** PATH first, then `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.claude/local`. `NOCTIS_CLAUDE_BIN` overrides everything. This matters because `launchd` starts processes with a bare `/usr/bin:/bin:/usr/sbin:/sbin` containing no Homebrew, so a scheduler-started backend cannot find an engine that works fine from a terminal. A failed lookup returns the bare name so the caller can report a proper error rather than crashing.
+**`one_shot` is the one place `-p` remains** (`engine.py`): the recap and the brief's prose call it, on the cheap tier, with every tool refused and `--output-format json`. A scripting mode used for a script.
 
 ---
 
-## 3. The event stream
+## 3. The event stream — removed
 
-`stream-json` emits one JSON object per line. `parser.py` has the shape knowledge and no I/O; `driver.py` has the I/O and no shape knowledge. Keeping them apart is what makes either testable — the streaming path is exercised end to end with `cat fixture.jsonl`.
-
-| Event | Carries |
-|---|---|
-| `SessionStart` | `session_id` (what `--resume` takes), model, cwd, tools |
-| `TextDelta` | assistant prose |
-| `ThinkingDelta` | a reasoning block. **`text` is usually empty and that is not a bug** — models default to `display: "omitted"`, so reasoning is billed and never returned. The block's *presence* is the signal. |
-| `ThinkingProgress` | live token estimate, climbing during a pause — the one honest signal that work is happening |
-| `ToolCall` | id, name, args, and a one-line `summary` of the target |
-| `ToolResult` | id, content, `is_error` |
-| `ContextSnapshot` | how full the window is *at one moment* |
-| `Limits` | 5h and 7d utilisation, reset times, overage flag |
-| `TurnEnd` | usage, duration, stop reason, and the turn-integrity fields (§7) |
-| `EngineError` | a failure to surface rather than swallow |
-
-**Why normalize at all**, given one engine ships: the frontend needs a stable shape, and `stream-json` is a supported flag rather than a versioned API. A schema change upstream becomes a patch to `parser.py` and nothing else. This is the surviving half of the Engine seam — the normalization earned its keep; the multi-adapter abstraction around it did not.
-
-**`ContextSnapshot` exists because occupancy cannot be read off `TurnEnd`.** That event's usage is cumulative across every API call the turn made, and a turn running fifteen tools makes fifteen calls, each re-sending the conversation. Summing them measures traffic, not occupancy: one real turn recorded 2,599,073 cache-read tokens against a 1M window, and the status bar faithfully reported 470% full. An assistant message carries the usage of the single call that produced it, so its prompt size *is* the occupancy at that instant.
-
-**Line limit.** asyncio's `StreamReader` defaults to 64KB and `stream-json` puts a whole tool result on one line. A `Read` of any sizeable file overran it and killed the session mid-turn. The limit is 32MB — the ceiling is a line the CLI already chose to emit, and refusing to read what it sent is not a limit worth enforcing here.
+There is no event stream. From 2026-09-11 to 09-13 the backend parsed `claude -p --output-format stream-json` into an `Event` union and streamed it to the shell over SSE; the CLI now renders itself in a terminal, and what the shell needs from it arrives through `statusLine` (§2) and the transcript on disk (§11). The parser, the wire contract and the reducer are deleted. `PTY-MIGRATION.md` §3–§4 is the record of why.
 
 ---
 
-## 4. Turn lifecycle
+## 4. Turn lifecycle — removed
 
-```
-spawn ──► SessionStart ──► [ThinkingDelta │ TextDelta │ ToolCall/Result]* ──► TurnEnd
-                                                                                │
-                                                    needs_closing? ──► resume once ──► handback
-```
-
-**Resume.** `session_id` from the first event, `--resume` on the next spawn. Stored per session, not per app: a turn without one starts fresh rather than continuing.
-
-**Concurrency: 4 by default**, settable with `NOCTIS_MAX_CONCURRENT`. Queued, not refused — a handle stays visibly `queued` rather than disappearing. The cap is a budget on the 5-hour window, not a resource limit; orchestrated sessions burn quota faster than chatting.
-
-**Failure containment.** A crashed run must not look like a clean one: the manager marks a handle `failed` when any fatal event appeared, `done` otherwise, in a `finally` so an abort cannot strand it. The shell clears `busy` in a `finally` too, so a throw cannot lock a composer with no way back.
+The CLI owns its own turn loop in a terminal. The closing pass, the silent/unclosed/truncated states and the `TurnEnd` bookkeeping existed to patch what `-p` could not do — `Stop` does not fire under `--print` — and went with it.
 
 ---
 
@@ -174,49 +138,15 @@ The budget matters because an orchestrated workload re-sends its context every t
 
 ---
 
-## 7. Permissions and turn integrity
+## 7. Permissions
 
-### Permissions
+**Every mode gets the same tool surface.** `orchestrator/permissions.json` pre-approves `Read Grep Glob WebSearch WebFetch Edit Write Bash NotebookEdit TodoWrite Task` and Noctis's own retrieval tools for every mode. Anything outside the list the CLI asks about in its own terminal — which is where a person is looking — the way it does anywhere. **`git push` is denied outright.**
 
-**Every mode gets the same tools.** `--disallowedTools` is not passed for any mode. Capability was the wrong axis to vary on: a mode handed work it cannot perform ends its turn with nothing done and no way to say so.
+**Bash is allowed whole.** A curated list can only be as complete as the last time someone extended it, and a session blocked on an unlisted command looks exactly like one that had nothing to say.
 
-Pre-approved, no prompt: `Edit`, `Write`, `Bash`, `NotebookEdit`, `WebSearch`, `WebFetch`, and the four read-only `mcp__noctis__*` tools. **Denied outright:** `Bash(git push*)`.
+**Permission mode and effort are the CLI's own controls.** Shift+Tab cycles the permission mode inside the terminal; effort is set at spawn. `bypassPermissions` is a real flag and deliberately not one you can land on by tapping a key.
 
-`mcp__noctis__propose` is deliberately *not* pre-approved — it writes, and it is maintenance's.
-
-**Bash is allowed whole**, not command by command. The curated list — `make`, `pytest`, a dozen `git` subcommands — meant anything outside it (`sed`, `find`, `mkdir`, `gh`) hit a prompt, and the list could only ever be as complete as the last time someone extended it.
-
-**Someone answers.** `--permission-prompts` decides *who*, and defaults to `host` — the SDK host or `--permission-prompt-tool`. A plain subprocess is not a host, so under the default every request went out and died unanswered, and the chip's labels were fiction. The Noctis MCP server is the prompt tool now: a request reaches a dialog and waits.
-
-**Sandbox:** the launched project plus the vault. Reaching outside them fails, and that failure is correct.
-
-**Effort** is the composer chip: `low` / `medium` / `high` / `xhigh`, default `high`. Applies to the next turn, which is immediate — every turn is its own spawn. `max` is settable but outside the cycle, the same treatment `bypassPermissions` gets.
-
-### Turn integrity
-
-A turn can legally end with tool calls and no text. The shell renders the transcript, so such a turn drew *nothing* — pixel-identical to a dead backend, a session still thinking, and a finished job. Four states, one picture.
-
-`TurnEnd` now carries what the turn produced:
-
-| Property | Means | Renders as |
-|---|---|---|
-| `silent` | no text at all | *turn ended with no reply* |
-| `unclosed` | ended on a tool call, nothing said after | *turn ended mid-work* |
-| `truncated` | `stop_reason == max_tokens` | *turn hit the output limit* |
-| `blocked` | silent **and** tools were refused | *turn ended blocked*, refusals named |
-
-**`denials` and `terminal_reason` were always in the stream and read by nothing.** That is why a caged session looked like a quiet one, and why `system.md`'s "never end a turn without user-visible text" kept failing: the rule was not ignored, it was **unsatisfiable** — a session refused every tool it needed has nothing to report but the refusal.
-
-**Every working turn is asked to close.** `Stop` is the hook that can refuse a stop, but it does not fire under `--print`, and the Agent SDK that supports hooks requires API-key auth — the metered path this architecture exists to avoid. So the manager resumes once with a prompt carrying `system.md`'s rules: what was done, what it fixed, what is next.
-
-- Asked when the turn **used tools**, or was silent, or truncated. Not asked for plain conversation, which closes itself by existing.
-- A turn that already closed answers `closed`, buffered and dropped so it never reaches the transcript.
-- `continuation=True` is the loop guard, and the recursion is not hypothetical: a continuation is itself a turn.
-- A failing close is swallowed. It is a courtesy on top of a turn that already happened.
-
-**Why not detect a missing summary from the text?** Because whether prose amounts to a handback is a judgement. Grepping for "Summary" would be the same fragile inference this replaced, so the question is asked of the model rather than of the text.
-
-**Cost:** roughly doubles notional list price on working turns; below the resolution of the 5-hour window on a subscription.
+**`crossSessionInbound: accept`.** A peer session's message is delivered rather than held and expired; bounded by the socket, which is user-only. Checked against the installed engine: an unrecognised value degrades to holding and cannot take the deny rule down with it.
 
 ---
 
@@ -318,6 +248,8 @@ second-brain/
 
 ## 11. History and storage
 
+**History is read from the CLI's own transcripts.** Claude Code writes `~/.claude/projects/<slugged-cwd>/<session-id>.jsonl` incrementally for every session it runs — a SIGKILL mid-generation keeps its partial output — and `orchestrator/jsonl.py` indexes those into the `sessions`/`messages`/`usage` tables the history routes, search and Stats read. `POST /v2/sessions/index` files anything new; the shell calls it when a terminal session ends, Stats on each visit. The mode a session was launched in comes from its status-line report, since the transcript records only the CLI's permission mode. It counts every session on this machine, not only the ones Noctis hosted.
+
 **SQLite, not the vault.** Transcripts are application data; the vault is for knowledge. Markdown transcripts would make every message a git diff.
 
 - One row per session and per turn: tokens in/out, cache read, cache write, model, mode.
@@ -333,9 +265,9 @@ Default location `backend/data/`, overridable with `NOCTIS_DATA_DIR`.
 
 React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `main.tsx` imports it and nothing else.
 
-**Rail:** Brief · Chat · Stats · Inbox · Settings.
+**Rail:** Brief · Terminal · Stats · Inbox · Settings.
 
-**Transcript blocks** — the turn is block-shaped underneath because `stream-json` gives discrete events, not a character stream:
+**Transcript blocks** are how a *history* transcript renders (read-only, from the store); a live session is the CLI's own TUI in a terminal. The block kinds:
 
 | Kind | Shows |
 |---|---|
@@ -369,7 +301,7 @@ Two, both non-blocking, both given the mode via `NOCTIS_MODE`:
 
 **Hooks are composed into `--settings` as inline JSON**, because they need absolute interpreter and script paths that cannot be committed. They used to live in a per-mode `settings.json` that is no longer read — a silent break, since a hook that stops firing reports nothing. A test asserts the scripts exist on disk.
 
-**Their role narrowed rather than ended.** Sessions the orchestrator hosts get telemetry from the `stream-json` it already parses, so hooks are the path for sessions Noctis does *not* host. That makes the runtime-log format a real interface rather than an implementation detail.
+**Their role.** A terminal session's telemetry comes from its own `statusLine` report and its transcript on disk; the hooks are what fires on every tool call regardless of who hosts the session, and they write the action feed. That makes the runtime-log format a real interface rather than an implementation detail.
 
 Runtime logs live in `backend/runtime/` — high-churn, ephemeral, gitignored. **Not vault content.**
 
@@ -478,9 +410,9 @@ Requirements live in code, not the vault: they are claims about *infrastructure*
 |---|---|---|
 | Text | methodology, overlays, agent definitions, the vault | inherently |
 | MCP | retrieval **and** identity (`tools/*` + `prompts/*`) | by standard |
-| Harness config | permissions, hooks, spawn flags, `stream-json` shape | **no** |
+| Harness config | permissions, hooks, spawn flags, the `statusLine` payload shape | **no** |
 
-Tier 3 is confined to three files under the `events.py` seam: `driver.py` (argv), `parser.py` (stream shape), `permissions.json` (policy).
+Tier 3 is confined to `engine.py` and `interactive.py` (argv), `jsonl.py` (transcript shape), `permissions.json` (policy), and `pty.rs` (the terminal).
 
 **`--migrate`** emits a brief describing Tier 3 as *intent* rather than as settings — nine sections covering MCP wiring, per-session identity, permissions, effort, prompt answering, hooks, the turn events the interface needs, working directories, and how to check yourself. Deliberately not a config file: a settings file in one harness's schema is worthless to another, but a statement of what the configuration is *for* is not.
 
@@ -533,8 +465,7 @@ Start with `make doctor`. It answers most of this in three lines.
 | `Not logged in` | Credentials are Keychain-keyed to the config-dir path | Run `claude` once in a terminal |
 | Engine not found under `launchd` | `launchd` gives a bare `PATH` with no Homebrew | Set `NOCTIS_CLAUDE_BIN` to the absolute path |
 | Typecheck passes, build broken | `tsc --noEmit -p tsconfig.json` checks **zero** files | Always `npm run typecheck` (`tsc -b`) |
-| A turn ends with no summary | The closing pass could not resume | A failed close is swallowed by design; the original turn is intact |
-| Transcript blank after tool calls | An older build without the turn-integrity fields | Restart the backend — the wire fields are new |
+| Terminal opens and the prompt is cut mid-sentence | An old shell build; the PTY host flushed only on the next read | Restart `make dev` — the batcher flushes on silence now |
 
 ---
 
@@ -557,18 +488,14 @@ make test        # pytest + tsc -b + vitest
 
 ## 23. Known gaps
 
-**In progress — the conversation surface:**
-- **The real CLI in a PTY.** Step 1 of `PTY-MIGRATION.md` §7 shipped 2026-09-13: a Terminal rail view hosting an interactive `claude` session in a pseudo-terminal, **beside** the `stream-json` transcript rather than instead of it. See §24. Steps 4–5 (switch the default, delete the orchestrator) are not started and are gated on the two running side by side without disagreeing.
-
 **Outstanding:**
 - The `launchd`-on-wake scheduler — the only feature left in the build order. `brief/generate.py` writes the brief; nothing fires it, and the vault auto-commit/push job does not exist.
 
 **Known and accepted:**
-- `--effort` and `--agents` reach in-app sessions only, not the Terminal or VS Code surfaces.
+- Effort is not yet passed at spawn (`interactive-args` does not take it); the CLI's default applies until it is.
 - The brief page renders whatever `brief/today.md` last held, with no staleness indicator. `POST /v2/brief/generate` exists and nothing in the shell calls it, so a brief only refreshes when something asks — which today is nothing. The scheduler is the fix; until it lands, a stale brief looks exactly like a current one.
 - Whitespace-only text counts as speech — judging quality would be the guesswork §7 replaced.
 - `seven_day_opus` is in the CLI binary and absent from an observed Haiku run. Unverified.
-- `--input-format stream-json` as a persistent bidirectional session is untested; it would address ~1.9s spawn-per-turn latency.
 
 **Permanently out of scope:** multi-user or hosting · code editing / custom IDE · any deployment story.
 
@@ -577,10 +504,7 @@ make test        # pytest + tsc -b + vitest
 
 ## 24. The Terminal — the real CLI, hosted
 
-**Shipped 2026-09-13, alongside the `stream-json` transcript, not replacing it.**
-Chat is still the orchestrator; Terminal is the interactive CLI in a
-pseudo-terminal. Both work. `PTY-MIGRATION.md` has the full reasoning; this
-section is what exists.
+**Shipped 2026-09-13 beside the `stream-json` transcript; the transcript and the orchestrator behind it were deleted 2026-09-14.** The terminal is the conversation surface. `PTY-MIGRATION.md` has the full reasoning; this section is what exists, and §2 is the spawn.
 
 **Why.** Noctis drives `claude -p` — "print response and exit" in the CLI's own
 help — once per turn, and much of the orchestrator exists to rebuild the

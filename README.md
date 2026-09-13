@@ -24,7 +24,7 @@ Noctis splits that into two halves that age differently:
 
 **The brain** — a markdown vault, plus a small MCP server that makes it queryable. Ranked retrieval over years of decisions, the working context of every job, and each mode's methodology. It speaks stdio JSON-RPC with no Noctis-specific dependencies, so **anything that speaks MCP can use it**: Claude Desktop, Cursor, Zed, a script.
 
-**The body** — whatever runs the sessions. Today that is a Tauri app driving the Claude Code CLI as a subprocess. It is a vessel. The brain is meant to outlive it.
+**The body** — whatever runs the sessions. Today that is a Tauri app hosting the Claude Code CLI in a terminal. It is a vessel. The brain is meant to outlive it.
 
 That split is the whole design. The interface is the replaceable half, and it is built so that replacing it costs a stated amount rather than a rewrite.
 
@@ -48,7 +48,7 @@ A mode is passed into a session in its argv — never inherited from a config fi
 flowchart LR
     subgraph Body[Body — replaceable]
         UI[Tauri shell · React]
-        Orch[Orchestrator<br/>spawn · stream · resume]
+        PTY[PTY host<br/>spawn · resize · resume]
     end
 
     subgraph Brain[Brain — durable]
@@ -57,19 +57,19 @@ flowchart LR
     end
 
     Store[(SQLite FTS5<br/>history + index)]
-    CC[claude -p]
+    CC[claude · interactive]
     Other[Any MCP client<br/>Cursor · Claude Desktop · Zed]
 
-    UI <-->|SSE| Orch
-    Orch <--> CC
+    UI <-->|IPC| PTY
+    PTY <--> CC
     CC <--> MCP
     Other <-.-> MCP
     MCP <--> Vault
-    Orch <--> Store
+    CC -.->|transcript| Store
     Store -.->|promote| Vault
 ```
 
-The orchestrator spawns `claude -p --output-format stream-json`, normalises the event stream, and streams it to the shell. Sessions resume by engine session id. Two run concurrently — a budget on the 5-hour window, not a resource limit.
+The shell hosts `claude` in a pseudo-terminal — the real interactive CLI, rendering itself, in Noctis's own palette. The mode travels in the argv. Sessions resume by engine session id, and history is indexed from the transcripts the CLI writes itself, so it covers every session on the machine. Several run at once; the cap is advisory, a budget on the 5-hour window rather than a resource limit.
 
 It runs on an existing Claude subscription with no API billing, because it drives the vendor's own CLI rather than calling an API with a key.
 
@@ -92,7 +92,7 @@ Each of these is verifiable on your own machine rather than taken on trust.
 |---|---|
 | Shell | Tauri 2, React 19, TypeScript, Vite, Tailwind 4 |
 | Backend | FastAPI, Python 3.11, no ORM, no migrations |
-| Session runtime | [Claude Code](https://claude.com/claude-code) CLI as a subprocess |
+| Session runtime | [Claude Code](https://claude.com/claude-code) CLI, interactive, in a pseudo-terminal |
 | Durable state | Markdown + YAML frontmatter |
 | History + retrieval | SQLite FTS5 (BM25), no added dependencies |
 | Testing | `pytest` + `vitest` + `tsc -b` |

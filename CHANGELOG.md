@@ -9,6 +9,41 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The session is a terminal; the orchestrator is gone (2026-09-14)
+
+**Steps 4–5 of `PTY-MIGRATION.md` §7, in three commits that each left the
+tree working.**
+
+`fb931f6` — what the backend actually depended on, moved out. The mode →
+model table, the tool allowlist, the tracked permission policy, the MCP
+config, the binary lookup and `one_shot` all lived in `driver.py` beside the
+spawn; `engine.py` holds them now, and `transcript.py` holds
+`blocks_from_messages`. `one_shot` — the one `-p` that remains, a script for
+recap and the brief — moved to `--output-format json`, which is what let it
+stop depending on the stream parser. Stats reads its lifetime figure from the
+transcripts, taken on the diff's evidence rather than on schedule.
+
+`092798b` — the shell, rewritten terminal-first rather than edited around
+the transcript it used to host. Gone: the stream-built transcript, the
+composer, the permission dialog, the pickers, the per-turn effort chip, the
+Chat tab bar, the SSE reader and reducer, and the modules only they used.
+Stays: ⌘K over history and the vault; a history row opens read-only with one
+action, *resume in a terminal*; ⌘T opens the launcher; ⌘⇧H hands off, and
+the carried summary arrives as the new session's first message. The
+arrangement is remembered on every change and comes back resumed.
+
+`7ba58e9` — the deletion. `driver`, `manager`, `parser`, `wire`, `events`,
+the permission host and its MCP tool, the launch and permission routes,
+`store.record`, and the tests that described them. `grep` found no importer
+first. Caught while cutting: the first terminal version never passed the job
+brief into the overlay — the never-called shape the 09-11 audit kept finding,
+in its third guise; the wiring test watches the argv now.
+
+Verified live: interactive-args carries the job section, the session list
+reports three live terminals from their own status lines, Stats reads 2.5B
+lifetime tokens back to 2026-05-11 — sessions Noctis never hosted. 287
+backend tests, 60 frontend.
+
 ### Beside the recorder, and the recorder loses (2026-09-13)
 
 Steps 2 and 3 of the migration wired in, plus three things the first real
