@@ -378,10 +378,11 @@ transcripts). Steps 4–5 — switch the default, delete the orchestrator — ar
 **not started** and are gated on the two paths running side by side without
 disagreeing. `DOCUMENTATION.md` §24.
 
-What remains is two measurements rather than unknowns: coalescing PTY reads into ~16ms frames
-before they cross Tauri's IPC (one event per read is the naive version that
-stalls under a fast-printing session), and deciding which keystrokes stay
-reserved to the shell versus passing through to the CLI. Sequence in `PTY-MIGRATION.md` §7, and steps 2–3 (statusLine
+What remains is one decision: which keystrokes stay reserved to the shell
+versus passing through to the CLI. The IPC batching is in and had one real
+bug on first use — it flushed only when the next read arrived, so a prompt
+that blocked for input rendered to mid-sentence; a quiet frame now flushes,
+via a batcher thread separate from the blocking reader. Sequence in `PTY-MIGRATION.md` §7, and steps 2–3 (statusLine
 receiver, JSONL indexer running beside the recorder) are worth doing either
 way.
 

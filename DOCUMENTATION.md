@@ -598,7 +598,7 @@ argv and hands it to `pty_spawn`.
 | | |
 |---|---|
 | Size the PTY **before** spawning | at 0×0 the TUI exits instantly, no error, no output |
-| Coalesce reads into ~16ms frames | every chunk is serialised across Tauri's IPC; one event per read stalls a fast-printing session |
+| Coalesce reads into ~16ms frames, **and flush on silence** | every chunk is serialised across Tauri's IPC; one event per read stalls a fast-printing session. But a flush that only runs on the *next* read strands the last frame of a prompt that then blocks for input — the trust dialog rendered to mid-sentence until a keystroke made the CLI repaint. A quiet frame sends what it holds; that needs a batcher thread separate from the blocking reader |
 | Kill the session, not the process | the immediate child is not the only thing holding the terminal |
 
 Bytes cross the IPC **base64-encoded**. A read can split a multi-byte

@@ -11,10 +11,14 @@
 //!   1. **Size the PTY before spawning.** At 0x0 the TUI exits instantly with
 //!      no error and no output, which reads exactly like "PTY doesn't work
 //!      here". It cost the first spike run.
-//!   2. **Coalesce reads before crossing the IPC.** Every chunk has to be
-//!      serialised from Rust into the web view, and a fast-printing session
-//!      makes hundreds of small reads a second. One event per read stalls; one
-//!      frame per ~16ms does not.
+//!   2. **Coalesce reads before crossing the IPC -- and flush on silence.**
+//!      Every chunk has to be serialised from Rust into the web view, and a
+//!      fast-printing session makes hundreds of small reads a second. One
+//!      event per read stalls; one frame per ~16ms does not. But a flush that
+//!      only runs when the *next* read arrives strands the last frame of a
+//!      prompt that then blocks for input -- the trust dialog rendered to
+//!      mid-sentence and stopped until a keystroke made the CLI repaint. So a
+//!      quiet frame sends what it holds, which takes a second thread.
 //!   3. **Kill the whole session, not the process.** Same lesson the pywebview
 //!      shell taught in July: the immediate child is not the only thing
 //!      holding the terminal.
@@ -167,35 +171,72 @@ pub fn pty_spawn(
         .take_writer()
         .map_err(|e| format!("writer: {e}"))?;
 
-    let emit_id = id.clone();
+    // Two threads, because a blocking read cannot also keep time.
+    //
+    // The first version batched inside the read loop: extend `pending`, and
+    // flush if a frame had elapsed. That flushes only when *another read
+    // arrives* -- so when the CLI finished painting its prompt and blocked
+    // waiting for input, the tail of that prompt sat in `pending` with nothing
+    // to trigger sending it. The trust dialog rendered up to mid-sentence and
+    // stopped; pressing ↓ made the CLI repaint, which produced a read, which
+    // shook the rest loose. Silence has to flush too, and a thread parked in
+    // `read()` cannot notice silence. So the reader only reads, and the
+    // batcher waits on a channel with a deadline: data extends the frame,
+    // and a frame with no data sends what it has.
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
     std::thread::spawn(move || {
         let mut buf = [0u8; 65536];
-        let mut pending: Vec<u8> = Vec::new();
-        let mut last = Instant::now();
         loop {
             match reader.read(&mut buf) {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
-                    pending.extend_from_slice(&buf[..n]);
-                    // Held only while the frame window is open. A burst
-                    // arrives as one event; a lone keystroke echo still goes
-                    // out within 16ms, so typing does not feel delayed.
-                    if last.elapsed() >= FRAME {
-                        let _ = app.emit(
-                            "pty:data",
-                            Chunk { id: emit_id.clone(), b64: STANDARD.encode(&pending) },
-                        );
-                        pending.clear();
-                        last = Instant::now();
+                    if tx.send(buf[..n].to_vec()).is_err() {
+                        break;
                     }
                 }
             }
         }
-        if !pending.is_empty() {
-            let _ = app.emit(
-                "pty:data",
-                Chunk { id: emit_id.clone(), b64: STANDARD.encode(&pending) },
-            );
+        // Dropping `tx` is the exit signal: the batcher sees Disconnected.
+    });
+
+    let emit_id = id.clone();
+    std::thread::spawn(move || {
+        use std::sync::mpsc::RecvTimeoutError::{Disconnected, Timeout};
+        let mut pending: Vec<u8> = Vec::new();
+        let mut opened = Instant::now();
+        let flush = |pending: &mut Vec<u8>| {
+            if !pending.is_empty() {
+                let _ = app.emit(
+                    "pty:data",
+                    Chunk { id: emit_id.clone(), b64: STANDARD.encode(&pending) },
+                );
+                pending.clear();
+            }
+        };
+        loop {
+            match rx.recv_timeout(FRAME) {
+                Ok(chunk) => {
+                    if pending.is_empty() {
+                        opened = Instant::now();
+                    }
+                    pending.extend_from_slice(&chunk);
+                    // A burst keeps arriving inside the window; it still goes
+                    // out once the window is a frame old, so a long build log
+                    // streams at frame rate rather than accumulating until a
+                    // pause. Without this bound a fast printer would only
+                    // ever flush on `Timeout`, which it never reaches.
+                    if opened.elapsed() >= FRAME {
+                        flush(&mut pending);
+                    }
+                }
+                // Nothing for a frame: whatever is held is complete for now.
+                // This is the branch the first version did not have.
+                Err(Timeout) => flush(&mut pending),
+                Err(Disconnected) => {
+                    flush(&mut pending);
+                    break;
+                }
+            }
         }
         let _ = app.emit("pty:exit", Exit { id: emit_id, code: None });
     });

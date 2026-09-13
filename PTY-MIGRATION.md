@@ -372,6 +372,11 @@ Two left, and both are measurements rather than unknowns:
    IPC event per read is the naive version that stalls. The fix is ordinary:
    coalesce reads on the Rust side into a ~16ms window and send one frame per
    tick. What needs measuring is the window size, not whether it works.
+   *Found on first use, 2026-09-13: the batch must also flush on silence. A
+   flush that only runs when the next read arrives strands the tail of a
+   prompt that then blocks for input — the trust dialog rendered to
+   mid-sentence. Fixed with a batcher thread on `recv_timeout`, since a thread
+   parked in `read()` cannot notice that nothing is arriving.*
 2. **Keystroke routing.** `⌘K`, `⌘T` and `⇧⇥` belong to the shell today, but
    inside a focused terminal almost everything must reach the CLI instead.
    VS Code's answer — a small reserved set, everything else passes through —

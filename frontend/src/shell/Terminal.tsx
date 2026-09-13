@@ -202,10 +202,14 @@ export function Terminal({
         /* Bytes, not text. A read can split a multi-byte character down the
          * middle; xterm has its own UTF-8 decoder that holds the seam, and
          * decoding here would corrupt it. */
+        // A frame can be in flight from the batcher after the listener is
+        // unregistered; writing it into a disposed terminal is the same
+        // unhandled throw as the resize case, from the other direction.
+        if (!live) return
         const bin = atob(e.payload.b64)
         const bytes = new Uint8Array(bin.length)
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-        term_.write(bytes)
+        safely('write', () => term_.write(bytes))
       })
       const unExit = await listen<{ id: string }>('pty:exit', (e) => {
         if (e.payload.id !== id) return
@@ -252,7 +256,15 @@ export function Terminal({
       })
 
       const ro = new ResizeObserver(() => {
-        fit.fit()
+        /* Guarded like the explicit fits above, and for a reason found in the
+         * log rather than imagined: this callback landed while the WebGL
+         * renderer was still attaching, and `fit()` reached into
+         * `_renderer.value.dimensions` during the swap when `value` was
+         * undefined. It was the only fit not wrapped, and it was the one that
+         * threw -- as an unhandled error, since an observer callback has no
+         * caller to catch it. */
+        if (!live) return
+        safely('fit on resize', () => fit.fit())
         void invoke('pty_resize', { id, rows: term_.rows, cols: term_.cols })
       })
       ro.observe(el)
