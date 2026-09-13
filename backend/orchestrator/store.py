@@ -91,6 +91,17 @@ CREATE TABLE IF NOT EXISTS usage (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_created ON usage(created_at);
 
+-- Conversations deleted on purpose. History is indexed from transcripts the
+-- CLI keeps on disk, and deleting a row does not delete the file -- so
+-- without this the next indexing pass filed a deleted conversation straight
+-- back, as `general`, under a title nobody chose. A tombstone on the engine
+-- id, not a hidden flag on a row: the row is really gone, and this is what
+-- keeps it gone.
+CREATE TABLE IF NOT EXISTS forgotten (
+    engine_session_id TEXT PRIMARY KEY,
+    at                TEXT NOT NULL
+);
+
 -- Contribution grid + lifetime tokens read from `usage`. Claude Code's own
 -- stats-cache.json can seed history but is a periodic cache (observed three
 -- months stale), so these rows are authoritative for anything Noctis ran.
@@ -292,6 +303,19 @@ class ConversationStore:
             )
         self.db.commit()
         return row_id
+
+    def forget(self, engine_session_id: str) -> None:
+        """Mark an engine id as deleted on purpose, so the indexer will not
+        file its transcript again. Idempotent."""
+        self.db.execute(
+            "INSERT OR IGNORE INTO forgotten (engine_session_id, at) VALUES (?, ?)",
+            (engine_session_id, _now()))
+        self.db.commit()
+
+    def is_forgotten(self, engine_session_id: str) -> bool:
+        return self.db.execute(
+            "SELECT 1 FROM forgotten WHERE engine_session_id=?",
+            (engine_session_id,)).fetchone() is not None
 
     def tokens_for_engine_id(self, engine_session_id: str) -> int | None:
         """What the recorder counted for one session, for comparison with what

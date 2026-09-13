@@ -1207,3 +1207,27 @@ def test_an_empty_cwd_is_refused_not_defaulted(client):
         r = client.get("/v2/sessions/interactive-args", headers=AUTH,
                        params={"mode": "faber", "cwd": cwd})
         assert r.status_code == 400, cwd
+
+
+def test_deleting_a_conversation_tombstones_its_engine_id(client):
+    import routers.sessions_v2 as sv2
+    sid = sv2._store.open_session("vesper", cwd="/tmp", title="to go")
+    sv2._store.db.execute("UPDATE sessions SET engine_session_id='eng-gone' WHERE id=?", (sid,))
+    sv2._store.db.commit()
+    assert client.delete(f"/v2/sessions/history/{sid}", headers=AUTH).status_code == 200
+    assert sv2._store.is_forgotten("eng-gone")
+    assert sv2._store.find_by_engine_id("eng-gone") is None
+
+
+def test_the_shell_can_close_a_slot_out_of_the_live_count(client):
+    """Liveness is "reported within half a minute" for a terminal that died
+    without saying so. One the shell watched exit says so, and leaves the
+    count at once rather than thirty seconds later."""
+    import routers.sessions_v2 as sv2
+    sv2._statusline.clear()
+    client.post("/v2/sessions/statusline?slot=term-bye", headers=AUTH, json={"session_id": "s"})
+    assert client.get("/v2/sessions", headers=AUTH).json()["running"] == 1
+    assert client.delete("/v2/sessions/statusline/term-bye", headers=AUTH).status_code == 200
+    assert client.get("/v2/sessions", headers=AUTH).json()["running"] == 0
+    # Closing a slot that is not there is not an error.
+    assert client.delete("/v2/sessions/statusline/term-never", headers=AUTH).status_code == 200

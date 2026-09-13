@@ -174,3 +174,23 @@ def test_losing_the_unique_race_declines_like_seeing_the_row(store, monkeypatch)
     # Now the row exists but the (patched) check says it does not.
     assert store.ingest(_conv("raced"), "faber") is None
     assert store.db.execute("SELECT count(*) FROM sessions").fetchone()[0] == 1
+
+
+def test_a_forgotten_transcript_is_not_filed_again(store, tmp_path, monkeypatch):
+    """History is indexed from files the CLI keeps, and deleting a row does
+    not delete the file. The end-to-end sweep deleted a conversation and the
+    next pass filed it straight back as `general` under a title nobody chose.
+    The tombstone is what makes delete mean it."""
+    proj = tmp_path / "-Users-x-repo"; proj.mkdir()
+    rec = {"type": "assistant", "timestamp": "2026-09-14T10:00:00Z",
+           "message": {"role": "assistant", "model": "m",
+                       "content": [{"type": "text", "text": "hi"}],
+                       "usage": {"input_tokens": 1, "output_tokens": 2}}}
+    (proj / "gone.jsonl").write_text(json.dumps(rec), encoding="utf-8")
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+
+    assert jsonl.index_new(store, {}) == ["gone"]
+    store.forget("gone")
+    store.db.execute("DELETE FROM sessions WHERE engine_session_id='gone'"); store.db.commit()
+    assert jsonl.index_new(store, {}) == [], "a deleted conversation came back"
+    assert store.forget("gone") is None          # idempotent

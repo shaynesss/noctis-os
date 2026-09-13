@@ -285,6 +285,10 @@ def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> 
         for p in PROJECTS.glob("**/*.jsonl"):
             if store.find_by_engine_id(p.stem) is not None:
                 continue
+            # Deleted on purpose. The file is the CLI's and stays; the row
+            # must not come back.
+            if store.is_forgotten(p.stem):
+                continue
             conv = read(p)
             if store.ingest(conv, mode_of.get(p.stem, default_mode)) is not None:
                 taken.append(p.stem)

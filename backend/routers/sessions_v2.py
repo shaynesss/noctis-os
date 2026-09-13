@@ -216,6 +216,20 @@ async def statusline(payload: dict, mode: str | None = None,
     return {"ok": True}
 
 
+@router.delete("/statusline/{slot}")
+def statusline_close(slot: str) -> dict:
+    """The shell says a terminal has gone.
+
+    Liveness is otherwise "reported within half a minute", which is right
+    for a terminal that died without saying so and wrong for one the shell
+    watched exit: it stayed in the live count for thirty seconds after its
+    pane said "session ended". The shell knows the instant, so it says.
+    Idempotent -- a slot that was never there, or already closed, is fine.
+    """
+    _statusline.pop(slot, None)
+    return {"closed": slot}
+
+
 @router.get("/statusline/all")
 def statusline_all() -> dict:
     """Every slot's newest reading, in one call.
@@ -423,9 +437,18 @@ def delete_conversation(session_id: int) -> dict:
     tokens in the lifetime totals, so Stats would disagree with History about
     what happened.
     """
-    row = _store.db.execute("SELECT id FROM sessions WHERE id=?", (session_id,)).fetchone()
+    row = _store.db.execute("SELECT id, engine_session_id FROM sessions WHERE id=?",
+                            (session_id,)).fetchone()
     if row is None:
         raise HTTPException(status_code=404, detail=f"No session {session_id}")
+
+    # Tombstoned first. The row is indexed from a transcript the CLI keeps on
+    # disk, and deleting the row does not delete the file -- the end-to-end
+    # sweep deleted a conversation and the next indexing pass filed it
+    # straight back, as `general`, under a title nobody chose. The tombstone
+    # is what makes "delete" mean it.
+    if row["engine_session_id"]:
+        _store.forget(row["engine_session_id"])
 
     # messages_fts is an external-content table with a delete trigger on
     # messages, so removing the rows keeps the search index in step.

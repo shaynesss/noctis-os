@@ -16,7 +16,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import '@xterm/xterm/css/xterm.css'
-import { get, post } from './engine'
+import { del, get, post } from './engine'
 import type { Mode } from './domain'
 
 /** Read a design token, so the terminal cannot drift from the rest of the UI. */
@@ -256,6 +256,10 @@ export function Terminal({
          * transcript is indexed it exists on disk and nowhere in the
          * interface. The exit is the moment the file is complete. */
         void post('/v2/sessions/index', {})
+        /* And out of the live count now, not in thirty seconds. Liveness is
+         * otherwise "reported recently", which is right for a terminal that
+         * died without saying so; this one just said so. */
+        void del(`/v2/sessions/statusline/${encodeURIComponent(id)}`)
         onExit?.()
       })
       cleanups.push(unData, unExit)
