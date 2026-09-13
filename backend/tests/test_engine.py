@@ -35,6 +35,20 @@ def test_one_shot_is_a_script_not_a_session():
         assert tool in disallowed
 
 
+def test_one_shot_leaves_nothing_behind():
+    """A recap is not a conversation and must not fire the repo's hooks.
+
+    Each of these was found live on 2026-09-14: recap transcripts filed into
+    history as `general` sessions, and the backend's cwd -- this repo --
+    applying its `--mode dev` SessionEnd hook to every one-shot, clearing
+    Faber's busy marker under a running session.
+    """
+    cmd = engine.one_shot_command("summarise this")
+    assert "--no-session-persistence" in cmd, "a script writes no transcript"
+    assert cmd[cmd.index("--setting-sources") + 1] == "user", \
+        "project hooks belong to sessions opened in the project, not to scripts"
+
+
 def test_every_mode_has_a_model():
     for mode, model in engine.MODE_MODELS.items():
         assert model.startswith("claude-"), mode

@@ -199,6 +199,20 @@ def one_shot_command(prompt: str) -> list[str]:
         # summarises text that is handed to it, and a summariser that can
         # read the filesystem is a larger thing than the job needs.
         "--disallowedTools", "Bash Edit Write Read Grep Glob WebSearch WebFetch Task",
+        # A script leaves no session behind. Without this every recap wrote a
+        # transcript under `~/.claude/projects/`, and the indexer -- which
+        # reads that directory as the record of what happened -- filed each
+        # one as a `general` conversation titled "Summarise this
+        # conversation in ONE sentence…". Five of them were in history
+        # before the sweep of 2026-09-14 noticed.
+        "--no-session-persistence",
+        # And it runs no project hooks. The backend's cwd is this repo, whose
+        # `.claude/settings.local.json` bakes `--mode dev` into its hooks;
+        # each one-shot's SessionEnd therefore fired *dev's* hook, which
+        # cleared dev's busy marker -- sixteen times in one day, out from
+        # under a live Faber session. The user's own settings still load;
+        # the project's and the local file's do not.
+        "--setting-sources", "user",
     ]
 
 

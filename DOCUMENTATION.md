@@ -54,7 +54,7 @@ Built by `backend/interactive.py`, served by `GET /v2/sessions/interactive-args?
 
 **Finding the binary.** PATH first, then `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.claude/local`, in both `engine.py` and `pty.rs`; `NOCTIS_CLAUDE_BIN` overrides. `launchd` starts processes with a bare `PATH` containing no Homebrew.
 
-**`one_shot` is the one place `-p` remains** (`engine.py`): the recap and the brief's prose call it, on the cheap tier, with every tool refused and `--output-format json`. A scripting mode used for a script.
+**`one_shot` is the one place `-p` remains** (`engine.py`): the recap and the brief's prose call it, on the cheap tier, with every tool refused and `--output-format json`. A scripting mode used for a script — and a script leaves nothing behind: `--no-session-persistence`, so no transcript lands under `~/.claude/projects/` for the indexer to file as a conversation (twenty-seven recaps had been filed as `general` sessions before this was noticed), and `--setting-sources user`, so the repo's own `.claude/settings.local.json` hooks — baked `--mode dev` — do not fire a `dev` SessionEnd for every recap. `--bare` would do both and more, but it refuses OAuth, so it cannot run on the subscription.
 
 ---
 
@@ -292,7 +292,7 @@ React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `ma
 
 ## 13. Telemetry and hooks
 
-Two, both non-blocking, both given the mode via `NOCTIS_MODE`:
+Two, both non-blocking, both given the mode via `NOCTIS_MODE`. **A terminal session gets it from `interactive-args`**, which returns an `env` map beside the argv (`NOCTIS_MODE`, and `NOCTIS_JOB_ID` when a job owns the working directory) and `pty_spawn` applies to the child — a PTY child otherwise inherits the shell process's environment, and a vesper session was found logging under whatever mode the shell happened to carry. The env wins over the `--mode` baked into a project's own `.claude/settings.local.json` hooks; those baked values are only a fallback for sessions nothing launched.
 
 - **`PostToolUse`** → `hooks/log_action.py`, one line per tool call to a per-job runtime log
 - **`SessionEnd`** → `hooks/mark_session_end.py`, clears the busy flag

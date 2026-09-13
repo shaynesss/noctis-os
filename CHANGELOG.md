@@ -9,6 +9,33 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Debugging sweep, second pass (2026-09-14)
+
+Three things found by running the whole loop for real — argv → PTY → turn →
+exit → index → recap — rather than by reading:
+
+- **Terminal sessions attribute to their own mode.** The telemetry hooks read
+  `NOCTIS_MODE`, and a PTY child inherits the shell process's environment, so
+  every terminal session was logging under whatever the shell happened to
+  carry. `interactive-args` now returns an `env` map beside the argv and
+  `pty_spawn` applies it. Proven end-to-end: a vesper probe's `Bash` call and
+  `SESSION_END` landed in `vesper__noctis-os.log`, SessionEnd resolved
+  `mode=vesper`.
+- **Recaps no longer become history.** `one_shot` wrote a transcript per call,
+  and the indexer — which reads `~/.claude/projects/` as the record — filed
+  each as a `general` conversation titled "Summarise this conversation in ONE
+  sentence…". Twenty-seven were on disk, twenty-six in history. Now
+  `--no-session-persistence`; the existing ones are tombstoned.
+- **Recaps no longer fire the repo's hooks.** The backend's cwd is this repo,
+  whose `settings.local.json` bakes `--mode dev` into its hooks, so every
+  recap's SessionEnd cleared dev's busy marker — sixteen times in a day. Now
+  `--setting-sources user`.
+
+And one lesson for the probes rather than the product: a long burst of input
+ending in `\r` trips the CLI's paste detection, and Enter becomes a newline.
+The e2e probe sends the text, waits, then sends Enter — which is what a person
+does.
+
 ### Glass (2026-09-14)
 
 The window is a macOS vibrancy material — `windowEffects: hudWindow`,
