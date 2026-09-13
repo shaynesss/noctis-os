@@ -368,6 +368,10 @@ def stats() -> dict:
 
 @router.get("/history")
 def history(limit: int = 25, mode: str | None = None, resumable: bool = False) -> dict:
+    # SQLite reads a negative LIMIT as "no limit", and the list is the
+    # palette's first paint; a caller that asked for -1 gets 500 rows, not
+    # every conversation ever.
+    limit = max(1, min(limit, 500))
     """Past conversations, newest first.
 
     The shell reads this on launch, so closing the window stops losing work.

@@ -118,8 +118,14 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
     # needs: the summary the previous session carried over arrives as the
     # opening message rather than sitting in a clipboard. Last, because it
     # is positional and everything before it is a flag.
+    #
+    # Behind `--`, always. A handoff summary that begins with a bullet --
+    # "- first, the parser…" -- is an argument that begins with a dash, and
+    # the CLI's option parser read one as `error: unknown option` and exited
+    # before the terminal had painted. The terminator ends option parsing;
+    # everything after it is the prompt, whatever it starts with.
     if prompt and prompt.strip():
-        args.append(prompt)
+        args += ["--", prompt]
 
     # The environment beside the argv. The telemetry hooks attribute an
     # action to a mode and a job by reading these; a PTY child otherwise

@@ -78,3 +78,12 @@ def test_the_environment_names_the_mode_for_the_hooks():
         env = interactive.spawn_args(mode, "/tmp")["env"]
         assert env["NOCTIS_MODE"] == mode
         assert "NOCTIS_JOB_ID" not in env      # /tmp is nobody's project
+
+
+def test_a_prompt_that_starts_with_a_dash_is_still_a_prompt():
+    """A handoff summary that opens with a bullet is an argument that opens
+    with a dash, and the CLI parsed one as an unknown option and exited
+    before the terminal painted. The terminator makes it text."""
+    args = interactive.spawn_args("general", "/tmp", prompt="- first point\n- second")["args"]
+    assert args[-2:] == ["--", "- first point\n- second"]
+    assert "--" not in interactive.spawn_args("general", "/tmp")["args"], "no prompt, no terminator"

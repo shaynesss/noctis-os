@@ -71,6 +71,16 @@ exit → index → recap — rather than by reading:
   counted live, eating the cap. On mount, anything registered that the
   mount did not bring back is killed and closed out of the live count.
 
+- **A handoff that opens with a bullet no longer kills its session.** The
+  carried summary rides as the CLI's positional prompt; one beginning with
+  `-` was read by the option parser as `error: unknown option` and the
+  session exited before the terminal painted. The prompt now sits behind
+  `--`. Proven in a PTY: a two-bullet prompt, session alive, answered.
+- **A status-line report with odd numbers is a live slot without a
+  reading**, not a 500 every five seconds. And `history?limit=-1` no
+  longer means every conversation ever (SQLite reads a negative LIMIT as
+  none); the limit is clamped to 1–500.
+
 And one lesson for the probes rather than the product: a long burst of input
 ending in `\r` trips the CLI's paste detection, and Enter becomes a newline.
 The e2e probe sends the text, waits, then sends Enter — which is what a person
