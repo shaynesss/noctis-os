@@ -82,7 +82,32 @@ export function Terminal({
     if (!el) return
     let live = true
     let term: Xterm | undefined
+    let webgl: WebglAddon | undefined
     const cleanups: Array<() => void> = []
+
+    /* Teardown may not throw, and getting this wrong took the whole app down
+     * on the first click.
+     *
+     * StrictMode double-invokes effects in development: mount, unmount,
+     * mount. The unmount lands while the async setup below is still in
+     * flight, so the terminal gets disposed part-attached — and
+     * `WebglAddon.dispose()` then reaches for a `_terminal._core._store` it
+     * never received, throwing `undefined is not an object`. That escaped the
+     * effect cleanup, which React cannot recover from, so the error boundary
+     * caught it and Noctis stopped rendering.
+     *
+     * Same shape as the dropped-stream bug: the failure was in the path that
+     * runs when something is being taken apart, and it was louder than the
+     * thing it was cleaning up after. */
+    const safely = (what: string, f: () => void) => {
+      try {
+        f()
+      } catch (e) {
+        // Reported, not raised. A terminal that fails to come apart cleanly
+        // is worth knowing about; it is not worth the window going white.
+        console.warn(`[noctis] terminal ${what} on teardown:`, e)
+      }
+    }
 
     void (async () => {
       const term_ = new Xterm({
@@ -123,14 +148,24 @@ export function Terminal({
        * are both real paths, and dropping to the DOM renderer costs frames
        * rather than correctness. */
       try {
-        const webgl = new WebglAddon()
-        webgl.onContextLoss(() => webgl.dispose())
-        term_.loadAddon(webgl)
+        const addon = new WebglAddon()
+        /* Disposed once, and only through the same path teardown uses. It
+         * used to dispose itself here *and* again via `term.dispose()`, and
+         * the second call is what found a half-attached addon. */
+        addon.onContextLoss(() => {
+          safely('webgl context loss', () => addon.dispose())
+          webgl = undefined
+        })
+        term_.loadAddon(addon)
+        webgl = addon
       } catch {
         // DOM renderer stays; nothing to report to the person using it.
       }
 
-      fit.fit()
+      safely('fit', () => fit.fit())
+      // Unmounted while the renderer was attaching — StrictMode does exactly
+      // this. Stop before touching a terminal the cleanup has already taken.
+      if (!live) return
 
       const args = await get<{ binary: string; args: string[] }>(
         `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}`)
@@ -141,6 +176,7 @@ export function Terminal({
         return
       }
 
+      if (!live) return
       const unData = await listen<{ id: string; b64: string }>('pty:data', (e) => {
         if (e.payload.id !== id) return
         /* Bytes, not text. A read can split a multi-byte character down the
@@ -157,6 +193,10 @@ export function Terminal({
         onExit?.()
       })
       cleanups.push(unData, unExit)
+      // The listeners are registered; if the tab went away while they were
+      // being attached, unregister rather than spawning a process nothing
+      // will read.
+      if (!live) return
 
       try {
         await invoke('pty_spawn', {
@@ -181,13 +221,29 @@ export function Terminal({
     })()
 
     return () => {
+      // First, so anything still awaiting above stops before it touches a
+      // terminal that is about to go.
       live = false
-      cleanups.forEach((f) => f())
+      cleanups.forEach((f) => safely('listener', f))
       /* The process goes with the tab. Leaving it would keep a session
        * burning the 5h window with nothing reading it — the same reason the
        * SSE reader releases its lock on abort. */
-      void invoke('pty_kill', { id })
-      term?.dispose()
+      void invoke('pty_kill', { id }).catch(() => {
+        // Killing a session that already exited is not a failure.
+      })
+      /* Renderer before terminal. `term.dispose()` disposes its addons as
+       * part of coming apart, and the WebGL addon cannot survive being
+       * reached for after its terminal's core store has gone — which is the
+       * exact throw that took the app down. Disposing it first, explicitly,
+       * means the terminal has nothing left to unwind into. */
+      if (webgl) {
+        safely('webgl dispose', () => webgl!.dispose())
+        webgl = undefined
+      }
+      if (term) {
+        safely('dispose', () => term!.dispose())
+        term = undefined
+      }
     }
     // Deliberately once per tab: re-running would kill and respawn the
     // session on a prop change, losing the conversation.

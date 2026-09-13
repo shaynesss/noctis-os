@@ -112,6 +112,21 @@ pub fn pty_spawn(
     rows: u16,
     cols: u16,
 ) -> Result<(), String> {
+    // Replacing rather than stacking. React's StrictMode mounts, unmounts and
+    // mounts again in development, so this id can arrive twice; without the
+    // reap the second insert would drop the first Session's handle on the
+    // floor and leave its engine running with nothing reading it. Same leak
+    // the pywebview shell taught in July, in a new place.
+    if let Some(mut old) = state
+        .0
+        .lock()
+        .map_err(|_| "pty registry poisoned".to_string())?
+        .remove(&id)
+    {
+        let _ = old.child.kill();
+        let _ = old.child.wait();
+    }
+
     let pty = native_pty_system();
     // Before the spawn. See the module note -- this is not incidental ordering.
     let size = PtySize {
