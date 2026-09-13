@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -90,13 +91,32 @@ class VaultIndex:
 
     def __init__(self, vault_path: Path, db_path: Path | str = ":memory:"):
         self.vault_path = Path(vault_path)
-        self.db = sqlite3.connect(str(db_path))
+        # One connection shared across threads, with every use serialised by
+        # `_lock` below.
+        #
+        # FastAPI runs sync routes on a threadpool, so the thread that builds
+        # this index is almost never the thread that later searches it. The
+        # default connection refuses that outright -- "SQLite objects created
+        # in a thread can only be used in that same thread" -- which surfaced
+        # as ⌘K reporting the backend as unreachable, because a 500 and a dead
+        # socket were indistinguishable to the frontend.
+        #
+        # ConversationStore solves the same problem with a connection per
+        # thread, and that pattern must NOT be copied here: this database
+        # defaults to `:memory:`, so a per-thread connection would open a
+        # private empty database and searches would return no matches at all.
+        # Silence is the worse failure -- an empty result reads as "the vault
+        # does not contain that", which is a lie a crash at least never tells.
+        #
+        # Serialising reads costs nothing measurable: a search is ~2ms, and
+        # the index is read-mostly after its one rebuild.
+        self._lock = threading.Lock()
+        self.db = sqlite3.connect(str(db_path), check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
 
     def rebuild(self) -> int:
         """Index every markdown file. Returns the chunk count."""
-        self.db.execute("DELETE FROM chunks")
         rows: list[tuple[str, str, str, str]] = []
         for p in sorted(self.vault_path.rglob("*.md")):
             if any(part in SKIP_DIRS for part in p.parts):
@@ -106,8 +126,13 @@ class VaultIndex:
             except OSError:
                 continue
             rows.extend(chunk_markdown(str(p.relative_to(self.vault_path)), text))
-        self.db.executemany("INSERT INTO chunks VALUES (?,?,?,?)", rows)
-        self.db.commit()
+        # The vault walk above stays outside the lock -- it is the slow part
+        # and touches no connection. The swap itself is held so a concurrent
+        # search never observes the emptied table between DELETE and INSERT.
+        with self._lock:
+            self.db.execute("DELETE FROM chunks")
+            self.db.executemany("INSERT INTO chunks VALUES (?,?,?,?)", rows)
+            self.db.commit()
         return len(rows)
 
     def search(self, query: str, k: int = TOP_K, per_document: bool = True) -> list[Hit]:
@@ -119,11 +144,12 @@ class VaultIndex:
         if not terms:
             return []
         try:
-            rows = self.db.execute(
-                f"SELECT path, head, body, {RANK} AS score FROM chunks"
-                f" WHERE chunks MATCH ? ORDER BY score LIMIT ?",
-                (" OR ".join(terms), k * 4),
-            ).fetchall()
+            with self._lock:
+                rows = self.db.execute(
+                    f"SELECT path, head, body, {RANK} AS score FROM chunks"
+                    f" WHERE chunks MATCH ? ORDER BY score LIMIT ?",
+                    (" OR ".join(terms), k * 4),
+                ).fetchall()
         except sqlite3.OperationalError:
             return []
 
@@ -144,7 +170,8 @@ class VaultIndex:
         return hits
 
     def close(self) -> None:
-        self.db.close()
+        with self._lock:
+            self.db.close()
 
 
 def _excerpt(body: str, limit: int = 300) -> str:

@@ -1,16 +1,12 @@
-"""Conversation store tests — Noctis v2 Stage 2 item 1."""
-import asyncio
-from pathlib import Path
+"""Conversation store tests.
 
+The store is history: rows the transcript indexer files, read by search,
+Stats and the history routes. The recorder that once folded stream events
+into it is gone; a row is written by `ingest` or, in these tests, directly.
+"""
 import pytest
 
-from orchestrator.driver import launch
-from orchestrator.events import (
-    SessionStart, TextDelta, ThinkingDelta, ToolCall, ToolResult, TurnEnd, Usage,
-)
-from orchestrator.store import ConversationStore, fold
-
-FIXTURE = Path(__file__).parent / "fixtures" / "stream_with_tools.jsonl"
+from orchestrator.store import ConversationStore
 
 
 @pytest.fixture
@@ -18,41 +14,6 @@ def store(tmp_path):
     s = ConversationStore(tmp_path / "t.db")
     yield s
     s.close()
-
-
-def _events():
-    async def go():
-        return [e async for e in launch(["cat", str(FIXTURE)])]
-    return asyncio.run(go())
-
-
-def test_folding_a_real_stream_records_transcript_and_usage(store):
-    sid = store.open_session("faber", cwd="/tmp")
-    fold(store, sid, "faber", _events())
-    store.close_session(sid)
-
-    roles = {r["role"] for r in store.transcript(sid)}
-    assert {"assistant", "tool", "tool_result"} <= roles
-    life = store.lifetime_tokens()
-    assert life["turns"] == 1 and life["cached"] > 0
-
-
-def test_engine_session_id_is_captured_so_the_session_can_be_resumed(store):
-    sid = store.open_session("faber")
-    fold(store, sid, "faber", _events())
-    store.close_session(sid)
-    row = store.db.execute("SELECT engine_session_id FROM sessions WHERE id=?", (sid,)).fetchone()
-    assert row["engine_session_id"]
-    assert store.resumable("faber")
-
-
-def test_empty_thinking_blocks_are_not_stored(store):
-    """Thinking text is empty under display:'omitted' -- storing those rows
-    would fill the transcript with blanks and pollute search."""
-    sid = store.open_session("faber")
-    store.record(sid, "faber", ThinkingDelta(text=""))
-    store.record(sid, "faber", TextDelta("real content"))
-    assert [r["role"] for r in store.transcript(sid)] == ["assistant"]
 
 
 def test_history_search_ranks_by_relevance(store):
@@ -101,7 +62,9 @@ def test_promote_writes_a_curated_note_into_the_vault(store, tmp_path):
     sid = store.open_session("vesper")
     store.add_message(sid, "user", "which host for a persistent backend?")
     store.add_message(sid, "assistant", "Railway — it holds connections.")
-    store.record(sid, "vesper", ThinkingDelta(text=""))
+    # A thinking row with no text, which is what the indexer files for
+    # omitted reasoning; promotion must step over it rather than print it.
+    store.add_message(sid, "thinking", "")
     store.close_session(sid)
 
     vault = tmp_path / "vault"
@@ -134,15 +97,14 @@ def test_store_is_usable_from_more_than_one_thread(tmp_path):
     test happened to exercise it, not by any unit test."""
     import threading
 
-    from orchestrator.events import TurnEnd, Usage
     from orchestrator.store import ConversationStore
 
     store = ConversationStore(tmp_path / "h.db")
     sid = store.open_session("faber", cwd="/tmp")
-    store.record(sid, "faber", TurnEnd(
-        session_id="s", duration_ms=1,
-        usage=Usage(input_tokens=5, output_tokens=6, cached_tokens=0, model="m"),
-    ))
+    store.db.execute(
+        "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens, created_at)"
+        " VALUES (?, 'faber', 'm', 5, 6, '2026-09-13T10:00:00+00:00')", (sid,))
+    store.db.commit()
 
     seen: list[int] = []
     errors: list[BaseException] = []
@@ -168,20 +130,21 @@ def test_a_resumed_turn_reuses_the_conversation_row(tmp_path):
     """engine_session_id is UNIQUE, so opening a new row per turn made the
     second turn of any resumed session fail with a constraint error -- and
     would have scattered one conversation's transcript across many rows."""
-    from orchestrator.events import SessionStart
     from orchestrator.store import ConversationStore
 
     store = ConversationStore(tmp_path / "h.db")
     first = store.open_session("general", cwd="/tmp")
-    store.record(first, "general", SessionStart(session_id="abc", model="m", cwd="/tmp"))
+    store.db.execute("UPDATE sessions SET engine_session_id='abc' WHERE id=?", (first,))
+    store.db.commit()
     store.close_session(first)
 
     found = store.find_by_engine_id("abc")
     assert found == first
 
-    # The same engine id arriving again must land on the same row.
+    # The same engine id arriving again must land on the same row: reopen,
+    # never insert.
     store.reopen(found)
-    store.record(found, "general", SessionStart(session_id="abc", model="m", cwd="/tmp"))
+    assert store.find_by_engine_id("abc") == first
     rows = store.db.execute("SELECT COUNT(*) c FROM sessions").fetchone()["c"]
     assert rows == 1
     store.close()

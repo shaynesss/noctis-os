@@ -143,13 +143,13 @@ def test_initialize_announces_the_server(client):
 SESSION_TOOLS = {"vault_search", "history_search", "job_context", "worklist", "propose"}
 
 
-def test_all_five_tools_are_advertised(client):
+def test_all_four_tools_are_advertised(client):
     """The spec's five, plus the internal prompt tool. Read from the server
     rather than asserted from a list here, so this fails if the surface
     changes rather than if this test goes stale."""
     tools = client.call("tools/list")["result"]["tools"]
     names = {t["name"] for t in tools}
-    assert names == SESSION_TOOLS | {"permission_prompt"}
+    assert names == SESSION_TOOLS
     for tool in tools:
         assert tool.get("description"), f"{tool['name']} has no description for a client to show"
         assert "inputSchema" in tool, f"{tool['name']} advertises no schema"

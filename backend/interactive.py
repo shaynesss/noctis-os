@@ -24,6 +24,7 @@ import json
 import os
 from pathlib import Path
 
+import jobs
 import vault_io
 from engine import MODE_MODELS, SHARED_SETTINGS, claude_binary, mcp_config
 from orchestrator.modes import mode_agents, mode_methodology
@@ -82,11 +83,20 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
 
     args: list[str] = ["--model", MODE_MODELS[mode]]
 
+    # The job whose project_path is this directory is the job this session is
+    # about to work on, and its brief rides in the overlay. Resolved here
+    # rather than sent by the shell: no parameter to keep in sync, and the
+    # mapping is the one already made by opening that directory. The old
+    # launch route did this and the first terminal version did not -- a Faber
+    # session opened in a repo with its job context silently absent, which
+    # is the never-called shape the 09-11 audit kept finding.
+    job_context = jobs.job_brief(mode, Path(cwd))
+
     # The mode, as text in the argv. Same mechanism as a `-p` spawn: it cannot
     # be raced by a second session of the same mode, and it switches
     # system-prompt snapshotting off so an edited methodology reaches a
     # resumed session.
-    if methodology := mode_methodology(mode):
+    if methodology := mode_methodology(mode, job_context):
         args += ["--append-system-prompt", methodology]
     if agents := mode_agents(mode):
         args += ["--agents", agents]

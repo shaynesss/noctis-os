@@ -23,10 +23,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from .events import (
-    Event, Limits, SessionStart, TextDelta, ThinkingDelta, ToolCall,
-    ToolResult, TurnEnd,
-)
 
 from typing import TYPE_CHECKING
 
@@ -243,50 +239,18 @@ class ConversationStore:
         )
         self.db.commit()
 
-    def record(self, session_id: int, mode: str, event: Event) -> None:
-        """Fold one Event into the store. The manager streams; this listens."""
-        if isinstance(event, SessionStart) and event.session_id:
-            self.db.execute(
-                "UPDATE sessions SET engine_session_id=? WHERE id=?",
-                (event.session_id, session_id),
-            )
-            self.db.commit()
-        elif isinstance(event, TextDelta):
-            self.add_message(session_id, "assistant", event.text)
-        elif isinstance(event, ThinkingDelta):
-            self.add_message(session_id, "thinking", event.text)
-        elif isinstance(event, ToolCall):
-            self.add_message(session_id, "tool", f"{event.name} {event.summary}".strip(),
-                             {"tool": event.name, "args": event.args, "id": event.id})
-        elif isinstance(event, ToolResult):
-            self.add_message(session_id, "tool_result", event.content[:4000],
-                             {"id": event.id, "is_error": event.is_error})
-        elif isinstance(event, TurnEnd):
-            u = event.usage
-            self.db.execute(
-                "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
-                " cached_tokens, cache_write_tokens, aux_input_tokens, aux_output_tokens,"
-                " duration_ms, list_cost_usd, created_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (session_id, mode, u.model, u.input_tokens, u.output_tokens,
-                 u.cached_tokens, u.cache_write_tokens, u.aux_input_tokens,
-                 u.aux_output_tokens, event.duration_ms, u.list_cost_usd, _now()),
-            )
-            self.db.commit()
-
     def ingest(self, conv: "Conversation", mode: str) -> int | None:
         """Take a conversation read from the CLI's own transcript.
 
-        The other way into these tables is `record`, which folds stream
-        events as they arrive -- and can only see sessions Noctis itself is
-        streaming. A terminal session, or one started in VS Code, never
-        passes through it. This is the second door, and it is what lets
-        history and Stats stop depending on Noctis having been present.
+        The only door into these tables now. There used to be a recorder
+        that folded stream events as Noctis hosted a session; it could only
+        see sessions Noctis streamed, and the comparison in `jsonl.diff_against`
+        showed it undercounting every one of them. Terminal sessions, VS Code
+        sessions, anything the CLI ran: all arrive here, from the transcript
+        the CLI itself wrote.
 
-        Idempotent on the engine id. A session that `record` already wrote
-        is left alone rather than duplicated, which is what makes it safe to
-        run this beside the recorder while the two are being compared. It
-        returns the row id when it wrote one, None when it declined.
+        Idempotent on the engine id, so re-running over the same files is
+        free. Returns the row id when it wrote one, None when it declined.
         """
         if not conv.engine_session_id or not conv.turns:
             return None
@@ -480,9 +444,3 @@ class ConversationStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("\n".join(lines))
         return target
-
-
-def fold(store: ConversationStore, session_id: int, mode: str,
-         events: Iterable[Event]) -> None:
-    for e in events:
-        store.record(session_id, mode, e)

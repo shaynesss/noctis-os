@@ -14,33 +14,12 @@ import jobs
 
 
 @pytest.fixture
-def no_real_spawn(tmp_path, monkeypatch):
-    """Isolate the two tests below that post a *valid* launch request.
-
-    Every other test that posts to `/v2/sessions` is refused before the spawn
-    -- unknown mode, cwd outside home, empty prompt -- so the suite had never
-    reached `SessionManager.start`, and nothing was in place to stop it when
-    it finally did. These two were the first to get there: each run launched a
-    real Claude Code session into a pytest tmp_path and, because
-    `sessions_v2._store` is module-level and unparameterised, wrote its
-    transcript into the real history database. Found 2026-09-11 by one of the
-    spawned sessions, which read its own working directory and recognised the
-    `vault` fixture's scaffolding.
-
-    Only the runner is replaced, so the manager's concurrency bookkeeping is
-    still the real thing. A test that genuinely wants to exercise a launch
-    should inject its own runner rather than drop this fixture.
-    """
+def home_is_tmp(tmp_path, monkeypatch):
+    """The interactive-args route confines cwd to home. The project the tests
+    write lives under tmp_path, so home has to be tmp_path for the duration."""
     import routers.sessions_v2 as sv2
-    from orchestrator.manager import SessionManager
-    from orchestrator.store import ConversationStore
-
-    async def never_spawns(spec, timeout=None):
-        return
-        yield  # pragma: no cover -- makes this an async generator
-
-    monkeypatch.setattr(sv2, "_manager", SessionManager(runner=never_spawns))
-    monkeypatch.setattr(sv2, "_store", ConversationStore(tmp_path / "history.db"))
+    monkeypatch.setattr(sv2, "_HOME", tmp_path.resolve())
+    monkeypatch.setenv("NOCTIS_API_TOKEN", "test-token")
 
 
 def _write_job(vault_dir: Path, mode_dir: str, slug: str, project_path: Path, **meta):
@@ -134,89 +113,51 @@ def test_job_with_no_project_path_is_skipped(vault, tmp_path):
     assert jobs.find_job_for_cwd("faber", tmp_path) is None
 
 
-def _spy_spec(monkeypatch, tmp_path):
-    """Capture the SessionSpec the route actually spawns.
-
-    Asserted at the spec rather than at `render()`, which is what the
-    previous version of this test did — and it passed for hours after the
-    cutover while the job context was being composed into a config directory
-    nothing read. A wiring test has to watch the wire, not a function that
-    used to be on it.
-    """
-    import routers.sessions_v2 as sv2
-    from orchestrator.manager import SessionManager
-
-    seen: dict = {}
-
-    async def capture(spec, timeout=None):
-        seen["spec"] = spec
-        return
-        yield  # pragma: no cover -- makes this an async generator
-
-    monkeypatch.setattr(sv2, "_manager", SessionManager(runner=capture))
-    monkeypatch.setattr(sv2, "_HOME", tmp_path.resolve())
-    monkeypatch.setenv("NOCTIS_API_TOKEN", "test-token")
-    return seen
-
-
-def _launch(cwd, mode="faber"):
+def _args_for(cwd, mode="faber"):
+    """The argv a terminal would spawn with for this directory. This *is* the
+    wire: there is no spec and no spawn between the route and the process."""
     from fastapi.testclient import TestClient
 
     from main import app
-    return TestClient(app).post(
-        "/v2/sessions",
+    r = TestClient(app).get(
+        "/v2/sessions/interactive-args",
         headers={"Authorization": "Bearer test-token"},
-        json={"mode": mode, "prompt": "go", "cwd": str(cwd)},
+        params={"mode": mode, "cwd": str(cwd)},
     )
+    assert r.status_code == 200, r.text
+    return r.json()["args"]
 
 
-def test_the_spawned_session_carries_its_job_context(vault, tmp_path, monkeypatch,
-                                                     no_real_spawn):
-    """The wiring test — the one whose absence let the parameter die twice.
+def _overlay(args):
+    return args[args.index("--append-system-prompt") + 1] if "--append-system-prompt" in args else ""
+
+
+def test_the_terminal_session_carries_its_job_context(vault, tmp_path, home_is_tmp):
+    """The wiring test -- the one whose absence let the parameter die three
+    times.
 
     First as a `compose()` argument no caller passed; then, after the
     cutover, as a correctly-resolved context written to a directory that no
-    longer existed. Both times the feature was complete, correct and
-    unreachable.
+    longer existed; then, in the first terminal version, as a `job_brief`
+    the interactive argv simply never asked for. Each time the feature was
+    complete, correct and unreachable. This watches the argv itself.
     """
     project = tmp_path / "proj"
     project.mkdir()
     _write_job(tmp_path, "dev", "proj", project, status="a distinctive status line")
 
-    seen = _spy_spec(monkeypatch, tmp_path)
-    _launch(project)
-
-    spec = seen.get("spec")
-    assert spec is not None, "the route never reached the spawn"
-    assert spec.job_context, "the spec was built without the job context"
-    assert "a distinctive status line" in spec.job_context
+    assert "a distinctive status line" in _overlay(_args_for(project))
 
 
-def test_the_job_context_reaches_the_argv(vault, tmp_path, monkeypatch, no_real_spawn):
-    """And survives composition — the spec carrying it is necessary but not
-    sufficient, since the prompt is assembled a layer further down."""
-    from orchestrator.driver import build_command
-
+def test_a_directory_that_is_not_a_project_sends_no_job_context(vault, tmp_path, home_is_tmp):
+    """No job is the honest result for a directory that is not one, and it
+    has to be distinguishable from a job that failed to load: the overlay is
+    still there, it just carries no job."""
     project = tmp_path / "proj"
     project.mkdir()
     _write_job(tmp_path, "dev", "proj", project, status="a distinctive status line")
-
-    seen = _spy_spec(monkeypatch, tmp_path)
-    _launch(project)
-
-    cmd = build_command(seen["spec"])
-    prompt = cmd[cmd.index("--append-system-prompt") + 1]
-    assert "a distinctive status line" in prompt
-
-
-def test_launch_outside_any_project_sends_no_job_context(vault, tmp_path, monkeypatch,
-                                                         no_real_spawn):
-    """No job is the honest result for a directory that is not one, and it
-    has to be distinguishable from a job that failed to load."""
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
 
-    seen = _spy_spec(monkeypatch, tmp_path)
-    _launch(elsewhere)
-
-    assert seen["spec"].job_context is None
+    overlay = _overlay(_args_for(elsewhere))
+    assert "a distinctive status line" not in overlay

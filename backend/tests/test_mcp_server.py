@@ -63,13 +63,13 @@ def test_handshake_declares_all_three_primitives(vault):
     assert reply["result"]["serverInfo"]["name"] == "noctis"
 
 
-def test_lists_the_five_tools(vault):
+def test_lists_the_four_tools(vault):
     replies = rpc(vault,
                   {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
                   {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     names = {t["name"] for t in replies[-1]["result"]["tools"]}
     assert names == {"vault_search", "history_search", "job_context", "worklist",
-                     "propose", "permission_prompt"}
+                     "propose"}
 
 
 def test_vault_search_returns_the_relevant_document(vault):

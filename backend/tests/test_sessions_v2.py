@@ -1,9 +1,5 @@
-"""v2 session route + wire-format tests.
-
-The wire format is the API contract, so its tests assert the *field names*
-the frontend reads rather than merely that serialization succeeds -- a
-rename that keeps the shape valid but breaks the UI has to fail here.
-"""
+"""Session route tests: the argv a terminal spawns with, the status-line
+reports it sends back, history, stats, recap, panels."""
 import json
 import pathlib
 from pathlib import Path
@@ -11,88 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from orchestrator.manager import MAX_CONCURRENT_CEILING
-from orchestrator.events import (
-    EngineError, Limits, SessionStart, TextDelta, ThinkingDelta,
-    ThinkingProgress, ToolCall, ToolResult, TurnEnd, Usage,
-)
-from orchestrator.wire import MAX_RESULT_CHARS, to_dict, to_sse
-
-
-# ------------------------------------------------------------------ wire
-
-def test_every_event_type_has_a_mapping():
-    """A missing mapping is a hole in the transcript, so the union is walked
-    exhaustively rather than sampled."""
-    usage = Usage(input_tokens=1, output_tokens=2, cached_tokens=3, model="opus-5")
-    events = [
-        SessionStart(session_id="s", model="m", cwd="/tmp", tools=["Read"]),
-        TextDelta(text="hi"),
-        ThinkingDelta(text="", tokens=5),
-        ThinkingProgress(estimated_tokens=50),
-        ToolCall(id="1", name="Read", args={"file_path": "/a/b.py"}),
-        ToolResult(id="1", content="x", is_error=False),
-        Limits(five_hour_used=0.1, five_hour_resets_at=1, seven_day_used=0.2, seven_day_resets_at=2),
-        TurnEnd(session_id="s", usage=usage, duration_ms=10),
-        EngineError(message="boom", fatal=True),
-    ]
-    tags = [to_dict(e)["t"] for e in events]
-    assert tags == ["start", "text", "thinking", "thinking_progress", "tool_call",
-                    "tool_result", "limits", "turn_end", "error"]
-
-
-def test_unmapped_type_raises_rather_than_dropping():
-    with pytest.raises(TypeError):
-        to_dict(object())  # type: ignore[arg-type]
-
-
-def test_tool_call_carries_the_computed_summary():
-    """Computed server-side so the transcript and the runtime log describe a
-    call the same way, rather than each deriving its own."""
-    d = to_dict(ToolCall(id="1", name="Read", args={"file_path": "/a/b.py"}))
-    assert d["summary"] == "/a/b.py"
-
-
-def test_long_tool_result_is_truncated_and_says_so():
-    """A prefix presented as the whole result is a quiet lie; the flag is
-    what lets the UI say 'truncated'."""
-    d = to_dict(ToolResult(id="1", content="x" * (MAX_RESULT_CHARS + 500)))
-    assert len(d["content"]) == MAX_RESULT_CHARS
-    assert d["truncated"] is True
-
-
-def test_short_tool_result_is_not_flagged():
-    assert to_dict(ToolResult(id="1", content="ok"))["truncated"] is False
-
-
-def test_omitted_thinking_still_sends_the_field():
-    """Empty text is the normal case, not an absence -- the field being
-    present is how the frontend tells 'omitted' from 'no thinking'."""
-    d = to_dict(ThinkingDelta(text="", tokens=12))
-    assert d["text"] == "" and d["tokens"] == 12
-
-
-def test_turn_end_nests_usage_under_the_names_the_ui_reads():
-    usage = Usage(input_tokens=10, output_tokens=20, cached_tokens=30, model="opus-5",
-                  aux_input_tokens=900, aux_output_tokens=12,
-                  context_window=1000000)
-    d = to_dict(TurnEnd(session_id="s", usage=usage, duration_ms=7))
-    assert d["usage"] == {"input": 10, "output": 20, "cached": 30, "model": "opus-5",
-                          "aux_input": 900, "aux_output": 12,
-                          "context_window": 1000000}
-
-
-def test_sse_frame_is_one_json_line_then_a_blank():
-    frame = to_sse(TextDelta(text="hello"))
-    assert frame.startswith("data: ") and frame.endswith("\n\n")
-    assert json.loads(frame[6:].strip())["text"] == "hello"
-
-
-def test_sse_payload_has_no_raw_newlines():
-    """A newline inside the payload would split one frame into two and
-    desynchronise the stream."""
-    frame = to_sse(TextDelta(text="a\nb"))
-    assert frame.count("\n") == 2  # only the two terminators
+from routers.sessions_v2 import MAX_CONCURRENT_CEILING
 
 
 # ------------------------------------------------------------------ routes
@@ -107,32 +22,46 @@ def client(monkeypatch):
 AUTH = {"Authorization": "Bearer test-token"}
 
 
-def test_launch_rejects_an_unknown_mode(client):
-    r = client.post("/v2/sessions", headers=AUTH,
-                    json={"mode": "nope", "prompt": "x", "cwd": str(Path.home())})
-    assert r.status_code == 404
+def _usage(store, sid, *, input=0, output=0, cached=0, cache_write=0, list_cost=0.0):
+    """One usage row, the shape the transcript indexer writes."""
+    store.db.execute(
+        "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
+        " cached_tokens, cache_write_tokens, duration_ms, list_cost_usd, created_at)"
+        " VALUES (?,?,?,?,?,?,?,1,?,?)",
+        (sid, "faber", "m", input, output, cached, cache_write, list_cost,
+         "2026-09-13T10:00:00+00:00"))
+    store.db.commit()
 
 
-def test_launch_refuses_bypass_permissions_over_the_wire(client):
-    """It is excluded from the UI's cycle; a guard that exists only in the
-    client is not a guard."""
-    r = client.post("/v2/sessions", headers=AUTH,
-                    json={"mode": "faber", "prompt": "x", "cwd": str(Path.home()),
-                          "permission_mode": "bypassPermissions"})
-    assert r.status_code == 400
+def test_the_session_list_reports_the_terminals_that_are_reporting(client):
+    """What is live is what the terminals say, not what a manager remembers.
+    A terminal's status line re-runs every five seconds while it is up, so a
+    report older than half a minute is a session that has gone."""
+    import routers.sessions_v2 as sv2
+    sv2._statusline.clear()
+    client.post("/v2/sessions/statusline?slot=term-a", headers=AUTH,
+                json={"session_id": "s-a", "model": {"id": "claude-opus-5"}})
+    sv2._statusline["term-old"] = {"session_id": "s-old", "reported_at": 0}
+    sv2._statusline["s-not-a-slot"] = {"session_id": "s-not-a-slot", "reported_at": 9e12}
+
+    body = client.get("/v2/sessions", headers=AUTH).json()
+    assert body["running"] == 1
+    assert body["live"][0]["slot"] == "term-a"
+    assert body["live"][0]["model"] == "claude-opus-5"
+    sv2._statusline.clear()
 
 
 def test_cwd_outside_home_is_refused(client):
-    """cwd reaches exec as a working directory -- the same class of input as
-    the job_slug traversal caught in the 2026-07-21 review."""
-    r = client.post("/v2/sessions", headers=AUTH,
-                    json={"mode": "faber", "prompt": "x", "cwd": "/etc"})
+    """cwd reaches the process as its working directory -- the same class of
+    input as the job_slug traversal caught in the 2026-07-21 review."""
+    r = client.get("/v2/sessions/interactive-args", headers=AUTH,
+                   params={"mode": "faber", "cwd": "/etc"})
     assert r.status_code == 403
 
 
 def test_nonexistent_cwd_is_refused(client):
-    r = client.post("/v2/sessions", headers=AUTH,
-                    json={"mode": "faber", "prompt": "x", "cwd": "~/definitely-not-here-xyz"})
+    r = client.get("/v2/sessions/interactive-args", headers=AUTH,
+                   params={"mode": "faber", "cwd": "~/definitely-not-here-xyz"})
     assert r.status_code == 400
 
 
@@ -142,17 +71,11 @@ def test_symlink_out_of_home_cannot_smuggle_a_path(client, tmp_path, monkeypatch
     link = Path.home() / ".noctis-test-escape-link"
     try:
         link.symlink_to("/etc")
-        r = client.post("/v2/sessions", headers=AUTH,
-                        json={"mode": "faber", "prompt": "x", "cwd": str(link)})
+        r = client.get("/v2/sessions/interactive-args", headers=AUTH,
+                       params={"mode": "faber", "cwd": str(link)})
         assert r.status_code == 403
     finally:
         link.unlink(missing_ok=True)
-
-
-def test_empty_prompt_is_rejected(client):
-    r = client.post("/v2/sessions", headers=AUTH,
-                    json={"mode": "faber", "prompt": "", "cwd": str(Path.home())})
-    assert r.status_code == 422
 
 
 def test_routes_require_auth(client):
@@ -179,35 +102,15 @@ def test_session_list_reports_the_concurrency_budget(client):
     UI is told the truth, whatever the truth is.
     """
     import routers.sessions_v2 as sv2
+    sv2._statusline.clear()
 
     body = client.get("/v2/sessions", headers=AUTH).json()
-    assert body["max_concurrent"] == sv2._manager.max_concurrent
+    assert body["max_concurrent"] == sv2.max_concurrent()
     assert 1 <= body["max_concurrent"] <= MAX_CONCURRENT_CEILING
     assert body["running"] == 0
 
 
 # ------------------------------------------------------------------- stats
-
-def test_stats_lifetime_includes_the_background_tier(tmp_path):
-    """The parser lost ~900 input tokens a turn by reading only the primary
-    model. A lifetime total that sums only the primary columns reproduces
-    that same undercount one layer down."""
-    from orchestrator.events import TurnEnd, Usage
-    from orchestrator.store import ConversationStore
-
-    store = ConversationStore(tmp_path / "h.db")
-    sid = store.open_session("faber", cwd="/tmp")
-    store.record(sid, "faber", TurnEnd(
-        session_id="s", duration_ms=1,
-        usage=Usage(input_tokens=2, output_tokens=52, cached_tokens=7444,
-                    model="claude-opus-5", aux_input_tokens=903, aux_output_tokens=12),
-    ))
-    life = store.lifetime_tokens()
-    assert life["input"] == 905          # 2 primary + 903 background
-    assert life["output"] == 64          # 52 + 12
-    assert life["primary_input"] == 2    # still available for the per-turn view
-    store.close()
-
 
 def test_an_older_database_gains_the_new_columns(tmp_path):
     """CREATE TABLE IF NOT EXISTS is a no-op on a database that already has
@@ -262,7 +165,7 @@ def test_brief_reports_whether_it_was_generated(client):
 def test_config_reports_what_the_orchestrator_will_really_run(client):
     """Read from driver.py rather than restated, so Settings cannot drift
     into describing a system that no longer exists."""
-    from orchestrator.driver import MODE_MODELS
+    from engine import MODE_MODELS
 
     body = client.get("/v2/config", headers=AUTH).json()
     assert {m["mode"]: m["model"] for m in body["modes"]} == MODE_MODELS
@@ -344,7 +247,7 @@ def _rows(msgs):
 def test_assistant_deltas_rejoin_into_one_block():
     """Deltas are stored one row each; a restored reply must not arrive
     shattered into a paragraph per fragment."""
-    from orchestrator.wire import blocks_from_messages
+    from transcript import blocks_from_messages
     blocks = blocks_from_messages(_rows([
         ("assistant", "Hel", None), ("assistant", "lo ", None), ("assistant", "there", None),
     ]))
@@ -354,7 +257,7 @@ def test_assistant_deltas_rejoin_into_one_block():
 def test_a_user_turn_separates_two_replies():
     """Without the user message between them, two turns' answers merge --
     which is exactly what old rows did before the prompt was recorded."""
-    from orchestrator.wire import blocks_from_messages
+    from transcript import blocks_from_messages
     blocks = blocks_from_messages(_rows([
         ("user", "one?", None), ("assistant", "ONE", None),
         ("user", "two?", None), ("assistant", "TWO", None),
@@ -366,7 +269,7 @@ def test_a_user_turn_separates_two_replies():
 def test_a_tool_result_pairs_with_its_call_by_id():
     """Pairing on adjacency breaks under the interleaving the live reducer
     already handles; the stored form must agree with it."""
-    from orchestrator.wire import blocks_from_messages
+    from transcript import blocks_from_messages
     blocks = blocks_from_messages(_rows([
         ("tool", "Read /a.py", '{"id": "a", "tool": "Read"}'),
         ("tool", "Bash ls", '{"id": "b", "tool": "Bash"}'),
@@ -377,7 +280,7 @@ def test_a_tool_result_pairs_with_its_call_by_id():
 
 
 def test_a_failed_tool_result_opens_itself():
-    from orchestrator.wire import blocks_from_messages
+    from transcript import blocks_from_messages
     blocks = blocks_from_messages(_rows([
         ("tool", "Bash boom", '{"id": "x", "tool": "Bash"}'),
         ("tool_result", "nope", '{"id": "x", "is_error": true}'),
@@ -402,7 +305,8 @@ def test_history_can_be_narrowed_before_the_limit_applies(client):
     from routers import sessions_v2 as sv2
 
     wanted = sv2._store.open_session("general", cwd="/tmp", title="the real one")
-    sv2._store.record(wanted, "general", SessionStart(session_id="eng-g", model="m", cwd="/tmp"))
+    sv2._store.db.execute("UPDATE sessions SET engine_session_id='eng-g' WHERE id=?", (wanted,))
+    sv2._store.db.commit()
     for _ in range(30):
         sv2._store.open_session("general", cwd="/tmp", title="debris")   # no engine id
 
@@ -432,7 +336,8 @@ def test_a_conversation_can_be_found_by_its_engine_id(client):
     from routers import sessions_v2 as sv2
 
     sid = sv2._store.open_session("faber", cwd="/tmp", title="the one")
-    sv2._store.record(sid, "faber", SessionStart(session_id="eng-42", model="m", cwd="/tmp"))
+    sv2._store.db.execute("UPDATE sessions SET engine_session_id='eng-42' WHERE id=?", (sid,))
+    sv2._store.db.commit()
 
     body = client.get("/v2/sessions/history/by-engine/eng-42", headers=AUTH).json()
     assert body["id"] == sid
@@ -568,16 +473,12 @@ def test_deleting_a_conversation_removes_its_usage_too(tmp_path):
     """Leaving usage rows behind would keep a deleted conversation's tokens
     in the lifetime totals, so Stats would disagree with History about what
     happened."""
-    from orchestrator.events import TurnEnd, Usage
     from orchestrator.store import ConversationStore
 
     store = ConversationStore(tmp_path / "h.db")
     sid = store.open_session("faber", cwd="/tmp")
     store.add_message(sid, "user", "hello")
-    store.record(sid, "faber", TurnEnd(
-        session_id="s", duration_ms=1,
-        usage=Usage(input_tokens=1, output_tokens=9, cached_tokens=0, model="m"),
-    ))
+    _usage(store, sid, input=1, output=9)
     assert store.lifetime_tokens()["output"] == 9
 
     store.db.execute("DELETE FROM messages WHERE session_id=?", (sid,))
@@ -598,61 +499,10 @@ def test_delete_requires_auth(client):
     assert client.delete("/v2/sessions/history/1").status_code == 401
 
 
-# ----------------------------------------------------- inline images
-
-PNG_B64 = "iVBORw0KGgo="
-
-
-def test_a_turn_can_carry_images_without_a_file(client, monkeypatch):
-    """Writing the image out and telling the session to Read it back worked,
-    but cost a tool call, put an absolute path in the transcript, and made
-    the answer depend on a file still existing."""
-    captured = {}
-
-    async def fake(spec):
-        captured["images"] = spec.images
-        return
-        yield  # pragma: no cover - generator shape
-
-    from routers import sessions_v2
-    monkeypatch.setattr(sessions_v2._manager, "start", lambda spec: fake(spec))
-
-    r = client.post("/v2/sessions", headers=AUTH, json={
-        "mode": "general", "prompt": "what is this?", "cwd": str(Path.home()),
-        "images": [{"media_type": "image/png", "data": PNG_B64}],
-    })
-    assert r.status_code == 200
-    assert captured["images"][0].media_type == "image/png"
-
-
-def test_an_unsupported_image_type_is_refused(client):
-    r = client.post("/v2/sessions", headers=AUTH, json={
-        "mode": "general", "prompt": "x", "cwd": str(Path.home()),
-        "images": [{"media_type": "image/svg+xml", "data": PNG_B64}],
-    })
-    assert r.status_code == 422
-
-
-def test_too_many_images_are_refused(client):
-    """A cap, because every image is base64 in one request and one message."""
-    r = client.post("/v2/sessions", headers=AUTH, json={
-        "mode": "general", "prompt": "x", "cwd": str(Path.home()),
-        "images": [{"media_type": "image/png", "data": PNG_B64}] * 9,
-    })
-    assert r.status_code == 422
-
-
 def test_config_lists_the_models_a_session_can_switch_to(client):
-    from orchestrator.driver import MODEL_CATALOG
+    from engine import MODEL_CATALOG
     body = client.get("/v2/config", headers=AUTH).json()
     assert [m["id"] for m in body["models"]] == [m["id"] for m in MODEL_CATALOG]
-
-
-def test_an_unknown_model_is_refused_by_the_route(client):
-    r = client.post("/v2/sessions", headers=AUTH, json={
-        "mode": "general", "prompt": "x", "cwd": str(Path.home()), "model": "gpt-9",
-    })
-    assert r.status_code == 400
 
 
 # ------------------------------------------------------------- recap
@@ -773,18 +623,6 @@ def test_billing_says_plainly_that_nothing_is_charged(client):
     assert body["basis"] == "api-list-price"
 
 
-def test_list_cost_sums_every_model_a_turn_billed(tmp_path):
-    """The background tier costs list price too, so summing only the primary
-    would under-report for the same reason the token counts once did."""
-    from orchestrator.parser import parse_line
-    from orchestrator.events import TurnEnd
-
-    fixture = (Path(__file__).parent / "fixtures" / "result_multi_model.json").read_text()
-    (end,) = [e for e in parse_line(fixture) if isinstance(e, TurnEnd)]
-    # 0.196462 (opus) + 0.000963 (haiku)
-    assert round(end.usage.list_cost_usd, 6) == round(0.196462 + 0.000963, 6)
-
-
 def test_limits_report_overage_even_before_anything_is_known(client):
     """Overage is the one signal here that can mean money, so its absence
     must be explicit rather than a missing key the UI reads as undefined."""
@@ -846,16 +684,13 @@ def test_billing_reports_how_many_turns_its_figure_covers(tmp_path, monkeypatch,
     """Token totals span every turn; the cost only spans turns recorded since
     the column existed. Printed side by side without saying so, the cost read
     about 20x low against its own tokens."""
-    from orchestrator.events import TurnEnd, Usage
     from orchestrator.store import ConversationStore
 
     store = ConversationStore(tmp_path / "h.db")
     sid = store.open_session("faber", cwd="/tmp")
     # One priced turn and one from before the column existed.
-    store.record(sid, "faber", TurnEnd(session_id="s", duration_ms=1, usage=Usage(
-        input_tokens=10, output_tokens=10, cached_tokens=0, model="m", list_cost_usd=0.5)))
-    store.record(sid, "faber", TurnEnd(session_id="s", duration_ms=1, usage=Usage(
-        input_tokens=10, output_tokens=10, cached_tokens=0, model="m")))
+    _usage(store, sid, input=10, output=10, list_cost=0.5)
+    _usage(store, sid, input=10, output=10)
 
     life = store.lifetime_tokens()
     assert life["turns"] == 2
@@ -868,7 +703,7 @@ def test_billing_reports_how_many_turns_its_figure_covers(tmp_path, monkeypatch,
 def test_prompts_lists_the_system_prompt_and_every_overlay(client):
     body = client.get("/v2/prompts", headers=AUTH).json()
     ids = {p["id"] for p in body["prompts"]}
-    from orchestrator.driver import MODE_MODELS
+    from engine import MODE_MODELS
     assert ids == {"system", *MODE_MODELS}
 
 
@@ -902,7 +737,7 @@ def test_editing_the_system_prompt_rerenders_every_mode(client, monkeypatch):
     """It is composed into all of them, so one of them going stale would be
     a silent divergence between modes."""
     from routers import panels
-    from orchestrator.driver import MODE_MODELS
+    from engine import MODE_MODELS
 
     rendered = []
     monkeypatch.setattr(panels.vault_io, "write_file", lambda p, c: None)
@@ -932,15 +767,14 @@ def test_artifacts_are_derived_from_what_the_session_did(tmp_path, monkeypatch, 
     """Not from anything the model announces: a turn that writes a file has
     already said so in its tool call, and asking it to also declare outputs
     would be a second source that can disagree with the first."""
-    from orchestrator.events import ToolCall
     from orchestrator.store import ConversationStore
     from routers import sessions_v2
 
     store = ConversationStore(tmp_path / "h.db")
     sid = store.open_session("faber", cwd="/tmp")
-    store.record(sid, "faber", ToolCall(id="1", name="Write", args={"file_path": "/tmp/a.py"}))
-    store.record(sid, "faber", ToolCall(id="2", name="Edit", args={"file_path": "/tmp/a.py"}))
-    store.record(sid, "faber", ToolCall(id="3", name="Read", args={"file_path": "/tmp/b.py"}))
+    for i, (tool, path) in enumerate([("Write", "/tmp/a.py"), ("Edit", "/tmp/a.py"), ("Read", "/tmp/b.py")], 1):
+        store.add_message(sid, "tool", f"{tool} {path}",
+                          {"tool": tool, "args": {"file_path": path}, "id": str(i)})
     monkeypatch.setattr(sessions_v2, "_store", store)
 
     found = client.get(f"/v2/sessions/history/{sid}/artifacts", headers=AUTH).json()["artifacts"]
@@ -967,38 +801,6 @@ def test_artifacts_404_for_an_unknown_conversation(client):
 
 
 # ---------------------------------------------------- live monitoring
-
-def test_the_session_list_reports_what_is_live_right_now(client):
-    """The spec puts live/max sessions on the same status row as the limit
-    windows, because together they answer one question: whether there is room
-    to start something now."""
-    import routers.sessions_v2 as sv2
-
-    body = client.get("/v2/sessions", headers=AUTH).json()
-    assert body["max_concurrent"] == sv2._manager.max_concurrent
-    assert isinstance(body["live"], list)
-    assert body["running"] == len([s for s in body["live"] if s["state"] == "running"])
-
-
-def test_a_live_session_reports_its_mode_model_and_elapsed(monkeypatch, client):
-    """A count alone says something is running; it does not say what, and
-    'what is it doing' is the question you open this to answer."""
-    from datetime import datetime, timedelta, timezone
-    from orchestrator.driver import SessionSpec
-    from orchestrator.manager import SessionHandle
-    from routers import sessions_v2
-
-    spec = SessionSpec(mode="faber", prompt="x", model="claude-haiku-4-5")
-    handle = SessionHandle(local_id=1, mode="faber", spec=spec, state="running",
-                           started_at=datetime.now(timezone.utc) - timedelta(seconds=42))
-    monkeypatch.setattr(type(sessions_v2._manager), "running",
-                        property(lambda self: [handle]))
-
-    live = client.get("/v2/sessions", headers=AUTH).json()["live"][0]
-    assert live["mode"] == "faber"
-    assert live["model"] == "claude-haiku-4-5"      # the override, not the mode default
-    assert 40 <= live["elapsed"] <= 60
-
 
 # ------------------------------------------------------------- promote
 
@@ -1298,6 +1100,8 @@ def test_the_status_line_feeds_the_rolling_windows(client):
     live in the backend rather than in React state, so the bar is right the
     moment the window opens instead of after the first turn.
     """
+    import routers.sessions_v2 as sv2
+    sv2._statusline.clear()
     payload = {
         "session_id": "s-1",
         "rate_limits": {"five_hour": {"used_percentage": 3, "resets_at": 1789338000},

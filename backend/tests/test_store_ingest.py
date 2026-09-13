@@ -11,13 +11,27 @@ from pathlib import Path
 import pytest
 
 from orchestrator import jsonl
-from orchestrator.events import SessionStart, TurnEnd, Usage
 from orchestrator.store import ConversationStore
 
 
 @pytest.fixture
 def store(tmp_path):
     return ConversationStore(tmp_path / "h.db")
+
+
+def _recorded(store, row, engine_id, tokens=None):
+    """A row the way the old recorder left it: engine id set, source
+    'recorder', and a usage row per turn. The recorder is gone; the rows it
+    wrote are still in real databases, and the seam has to keep treating
+    them as what they were."""
+    store.db.execute("UPDATE sessions SET engine_session_id=? WHERE id=?", (engine_id, row))
+    if tokens:
+        i, o, cr, cw = tokens
+        store.db.execute(
+            "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
+            " cached_tokens, cache_write_tokens, duration_ms, created_at)"
+            " VALUES (?,?,?,?,?,?,?,1,'2026-09-13T10:00:00+00:00')", (row, "faber", "m", i, o, cr, cw))
+    store.db.commit()
 
 
 def _conv(sid="abc-1", tokens=(10, 20, 300, 40)):
@@ -55,7 +69,7 @@ def test_ingest_is_idempotent_on_the_engine_id(store):
 
 def test_ingest_declines_a_session_the_recorder_already_has(store):
     row = store.open_session("faber", cwd="/repo", title="live")
-    store.record(row, "faber", SessionStart(session_id="rec-1", model="m", cwd="/repo"))
+    _recorded(store, row, "rec-1")
     assert store.ingest(_conv("rec-1"), "faber") is None
     assert store.db.execute("SELECT source FROM sessions WHERE id=?",
                             (row,)).fetchone()["source"] == "recorder"
@@ -72,10 +86,7 @@ def test_the_comparison_only_tests_what_the_recorder_wrote(store):
     """
     # Recorded by the recorder: a real comparison.
     row = store.open_session("faber", cwd="/repo", title="live")
-    store.record(row, "faber", SessionStart(session_id="rec-1", model="m", cwd="/repo"))
-    store.record(row, "faber", TurnEnd(
-        session_id="rec-1", usage=Usage(10, 20, 300, "m", cache_write_tokens=40),
-        duration_ms=1, text_chars=4, tool_calls=0, text_after_last_tool=4))
+    _recorded(store, row, "rec-1", tokens=(10, 20, 300, 40))
     assert store.tokens_for_engine_id("rec-1") == 370
 
     # Filed from a transcript: not a comparison at all.

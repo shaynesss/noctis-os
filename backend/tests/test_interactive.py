@@ -4,7 +4,7 @@ import json
 import pytest
 
 import interactive
-from orchestrator.driver import MODE_MODELS
+from engine import MODE_MODELS
 
 
 def test_it_is_not_a_print_spawn():
@@ -50,7 +50,7 @@ def test_the_status_line_reports_back():
 def test_it_carries_the_same_tracked_policy():
     """One permission file, both spawn paths. A terminal session that quietly
     had different permissions would be the 09-11 defect wearing a new shape."""
-    from orchestrator.driver import SHARED_SETTINGS
+    from engine import SHARED_SETTINGS
     tracked = json.loads(SHARED_SETTINGS.read_text())
     settings = json.loads(
         interactive.spawn_args("faber", "/tmp")["args"][

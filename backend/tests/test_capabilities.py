@@ -89,7 +89,7 @@ def test_render_states_the_gap_rather_than_a_count(monkeypatch):
 def test_the_migration_brief_describes_the_live_config(real_vault):
     """Generated, not hand-written, so it cannot drift from what it describes
     -- which is the failure this whole module exists to prevent."""
-    from orchestrator.driver import EFFORT_CYCLE
+    from engine import EFFORT_CYCLE
 
     brief = capabilities.migration_brief()
     assert "maintenance/audit.md" in brief, "the mode->methodology map"
