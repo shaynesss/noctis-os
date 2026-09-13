@@ -31,6 +31,20 @@ exit → index → recap — rather than by reading:
   recap's SessionEnd cleared dev's busy marker — sixteen times in a day. Now
   `--setting-sources user`.
 
+- **The backend no longer sits at 640MB.** `lifetime_tokens` built every
+  transcript's full conversation — every message body — on the way to four
+  integers, and `_records` held each file twice (the text and its line
+  list). Measured after one Stats visit: 644MB resident, and it stayed there.
+  Now a usage-only scan (`scan_usage`, held equal to `read` by a test) over a
+  line-streamed reader: 78MB after Stats, index, search, history, brief and
+  five more cycles.
+- **A session that never started can be restarted.** A pane whose backend
+  was down, or whose spawn failed, printed its message and then swallowed
+  every keystroke; the key handler was registered after the spawn. It is now
+  registered first, both failures say `press r to try again`, and a backend
+  that *refused* (HTTP 400, a directory that does not exist) is told apart
+  from a backend that is not there.
+
 And one lesson for the probes rather than the product: a long burst of input
 ending in `\r` trips the CLI's paste detection, and Enter becomes a newline.
 The e2e probe sends the text, waits, then sends Enter — which is what a person

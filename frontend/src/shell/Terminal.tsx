@@ -16,7 +16,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import '@xterm/xterm/css/xterm.css'
-import { del, get, post } from './engine'
+import { del, getResult, post } from './engine'
 import type { Mode } from './domain'
 
 /** Read a design token, so the terminal cannot drift from the rest of the UI. */
@@ -198,16 +198,43 @@ export function Terminal({
       // this. Stop before touching a terminal the cleanup has already taken.
       if (!live) return
 
-      const args = await get<{ binary: string; args: string[]; env?: Record<string, string> }>(
+      /* Keys go to the process -- or, once there is no process, to the
+       * restart control. Registered before anything that can fail, so a
+       * session that never started is as recoverable as one that ended:
+       * the first version registered this after the spawn, and a pane whose
+       * backend was down printed its message and then ate every keystroke,
+       * `r` included. */
+      term_.onData((d) => {
+        if (dead.current) {
+          if (d === 'r' || d === 'R') { setDead(false); setGeneration((g) => g + 1) }
+          return
+        }
+        void invoke('pty_write', { id, data: d })
+      })
+      const stillborn = (...lines: string[]) => {
+        for (const l of lines) term_.writeln(l)
+        term_.writeln('\r\n\x1b[2m  press \x1b[0mr\x1b[2m to try again\x1b[0m')
+        setDead(true)
+      }
+
+      const fetched = await getResult<{ binary: string; args: string[]; env?: Record<string, string> }>(
         `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`
         + (resumeRef.current ? `&resume_id=${encodeURIComponent(resumeRef.current)}` : '')
         + (prompt ? `&prompt=${encodeURIComponent(prompt)}` : ''))
       if (!live) return
-      if (!args) {
-        term_.writeln('\r\n  the backend did not answer, so this session has no')
-        term_.writeln('  methodology to start with. `make doctor` says whether it is up.\r\n')
+      if (!fetched.ok) {
+        // Two different failures that the first version reported as one.
+        // A backend that is down is not a backend that said no.
+        if (fetched.kind === 'offline') {
+          stillborn('\r\n  the backend did not answer, so this session has no',
+                    '  methodology to start with. `make doctor` says whether it is up.')
+        } else {
+          stillborn(`\r\n  the backend refused this session (HTTP ${fetched.status}).`,
+                    `  ${fetched.status === 400 ? `is ${cwd} a directory that exists?` : 'its log says why.'}`)
+        }
         return
       }
+      const args = fetched.data
 
       if (!live) return
       const unData = await listen<{ id: string; b64: string }>('pty:data', (e) => {
@@ -275,19 +302,9 @@ export function Terminal({
           rows: term_.rows, cols: term_.cols,
         })
       } catch (e) {
-        term_.writeln(`\r\n  could not start the engine: ${String(e)}\r\n`)
+        stillborn(`\r\n  could not start the engine: ${String(e)}`)
         return
       }
-
-      term_.onData((d) => {
-        // Once the engine is gone there is nothing to write to, so the
-        // terminal's own keys become the restart control.
-        if (dead.current) {
-          if (d === 'r' || d === 'R') { setDead(false); setGeneration((g) => g + 1) }
-          return
-        }
-        void invoke('pty_write', { id, data: d })
-      })
 
       const ro = new ResizeObserver(() => {
         /* Guarded like the explicit fits above, and for a reason found in the
