@@ -307,6 +307,43 @@ Genuinely unresolved. Not gaps to silently fill.
 3. ~~**The v2 checkpoint** — *"do I still open Desktop?"*~~ **Closed 2026-09-12: passed.** The shell has been the daily driver since 2026-09-08. Recorded late deliberately — until 09-11 the answer was contaminated, because Faber inside Noctis could not do build work and the fallback to Desktop was therefore forced rather than chosen. With that fixed the question could be asked cleanly, and the answer held.
 4. **`seven_day_opus` window** — present in the CLI binary and the statusline schema, absent from an observed Haiku run. Unverified.
 5. **`--input-format stream-json` as a persistent bidirectional session** — untested. Would address spawn-per-turn latency (~1.9s).
+7. **Should the conversation surface be a PTY rather than `stream-json`?** *Opened
+2026-09-13, undecided, and the largest question on this list.* Noctis does not
+stream a running CLI — it drives `-p`, which the CLI's own help calls "print
+response and exit", once per turn. Most of the orchestrator exists to rebuild,
+on top of a scripting mode, the loop the interactive mode already has. Running
+`claude` in a pseudo-terminal instead would delete that reconstruction and give
+the real thing.
+
+**This was considered and rejected twice, and the rejection is now stale.**
+`Modes.md` (2026-07-19) calls PTY capture "the original trap" and defers "full
+terminal mirroring" to a v2 that "if ever wanted" should use octogent's PTY code;
+the v2 spec's deferral table drops "PTY mirroring" outright. Both were correct
+*under the fire-and-forget premise* — the interface launched sessions in
+Terminal.app and VS Code and read state back from files, so a PTY meant scraping
+a terminal Noctis did not own. **v2 replaced that premise**: the app hosts its
+sessions now. Under hosting, a PTY is not mirroring, it is simply how an
+interactive process is run. The decision was never re-derived when the thing it
+rested on was removed, which is the failure `dev.md`'s completeness check exists
+to catch — a decision outliving its premise.
+
+Four load-bearing assumptions were tested on 2026-09-13 rather than argued:
+chrome can drive the terminal (`/status` injected into a PTY rendered correctly,
+survived resize, exited with no orphans); the `statusLine` command delivers
+`rate_limits.five_hour`/`seven_day`, `context_window`, `effort`, `cost`,
+`session_id` and `transcript_path` as JSON from an interactive session; the CLI
+writes a complete transcript per session to `~/.claude/projects/**/*.jsonl`
+carrying messages, tool calls, thinking, per-turn `usage` and its own `aiTitle`;
+and `/status` reports `Login method: Claude Pro account`, so the subscription
+premise is unchanged. One measurable regression was found: the JSONL carries no
+`modelUsage`, so the background tier — 141k input tokens across 100 turns in the
+current store — would be undercounted, which is the same defect fixed on
+2026-09-08. `CLAUDE_CODE_ENABLE_TELEMETRY` and `claude_code.token.usage` are the
+candidate third source and would add an OTel collector.
+
+Full impact review, capability by capability: `PTY-MIGRATION.md`. Not decided,
+and deliberately not started — the spike code is throwaway.
+
 6. **Should a session outlive its window?** VS Code's model: the pty host owns long-running work, so a window reload reattaches rather than losing it. Noctis binds a session's lifetime to the HTTP request, so closing a tab kills the turn. Detaching would fix that and creates eight problems worth naming before it is built — unwatched budget burn, no stop control once the window is gone, orphans counting invisibly against the cap, who owns the stream on reattach, an unbounded or lossy replay buffer, nothing ending an abandoned session, **unwatched writes with no reachable permission dialog**, and the fact that sessions are subprocesses of uvicorn so it would not survive a backend restart anyway.
 
 ---
