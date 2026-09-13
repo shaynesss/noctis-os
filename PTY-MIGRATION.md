@@ -157,27 +157,50 @@ turns, so the *condition* largely stops arising — but the explicit `silent`
 block kind and the closing pass would go with it. Removal of a workaround,
 not of a feature.
 
-### The one measurable regression
+### The background tier — measured, and not decision-relevant
 
-**The background tier.** `store.usage` currently holds `aux_input_tokens` =
-141,195 and `aux_output_tokens` = 4,223 for Opus — the CLI's own background
-calls, sourced from `modelUsage` on the `result` event. **The JSONL has no
-`modelUsage`**: it carries only the primary model's usage. Lifetime figures
-would undercount by roughly 1,400 input tokens per turn — the identical defect
-fixed on 2026-09-08.
+**Resolved 2026-09-13. Decision: lifetime tokens come from the JSONL, the
+`aux_*` columns go, and Stats shows one honest total with no split.**
 
-Three options, none free:
+`modelUsage` is absent from the JSONL, so the CLI's own background calls —
+titles, quota checks — would not be counted. The first draft of this document
+called that "the one measurable regression" and put the whole decision on it,
+quoting `aux_input_tokens = 141,195` as if the absolute number meant something.
+Measured against the total it does not:
 
-1. Accept it and say so in the UI. Cheapest, and dishonest about a number
-   whose whole job is answering "what have I used".
-2. `CLAUDE_CODE_ENABLE_TELEMETRY` with `claude_code.token.usage`. Correct and
-   complete; adds an OTel collector to a single-user local app.
-3. Keep `cost.total_cost_usd` from `statusLine` as the authoritative per-session
-   figure and drop the per-tier breakdown. Loses the split that made the
-   undercount visible in the first place.
+```
+lifetime primary   82,174,586
+lifetime aux          146,327
+aux as % of total       0.178%      (1,230 tokens/turn over 119 turns)
+```
 
-**This is the open question the decision should turn on.** Everything else
-either survives or improves.
+**A fifth of one percent.** `CLAUDE_CODE_ENABLE_TELEMETRY` with
+`claude_code.token.usage` would recover it exactly and costs an OTel collector
+in a single-user local app — not a trade worth making for 0.178%. Nor is a
+caveat in the UI: an asterisk on a number this accurate makes it read as less
+trustworthy than it is.
+
+What the JSONL measures is *conversation* tokens, which is what the Stats page
+is asked about. One number, no split, no footnote.
+
+*Method note, because it is the reason the first draft was wrong: a large
+absolute figure was compared against nothing. The per-session reconciliation
+that would have caught it earlier is also confounded — a session Noctis
+streamed and that later continued in VS Code shows a JSONL total 3× the
+store's, because the store only ever saw the turns it hosted.*
+
+### The real risk, and the spike must settle it
+
+**Not every session writes a transcript.** Of 73 sessions in the store with an
+engine id, **23 have a JSONL on disk**. The missing 50 are `-p` spawns, which
+is the mode being left behind, and interactive sessions demonstrably do write
+them — 128 files, the current one at 14MB. But history would move from
+something Noctis records itself to something it *reads*, and that only works if
+the file is always there.
+
+The spike must confirm: does every PTY session write a transcript, including a
+very short one, one killed mid-turn, and one resumed? If the answer is no,
+history needs a fallback and this gets much less attractive.
 
 ---
 
@@ -222,11 +245,24 @@ than inference, and titles come free.
 
 ## 7. Recommendation
 
-Decide on §4's background-tier question first — it is the only place the
-proposal actually loses something, and options 1–3 differ enough to change
-whether this is worth doing.
+With the token question settled at 0.178%, nothing measured so far argues
+against this. The open risk is transcript coverage (§4), and it is a spike
+question rather than a design question.
 
-If that resolves, the sequence is: PTY host behind a setting, alongside the
-current transcript → statusLine receiver → JSONL indexer writing the same
-tables → switch the default → delete the orchestrator once nothing reads it.
-Never a cutover.
+Sequence, and never a cutover:
+
+1. **PTY host behind a setting**, alongside the existing transcript. Both paths
+   work; you switch per tab.
+2. **`statusLine` receiver** — one endpoint, and the status bar stops depending
+   on the stream even before the migration lands.
+3. **JSONL indexer** writing the same SQLite tables, so search, Stats and
+   history keep their queries. Run it beside the current recorder and diff the
+   two for a week.
+4. **Switch the default** once the diff is boring.
+5. **Delete the orchestrator** only when nothing reads it — the 2026-09-12
+   cutover removed `launch_config/` while a guard still required it and broke
+   every spawn, which is the mistake this ordering exists to avoid.
+
+Steps 2 and 3 are worth doing **regardless of the decision**: the status bar
+should survive a reload today, and an indexer that agrees with the recorder is
+the cheapest possible proof that step 4 is safe.

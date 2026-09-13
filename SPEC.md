@@ -335,11 +335,22 @@ survived resize, exited with no orphans); the `statusLine` command delivers
 writes a complete transcript per session to `~/.claude/projects/**/*.jsonl`
 carrying messages, tool calls, thinking, per-turn `usage` and its own `aiTitle`;
 and `/status` reports `Login method: Claude Pro account`, so the subscription
-premise is unchanged. One measurable regression was found: the JSONL carries no
-`modelUsage`, so the background tier — 141k input tokens across 100 turns in the
-current store — would be undercounted, which is the same defect fixed on
-2026-09-08. `CLAUDE_CODE_ENABLE_TELEMETRY` and `claude_code.token.usage` are the
-candidate third source and would add an OTel collector.
+premise is unchanged.
+
+**Settled 2026-09-13 — lifetime tokens come from the JSONL, and Stats shows one
+honest total with no per-tier split.** The JSONL carries no `modelUsage`, so the
+CLI's background calls go uncounted; measured, that is 146,327 tokens against
+82,174,586, or **0.178%**. `CLAUDE_CODE_ENABLE_TELEMETRY` would recover it
+exactly at the price of an OTel collector in a single-user app, which is not a
+trade worth making at that scale — and a footnote on a number this accurate
+would make it read as less trustworthy than it is. The `aux_input_tokens` /
+`aux_output_tokens` columns retire with the migration.
+
+**The open risk is transcript coverage, not tokens.** 23 of 73 stored sessions
+have a JSONL on disk; the other 50 are `-p` spawns, the mode being left. History
+would move from something Noctis records to something it reads, so the spike
+must show that every PTY session writes a transcript — including a short one,
+one killed mid-turn, and a resumed one.
 
 Full impact review, capability by capability: `PTY-MIGRATION.md`. Not decided,
 and deliberately not started — the spike code is throwaway.
