@@ -113,6 +113,7 @@ pub fn pty_spawn(
     cwd: String,
     args: Vec<String>,
     binary: Option<String>,
+    env: Option<HashMap<String, String>>,
     rows: u16,
     cols: u16,
 ) -> Result<(), String> {
@@ -148,11 +149,16 @@ pub fn pty_spawn(
     }
     cmd.cwd(&cwd);
     cmd.env("TERM", "xterm-256color");
-    // The engine reads this the same way a `-p` spawn does, so the telemetry
-    // hooks keep attributing actions to the right mode.
-    if let Some(m) = args.iter().position(|a| a == "--noctis-mode") {
-        if let Some(v) = args.get(m + 1) {
-            cmd.env("NOCTIS_MODE", v);
+    // The environment the backend asked for, beside the argv it asked for.
+    // NOCTIS_MODE and NOCTIS_JOB_ID are what the telemetry hooks read to
+    // attribute an action to a mode and a job; a PTY child otherwise
+    // inherits *this* process's environment, and a vesper session was
+    // logging under whatever mode the shell happened to have. The first
+    // version scanned the argv for a `--noctis-mode` flag the backend never
+    // sent -- and which the engine would have rejected if it had.
+    if let Some(vars) = env {
+        for (k, v) in vars {
+            cmd.env(k, v);
         }
     }
 

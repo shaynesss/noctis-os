@@ -121,9 +121,18 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
     if prompt and prompt.strip():
         args.append(prompt)
 
+    # The environment beside the argv. The telemetry hooks attribute an
+    # action to a mode and a job by reading these; a PTY child otherwise
+    # inherits the shell process's environment, and a vesper session was
+    # found logging under `faber` -- whatever the shell happened to have.
+    env = {"NOCTIS_MODE": mode}
+    if slug := jobs.find_job_for_cwd(mode, Path(cwd)):
+        env["NOCTIS_JOB_ID"] = slug
+
     return {
         "binary": claude_binary(),
         "args": args,
+        "env": env,
         "cwd": cwd,
         "mode": mode,
         "model": MODE_MODELS[mode],

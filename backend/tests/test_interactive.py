@@ -67,3 +67,14 @@ def test_resume_is_passed_through():
 def test_an_unknown_mode_is_refused_here_not_at_spawn():
     with pytest.raises(ValueError):
         interactive.spawn_args("nonsense", "/tmp")
+
+
+def test_the_environment_names_the_mode_for_the_hooks():
+    """The telemetry hooks attribute an action by reading NOCTIS_MODE. A PTY
+    child inherits the shell process's environment, and the end-to-end sweep
+    found a vesper session logging under faber -- whatever the shell had.
+    The environment travels beside the argv, from the same place."""
+    for mode in MODE_MODELS:
+        env = interactive.spawn_args(mode, "/tmp")["env"]
+        assert env["NOCTIS_MODE"] == mode
+        assert "NOCTIS_JOB_ID" not in env      # /tmp is nobody's project

@@ -198,7 +198,7 @@ export function Terminal({
       // this. Stop before touching a terminal the cleanup has already taken.
       if (!live) return
 
-      const args = await get<{ binary: string; args: string[] }>(
+      const args = await get<{ binary: string; args: string[]; env?: Record<string, string> }>(
         `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`
         + (resumeRef.current ? `&resume_id=${encodeURIComponent(resumeRef.current)}` : '')
         + (prompt ? `&prompt=${encodeURIComponent(prompt)}` : ''))
@@ -271,7 +271,7 @@ export function Terminal({
       spawnedAt.current = Date.now()
       try {
         await invoke('pty_spawn', {
-          id, cwd, args: args.args, binary: args.binary,
+          id, cwd, args: args.args, binary: args.binary, env: args.env ?? null,
           rows: term_.rows, cols: term_.cols,
         })
       } catch (e) {
