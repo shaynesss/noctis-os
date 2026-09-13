@@ -1339,3 +1339,33 @@ def test_interactive_args_refuse_an_unknown_mode(client):
     r = client.get("/v2/sessions/interactive-args",
                    params={"mode": "nonsense", "cwd": "/tmp"}, headers=AUTH)
     assert r.status_code == 400
+
+
+def test_a_status_line_report_is_filed_under_its_slot(client):
+    """The shell's strip asks for its own terminal's reading by the name it
+    gave the terminal, because the session id is not known to the shell until
+    this very report arrives."""
+    client.post("/v2/sessions/statusline?mode=faber&slot=term-a", headers=AUTH,
+                json={"session_id": "s-a", "model": {"id": "claude-sonnet-5"}})
+    got = client.get("/v2/sessions/statusline?slot=term-a", headers=AUTH).json()["payload"]
+    assert got["model"]["id"] == "claude-sonnet-5"
+    assert "reported_at" in got, "the bar shows the reading's age"
+    # A '-' slot means the shell gave none; fall back to the session id.
+    client.post("/v2/sessions/statusline?slot=-", headers=AUTH, json={"session_id": "s-b"})
+    assert client.get("/v2/sessions/statusline?session_id=s-b", headers=AUTH
+                      ).json()["payload"] is not None
+
+
+def test_limits_carry_when_they_were_last_reported(client):
+    """An idle terminal re-reports the same figure while other sessions move
+    the account on. The age is what makes a stale reading look stale rather
+    than wrong -- and it must not advance just because the bar polled."""
+    payload = {"session_id": "s-1",
+               "rate_limits": {"five_hour": {"used_percentage": 33, "resets_at": 1},
+                               "seven_day": {"used_percentage": 12, "resets_at": 2}}}
+    client.post("/v2/sessions/statusline", json=payload, headers=AUTH)
+    first = client.get("/v2/sessions/limits", headers=AUTH).json()["reported_at"]
+    again = client.get("/v2/sessions/limits", headers=AUTH).json()["reported_at"]
+    assert first == again, "polling is not a new reading"
+    client.post("/v2/sessions/statusline", json=payload, headers=AUTH)
+    assert client.get("/v2/sessions/limits", headers=AUTH).json()["reported_at"] >= first

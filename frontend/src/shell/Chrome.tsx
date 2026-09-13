@@ -463,6 +463,11 @@ export interface LiveLimits {
   five_hour: { used: number; resets_at: number }
   seven_day: { used: number; resets_at: number }
   using_overage?: boolean
+  /** Unix seconds when this reading arrived at the backend. A hosted session
+   *  only learns the windows from its own API responses, so an idle terminal
+   *  repeats one figure while other sessions move the account on -- the age
+   *  is what makes that read as stale rather than wrong. */
+  reported_at?: number
 }
 
 /* Shown only past the plan's limits.
@@ -583,6 +588,16 @@ export function StatusBar({ limits, state }: { limits?: LiveLimits | null; state
                   actually blocks you inside a working day; the 7d window
                   resets on a horizon no decision turns on. */}
               <span className="ml-[5px] text-ink-faint">↻ {until(limits!.five_hour.resets_at, now)}</span>
+              {/* How old the reading is, once it is old enough to matter. A
+                  hosted session only learns these from its own API responses,
+                  so a terminal sitting at its prompt repeats one figure while
+                  other sessions move the account on. Shown from a minute, so
+                  a fresh reading is just a number and a stale one says so. */}
+              {limits!.reported_at != null && now / 1000 - limits!.reported_at >= 60 && (
+                <span className="ml-[5px] text-ink-faint">
+                  · {Math.floor((now / 1000 - limits!.reported_at) / 60)}m ago
+                </span>
+              )}
             </>
           )}
         </Seg>

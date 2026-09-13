@@ -188,7 +188,7 @@ export function Terminal({
       if (!live) return
 
       const args = await get<{ binary: string; args: string[] }>(
-        `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}`)
+        `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`)
       if (!live) return
       if (!args) {
         term_.writeln('\r\n  the backend did not answer, so this session has no')

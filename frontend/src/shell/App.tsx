@@ -17,6 +17,14 @@ import {
   type Stats as StatsPayload, type Window,
 } from './engine'
 import { Terminals } from './Terminals'
+
+/** What a terminal's statusLine reports, the parts the bar reads. */
+interface TermReport {
+  model?: { id?: string; display_name?: string }
+  context_window?: { used_percentage?: number | null }
+  workspace?: { current_dir?: string }
+  effort?: { level?: string }
+}
 import { Unreachable } from './Async'
 import { useFetched } from './useFetched'
 import { hasImage } from './clipboard'
@@ -144,6 +152,36 @@ export default function App() {
   const [limits, setLimits] = useState<
     { five_hour: Window; seven_day: Window; using_overage?: boolean } | null
   >(null)
+
+  /* The active terminal's own report, for the bar.
+   *
+   * The bar's cwd, model and context come from the Chat tab's session
+   * (below), and that is right while Chat is showing. With a terminal
+   * showing it is wrong in a way that looks like a bug: `/model` inside the
+   * terminal changed the engine's model and the bar kept naming the Chat
+   * tab's, and ctx read `—` because no Chat turn was in flight. The
+   * terminal's statusLine payload carries all three, keyed by the slot name
+   * the strip gave it, so the bar reads that instead while the terminal is
+   * the thing on screen. */
+  const [termSlot, setTermSlot] = useState<string | null>(null)
+  const [termBar, setTermBar] = useState<TermReport | null>(null)
+  useEffect(() => {
+    if (view !== 'terminal' || !termSlot) {
+      setTermBar(null)
+      return
+    }
+    let alive = true
+    const read = () =>
+      void get<{ payload: TermReport | null }>(
+        `/v2/sessions/statusline?slot=${encodeURIComponent(termSlot)}`,
+      ).then((d) => { if (alive) setTermBar(d?.payload ?? null) })
+    read()
+    const id = setInterval(read, 4000)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [view, termSlot])
 
   /* Seed it from the backend, which has been remembering this all along.
    *
@@ -1205,7 +1243,7 @@ export default function App() {
             dies with its component, so this cannot live inside the ternary
             above the way the panels do. */}
         <Terminals hidden={view !== 'terminal'} mode={session.mode}
-                   cwd={activeCwd} accent={accent} />
+                   cwd={activeCwd} accent={accent} onActive={setTermSlot} />
 
         </div>
       </div>
@@ -1217,7 +1255,18 @@ export default function App() {
            what makes it resumable, and so what makes the mode genuinely
            "open" rather than merely selected. */
         open={tabs.filter((t) => sessions[t.id]?.engineId).map((t) => sessions[t.id].mode)}
-        state={{
+        state={termBar ? {
+          /* The terminal on screen, not the Chat tab behind it. Every field
+             here is what the CLI itself last reported, so `/model` inside
+             the terminal moves this the next time the status line runs. */
+          live: live ?? undefined,
+          cwd: shortenHome(termBar.workspace?.current_dir ?? activeCwd),
+          model: termBar.model?.id ?? termBar.model?.display_name ?? '—',
+          branch,
+          context: termBar.context_window?.used_percentage == null
+            ? null
+            : termBar.context_window.used_percentage / 100,
+        } : {
           live: live ?? undefined,
           cwd: shortenHome(activeCwd),
           /* The session's override if it has one, else the mode's default
@@ -1234,6 +1283,11 @@ export default function App() {
           context: session.context ?? null,
         }}
       >
+        {/* Not under a terminal. The composer sends to a Chat session, and
+            sitting beneath a terminal that has its own prompt it reads as a
+            second place to type -- one that would send your words to
+            General instead. */}
+        {view !== 'terminal' && (
         <Composer
             ref={composerRef}
             mode={composerMode}
@@ -1266,6 +1320,7 @@ export default function App() {
               })
             }
         />
+        )}
       </BottomBar>
 
       {picker === 'model' && (

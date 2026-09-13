@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -282,15 +283,18 @@ def list_sessions() -> dict:
 
 
 @router.get("/interactive-args")
-def interactive_args(mode: str, cwd: str, resume_id: str | None = None) -> dict:
+def interactive_args(mode: str, cwd: str, resume_id: str | None = None,
+                     slot: str | None = None) -> dict:
     """The argv for a session the shell hosts in a pseudo-terminal.
 
     The Rust side owns the terminal and knows nothing about modes; this owns
     the mode and knows nothing about terminals. See `interactive.py` for why
-    this is not `build_command` with a flag.
+    this is not `build_command` with a flag. `slot` is the shell's name for
+    the terminal, baked into the status-line command so reports come back
+    labelled with it.
     """
     try:
-        return interactive.spawn_args(mode, cwd, resume_id)
+        return interactive.spawn_args(mode, cwd, resume_id, slot=slot)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -325,7 +329,8 @@ def index_transcripts() -> dict:
 
 
 @router.post("/statusline")
-async def statusline(payload: dict, mode: str | None = None) -> dict:
+async def statusline(payload: dict, mode: str | None = None,
+                     slot: str | None = None) -> dict:
     """Where an interactive session reports what the stream used to.
 
     Claude Code runs the configured `statusLine` command on every render and
@@ -341,7 +346,13 @@ async def statusline(payload: dict, mode: str | None = None) -> dict:
     the middle of somebody's session.
     """
     sid = str(payload.get("session_id") or "unknown")
-    _statusline[sid] = payload
+    # Stamped here rather than trusted from the payload: the CLI reports what
+    # it last learned from an API response, and the bar shows how old that is.
+    payload["reported_at"] = time.time()
+    # Keyed by the shell's slot name when it gave one, so the strip can ask
+    # for its own terminal's reading; the session id is the fallback for a
+    # session the shell did not start.
+    _statusline[slot if slot and slot != "-" else sid] = payload
     if mode in MODE_MODELS and sid != "unknown":
         _mode_of[sid] = mode
 
@@ -362,8 +373,14 @@ async def statusline(payload: dict, mode: str | None = None) -> dict:
 
 
 @router.get("/statusline")
-def statusline_read(session_id: str | None = None) -> dict:
-    """The newest status-line reading, for the bar."""
+def statusline_read(session_id: str | None = None, slot: str | None = None) -> dict:
+    """The newest status-line reading, for the bar.
+
+    By slot when the shell asks for one of its own terminals; by session id
+    for anything else; the newest of all when neither is given.
+    """
+    if slot:
+        return {"payload": _statusline.get(slot)}
     if session_id:
         return {"payload": _statusline.get(session_id)}
     newest = max(_statusline.values(), key=lambda p: p.get("cost", {}).get(
@@ -379,16 +396,30 @@ def limits() -> dict:
     otherwise render identically, and the difference decides whether there
     is room to start another session.
     """
+    global _limits_seen
     lim = _manager.limits
     if lim is None:
         return {"known": False, "five_hour": None, "seven_day": None,
                 "using_overage": False}
+    # When this reading arrived, tracked by identity so it is right whichever
+    # door it came through -- a stream event replaces the object, a status
+    # line replaces the object, and either way a new object is a new reading.
+    # The bar shows the age, because a hosted session only learns the windows
+    # from its own API responses: an idle terminal reports the same figure
+    # for as long as it sits there while other sessions move the account on.
+    # "33%, 4m ago" is honest; "33%" beside a CLI showing 36% looks broken.
+    if _limits_seen is None or _limits_seen[0] is not lim:
+        _limits_seen = (lim, time.time())
     return {
         "known": True,
         "five_hour": {"used": lim.five_hour_used, "resets_at": lim.five_hour_resets_at},
         "seven_day": {"used": lim.seven_day_used, "resets_at": lim.seven_day_resets_at},
         "using_overage": lim.using_overage,
+        "reported_at": _limits_seen[1],
     }
+
+
+_limits_seen: tuple[object, float] | None = None
 
 
 @router.get("/stats")

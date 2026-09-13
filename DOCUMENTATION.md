@@ -657,9 +657,26 @@ the capture phase, before xterm, and binds Shift+Tab, Escape and the arrows —
 all of which Claude Code's TUI uses. Every ⌘-chord (⌘K/T/W/⇧H/1–9) stays with
 the shell; everything without ⌘ passes through. VS Code's split.
 
-**The status bar is live.** `/v2/sessions/limits` is read on the same
-four-second cadence as the live counter, so a terminal session's `statusLine`
-reports reach the bar rather than sitting in the backend until a reload.
+**The status bar is live, and reads the terminal on screen.** `/v2/sessions/limits`
+is polled on the same four-second cadence as the live counter. With a terminal
+showing, the bar's cwd, model and context come from that terminal's own
+`statusLine` report — keyed by the slot name the strip gave it, which rides
+out in the status-line command and comes back with each report — rather than
+from the Chat tab behind it. `refreshInterval: 5` keeps an idle terminal
+reporting, so `/model` inside it reaches the bar without a redraw.
+
+**A reading has an age.** A hosted session only learns the 5h/7d windows from
+its own API responses, so an idle terminal repeats one figure while other
+sessions move the account on — 33% in the bar beside 36% in the CLI. Nothing
+can make that fresher without an API call, so the bar says "· 4m ago" once a
+reading is a minute old. `reported_at` is stamped by identity on the backend,
+so it is right whichever door the reading came through and does not advance
+just because the bar polled.
+
+The Chat composer is not rendered under a terminal — it sends to General, and
+beneath a terminal with its own prompt it read as a second place to type.
+Terminal labels are positional (1, 2, 3 for whatever is open); the first
+version showed lifetime ordinals from a counter that StrictMode double-ran.
 
 **Styling is the shell's.** xterm.js ships no look of its own: the theme is
 generated from `tokens.css`, so ground, ink and the character accents are the

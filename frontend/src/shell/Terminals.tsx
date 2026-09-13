@@ -17,7 +17,7 @@
  * `if terminal`, and PTY-MIGRATION.md §7 is explicit that the two surfaces
  * run beside each other until one is clearly better, not entangled.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Terminal } from './Terminal'
 import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
@@ -25,24 +25,31 @@ interface Slot {
   id: string
   mode: Mode
   cwd: string
-  /** Display ordinal. Stable for the slot's life, never reused. */
-  n: number
 }
 
-let counter = 0
-const slot = (mode: Mode, cwd: string): Slot => {
-  counter += 1
-  return { id: `term-${mode}-${counter}`, mode, cwd, n: counter }
-}
+/* An id with no counter behind it.
+ *
+ * The first version numbered slots from a module-level counter, and showed
+ * that number as the label. Two things went wrong at once: the counter was
+ * bumped inside a `useState` initializer, which StrictMode runs twice, so the
+ * first terminal could be "2"; and closing a terminal left a hole, so the
+ * strip read "general · 1, general · 4" with nothing in between and no way
+ * to tell whether something had gone missing. Ids are random and labels are
+ * positional now -- the strip shows 1, 2, 3 for whatever is open. */
+const slot = (mode: Mode, cwd: string): Slot =>
+  ({ id: `term-${mode}-${crypto.randomUUID().slice(0, 8)}`, mode, cwd })
 
-export function Terminals({ mode, cwd, accent, hidden }: {
+export function Terminals({ mode, cwd, accent, hidden, onActive }: {
   mode: Mode
   cwd: string
   accent: string
   hidden: boolean
+  /** Which terminal is showing, so the status bar can read its report. */
+  onActive?: (id: string | null) => void
 }) {
   const [slots, setSlots] = useState<Slot[]>(() => [slot(mode, cwd)])
   const [active, setActive] = useState<string>(() => slots[0].id)
+  useEffect(() => { onActive?.(active || null) }, [active, onActive])
 
   const add = () => {
     // Opens in the mode and directory the shell is currently on, which is
@@ -66,7 +73,7 @@ export function Terminals({ mode, cwd, accent, hidden }: {
       {/* The strip. Same height token as the tab bar above it so the two
           read as one system rather than two bars of nearly equal size. */}
       <div className="flex h-[34px] shrink-0 items-center gap-[2px] border-b border-line px-[8px] font-mono text-[11px]">
-        {slots.map((s) => {
+        {slots.map((s, i) => {
           const on = s.id === active
           return (
             <div
@@ -77,7 +84,7 @@ export function Terminals({ mode, cwd, accent, hidden }: {
             >
               <button type="button" onClick={() => setActive(s.id)} className="flex items-center gap-[7px]">
                 <span className="h-[7px] w-[7px] rounded-[2px]" style={{ background: MODE_ACCENT[s.mode] }} />
-                <span>{MODE_LABEL[s.mode].toLowerCase()} · {s.n}</span>
+                <span>{MODE_LABEL[s.mode].toLowerCase()} · {i + 1}</span>
               </button>
               <button
                 type="button"

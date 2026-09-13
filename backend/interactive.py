@@ -37,7 +37,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 STATUSLINE = REPO_ROOT / "backend" / "scripts" / "statusline.sh"
 
 
-def statusline_settings(mode: str = "general", port: int | None = None) -> dict:
+def statusline_settings(mode: str = "general", port: int | None = None,
+                        slot: str | None = None) -> dict:
     """The tracked policy plus a status line that reports back here.
 
     `statusLine` is how an interactive session hands over what the stream used
@@ -55,14 +56,26 @@ def statusline_settings(mode: str = "general", port: int | None = None) -> dict:
     # record which Noctis mode launched a session -- its `mode` field is the
     # CLI's permission mode -- so this is the one place the mapping can be
     # captured, at the moment the session first identifies itself.
+    # The slot too: the shell's terminal strip needs to know which of its
+    # terminals a report belongs to, and the session id is not known to the
+    # shell until this very report arrives -- so the shell's own name for the
+    # terminal rides out and comes back.
+    #
+    # `refreshInterval` keeps an idle terminal reporting. Without it the
+    # status line only re-runs when the CLI redraws, so a session sitting at
+    # its prompt after `/model` never told the bar its model changed. It
+    # cannot make the rate-limit figures fresher than the session's last API
+    # response -- nothing can -- which is why the bar shows the reading's age.
     policy["statusLine"] = {
         "type": "command",
-        "command": f"bash {STATUSLINE} {port or os.environ.get('PORT', '8000')} {mode}",
+        "command": f"bash {STATUSLINE} {port or os.environ.get('PORT', '8000')} {mode} {slot or '-'}",
+        "refreshInterval": 5,
     }
     return policy
 
 
-def spawn_args(mode: str, cwd: str, resume_id: str | None = None) -> dict:
+def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
+               slot: str | None = None) -> dict:
     """Everything the shell needs to open one interactive session.
 
     Returns the binary separately from the arguments because the Rust side
@@ -84,7 +97,7 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None) -> dict:
         args += ["--agents", agents]
 
     args += ["--mcp-config", mcp_config()]
-    args += ["--settings", json.dumps(statusline_settings(mode))]
+    args += ["--settings", json.dumps(statusline_settings(mode, slot=slot))]
 
     # The vault, always. A session sandboxed to its working directory cannot
     # read its own methodology, job context or lessons -- all of which live
