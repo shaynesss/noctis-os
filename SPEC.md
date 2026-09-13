@@ -46,19 +46,19 @@ Two halves, deliberately unequal:
 
 ## PRD
 
-### Chat client
+### Session surface
 
-Terminal-shaped: prompt, visible activity, tool calls inline, prose output.
+**The real CLI, in a terminal.** A session is `claude` interactive in a pseudo-terminal the shell owns, rendered by xterm.js in Noctis's palette: its own prompt, its own tool display, its own permission questions, its own thinking indicator. Nothing is reimplemented; the composer, the block transcript and the permission dialog that used to stand in for these are gone with the `-p` orchestrator (EDD, "Session host").
 
-**Visible thinking means visible *activity*, not text.** Models default to `display: "omitted"`, so reasoning is billed but never returned and no flag changes it. What is available: a live token estimate that climbs during a pause, and a final count on the turn. The transcript shows a thinking row with a counter and duration.
+**Several at once.** A strip of terminals, positional labels, `⌘T` opens one in a mode and a directory, `⌘W` closes, `⌘1–9` selects. The arrangement is remembered and comes back resumed.
 
-**Composer is a real text field**, not a readline editor — click to place the caret, drag to select, ⌘← to line start, standard undo. This is one of the concrete answers to "why not just use the CLI". Enter sends, ⇧Enter newlines, ⌘K opens commands.
+**History is read-only and resumable.** `⌘K` searches history and the vault; a past conversation opens as blocks from the store, with one action — resume in a terminal.
 
-**Status block, four rows.** cwd · branch · model · clock. Context % · 5h and 7d windows with reset countdowns · live/max sessions. Mode state. Artifact chips.
+**Status block, four rows.** cwd · branch · model · clock. Context % · 5h and 7d windows with reset countdowns and the reading's age · live/max sessions. Mode state. Every figure comes from the terminal's own `statusLine` report.
 
 **No cost is displayed as spend.** Under a subscription the figure is notional and never charged. Limits are the real currency. Settings shows a lifetime list-price total, stated outright as not charged; the column is named `list_cost_usd` and `/v2/billing` returns `charged: false`, so the UI has no excuse to render it as a bill. **Overage is the one exception that can mean money** and the only thing that raises a banner.
 
-**Table stakes:** searchable history · attachments · artifacts panel · edit/regenerate · search.
+**Table stakes:** searchable history · handoff between modes · search.
 
 ### Modes
 
@@ -80,7 +80,7 @@ Five session configurations. They differ by **methodology and model, never by ca
 
 ### The rest of the surface
 
-**Rail:** Brief · Chat · Stats · Inbox · Settings. *(The vault spec omits Chat; the build has it.)*
+**Rail:** Brief · Terminal · Stats · Inbox · Settings.
 
 **Maintenance** — root-level `second-brain/maintenance/`, not a mode folder. Retains Audit → Propose → Apply and propose-never-commit.
 
@@ -285,9 +285,9 @@ Full reasoning: `second-brain/wiki/Harness Portability.md`.
 
 | Token | Value | Use |
 |---|---|---|
-| `--color-ground` | `rgba(15,15,15,0.72)` | app background, over the material |
-| `--color-surface` | `rgba(22,22,22,0.80)` | panels, rail, cards |
-| `--color-elevated` | `rgba(28,28,28,0.88)` | inputs, hover, active tab |
+| `--color-ground` | `rgba(15,15,15,0.42)` | app background, over the material |
+| `--color-surface` | `rgba(22,22,22,0.55)` | panels, rail, cards |
+| `--color-elevated` | `rgba(28,28,28,0.70)` | inputs, hover, active tab |
 | `--color-line` | `#2a2a2a` | dividers |
 | `--color-ink` | `#cccccc` | primary text |
 | `--color-ink-dim` | `#8a8a8a` | secondary |

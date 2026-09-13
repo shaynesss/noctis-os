@@ -178,6 +178,14 @@ async def statusline(payload: dict, mode: str | None = None,
     # Stamped here rather than trusted from the payload: the CLI reports what
     # it last learned from an API response, and the bar shows how old that is.
     payload["reported_at"] = time.time()
+    # Whether there is anything to resume. The CLI assigns a session id at
+    # start but writes the transcript on the first message, so a terminal
+    # that was opened and never spoken to has an id that `--resume` cannot
+    # find -- and a shell that remembered it came back to "No conversation
+    # found" instead of a fresh session. The shell remembers the id only
+    # once this is true.
+    tp = payload.get("transcript_path")
+    payload["transcript_exists"] = bool(tp) and Path(str(tp)).is_file()
     # Keyed by the shell's slot name when it gave one, so the strip can ask
     # for its own terminal's reading; the session id is the fallback for a
     # session the shell did not start.

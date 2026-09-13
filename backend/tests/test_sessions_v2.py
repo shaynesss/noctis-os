@@ -1173,3 +1173,27 @@ def test_limits_carry_when_they_were_last_reported(client):
     assert first == again, "polling is not a new reading"
     client.post("/v2/sessions/statusline", json=payload, headers=AUTH)
     assert client.get("/v2/sessions/limits", headers=AUTH).json()["reported_at"] >= first
+
+
+def test_a_report_says_whether_its_session_can_be_resumed(client, tmp_path):
+    """The CLI assigns a session id at start and writes the transcript on
+    the first message. A terminal opened and never spoken to has an id that
+    `--resume` cannot find, and a shell that remembered it came back to "No
+    conversation found" instead of a fresh session. The report says which."""
+    import routers.sessions_v2 as sv2
+    sv2._statusline.clear()
+    written = tmp_path / "abc.jsonl"
+    written.write_text("{}", encoding="utf-8")
+
+    client.post("/v2/sessions/statusline?slot=term-yes", headers=AUTH,
+                json={"session_id": "abc", "transcript_path": str(written)})
+    client.post("/v2/sessions/statusline?slot=term-no", headers=AUTH,
+                json={"session_id": "def", "transcript_path": str(tmp_path / "def.jsonl")})
+    client.post("/v2/sessions/statusline?slot=term-none", headers=AUTH,
+                json={"session_id": "ghi"})
+
+    slots = client.get("/v2/sessions/statusline/all", headers=AUTH).json()["slots"]
+    assert slots["term-yes"]["transcript_exists"] is True
+    assert slots["term-no"]["transcript_exists"] is False
+    assert slots["term-none"]["transcript_exists"] is False
+    sv2._statusline.clear()

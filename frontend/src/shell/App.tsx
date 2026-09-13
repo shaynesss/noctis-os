@@ -32,6 +32,9 @@ import './tokens.css'
 /** What a terminal's statusLine reports, the parts the shell reads. */
 interface TermReport {
   session_id?: string
+  /** The CLI writes the transcript on the first message, not at start. An
+   *  id with no transcript resumes to "No conversation found". */
+  transcript_exists?: boolean
   model?: { id?: string; display_name?: string }
   context_window?: { used_percentage?: number | null }
   workspace?: { current_dir?: string }
@@ -89,6 +92,7 @@ export function App() {
    * already accepts. */
   const [reports, setReports] = useState<Record<string, TermReport>>({})
   const [limits, setLimits] = useState<LiveLimits | null>(null)
+  const [maxSlots, setMaxSlots] = useState(9)
   useEffect(() => {
     let alive = true
     const read = () => {
@@ -96,6 +100,8 @@ export function App() {
         .then((d) => { if (alive && d) setReports(d.slots) })
       void get<LiveLimits & { known: boolean }>('/v2/sessions/limits')
         .then((d) => { if (alive && d?.known) setLimits(d) })
+      void get<{ max_concurrent: number }>('/v2/sessions')
+        .then((d) => { if (alive && d) setMaxSlots(d.max_concurrent) })
     }
     read()
     const id = setInterval(read, 4000)
@@ -111,7 +117,12 @@ export function App() {
     rememberSlots(slots.map((s) => ({
       mode: s.mode,
       cwd: s.cwd,
-      sessionId: reports[s.id]?.session_id ?? s.resumeId,
+      /* Only an id that resumes to something. A terminal opened and never
+         spoken to has an id and no transcript; remembering it brought the
+         slot back to "No conversation found" instead of a fresh session. */
+      sessionId: reports[s.id]?.transcript_exists
+        ? reports[s.id]?.session_id
+        : s.resumeId,
     })))
   }, [slots, reports])
 
@@ -248,7 +259,7 @@ export function App() {
         limits={limits}
         open={slots.map((s) => s.mode)}
         state={{
-          live: { running: slots.length, max: slots.length },
+          live: { running: slots.length, max: maxSlots },
           cwd: shortenHome(cwd),
           /* What the CLI itself last reported, once it has. Falls back to
              the mode's name for the frame before the first report. */

@@ -55,9 +55,9 @@
    * The body must keep painting `--color-ground`. A transparent body would
    * show the raw material with no tint at all, which reads as a bug rather
    * than as glass. */
-  --color-ground: rgba(15, 15, 15, 0.72);
-  --color-surface: rgba(22, 22, 22, 0.80);
-  --color-elevated: rgba(28, 28, 28, 0.88);
+  --color-ground: rgba(15, 15, 15, 0.42);
+  --color-surface: rgba(22, 22, 22, 0.55);
+  --color-elevated: rgba(28, 28, 28, 0.70);
   --color-line: #2a2a2a;
   --color-line-soft: #212121;
 

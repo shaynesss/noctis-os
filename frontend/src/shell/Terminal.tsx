@@ -1,14 +1,9 @@
 /* A real Claude Code session, hosted in the shell.
  *
- * The transcript beside this one is built from `stream-json` events: Noctis
- * drives `claude -p` — "print response and exit" — once per turn and rebuilds
- * the interactive loop on top of it. This runs the CLI the way a terminal
- * does, so the loop is the CLI's own.
- *
- * Both exist at once, deliberately. `PTY-MIGRATION.md` §7 sequences it that
- * way: the 2026-09-12 cutover deleted `launch_config/` while a guard still
- * required it and broke every spawn, and the lesson was that a path gets
- * removed only once nothing reads it.
+ * This is the conversation surface. Noctis used to drive `claude -p` —
+ * "print response and exit" — once per turn and rebuild the interactive loop
+ * on top of it; that orchestrator is deleted (`PTY-MIGRATION.md`). This runs
+ * the CLI the way a terminal does, so the loop is the CLI's own.
  *
  * xterm.js ships no look of its own, so the theme below is generated from
  * `tokens.css` rather than written twice — one source of truth for what
@@ -88,6 +83,11 @@ export function Terminal({
   const [generation, setGeneration] = useState(0)
   const dead = useRef(false)
   const setDead = (v: boolean) => { dead.current = v }
+  /* The id this terminal will try to resume. A ref rather than the prop,
+   * because a resume that fails has to be retried *without* it, and the
+   * prop cannot change from in here. Cleared on a fast death; see below. */
+  const resumeRef = useRef<string | undefined>(resumeId)
+  const spawnedAt = useRef(0)
 
   useEffect(() => {
     const el = host.current
@@ -200,7 +200,7 @@ export function Terminal({
 
       const args = await get<{ binary: string; args: string[] }>(
         `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`
-        + (resumeId ? `&resume_id=${encodeURIComponent(resumeId)}` : '')
+        + (resumeRef.current ? `&resume_id=${encodeURIComponent(resumeRef.current)}` : '')
         + (prompt ? `&prompt=${encodeURIComponent(prompt)}` : ''))
       if (!live) return
       if (!args) {
@@ -226,6 +226,17 @@ export function Terminal({
       })
       const unExit = await listen<{ id: string }>('pty:exit', (e) => {
         if (e.payload.id !== id) return
+        /* A resume that dies within seconds is a resume of nothing -- the
+         * transcript was deleted, or never written. The CLI prints "No
+         * conversation found" and exits, and the person is left with a dead
+         * pane for an id they never chose. Try once more as a fresh session
+         * instead; the mode and directory are what they wanted. */
+        if (resumeRef.current && Date.now() - spawnedAt.current < 5000) {
+          resumeRef.current = undefined
+          term_.writeln('\r\n\x1b[2m  nothing to resume — starting fresh\x1b[0m')
+          setGeneration((g) => g + 1)
+          return
+        }
         /* A dead pane needs a way out of itself.
          *
          * A session ends for ordinary reasons -- answering "No, exit" at the
@@ -253,6 +264,7 @@ export function Terminal({
       // will read.
       if (!live) return
 
+      spawnedAt.current = Date.now()
       try {
         await invoke('pty_spawn', {
           id, cwd, args: args.args, binary: args.binary,
