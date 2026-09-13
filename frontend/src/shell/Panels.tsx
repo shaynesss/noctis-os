@@ -453,7 +453,14 @@ function Loading() {
  */
 function Worklist({ initial, path }: { initial: string; path: string }) {
   const [text, setText] = useState(initial)
-  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  /* `failed` is a state, not an absence of one.
+   *
+   * A failed save used to fall back to `idle`, which renders "yours to
+   * keep" -- the same words as a file that is saved and untouched. So the
+   * one moment your typing is *not* on disk looked exactly like the moment
+   * it certainly is, and the only way to find out was to reload and watch
+   * the edit disappear. */
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   /* Debounced rather than saved on every keystroke, and flushed on unmount
@@ -464,7 +471,7 @@ function Worklist({ initial, path }: { initial: string; path: string }) {
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(async () => {
       const ok = await put('/v2/worklist', { markdown: next })
-      setState(ok ? 'saved' : 'idle')
+      setState(ok ? 'saved' : 'failed')
     }, 600)
   }
 
@@ -479,7 +486,8 @@ function Worklist({ initial, path }: { initial: string; path: string }) {
         onChange={(e) => schedule(e.target.value)}
         onBlur={() => {
           if (timer.current) clearTimeout(timer.current)
-          void put('/v2/worklist', { markdown: text }).then((ok) => setState(ok ? 'saved' : 'idle'))
+          void put('/v2/worklist', { markdown: text })
+            .then((ok) => setState(ok ? 'saved' : 'failed'))
         }}
         spellCheck={false}
         placeholder="- things to get done"
@@ -489,7 +497,10 @@ function Worklist({ initial, path }: { initial: string; path: string }) {
       <div className="flex items-center gap-[8px] border-t border-line px-4 py-[7px] font-mono text-[10.5px] text-ink-faint">
         <span>{path}</span>
         <span className="ml-auto">
-          {state === 'saving' ? 'saving…' : state === 'saved' ? 'saved' : 'yours to keep'}
+          {state === 'saving' ? 'saving…'
+            : state === 'saved' ? 'saved'
+              : state === 'failed' ? 'not saved — copy this out before leaving'
+                : 'yours to keep'}
         </span>
       </div>
     </Card>

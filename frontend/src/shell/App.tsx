@@ -1022,8 +1022,35 @@ export default function App() {
     // Dropped from local state first: the dialog must go the instant you
     // click, not one poll later, or it reads as not having registered and
     // invites a second click on a question that is already answered.
-    setPermissionRequests((prev) => prev.filter((r) => r.id !== id))
+    // Captured inside the updater rather than read from state: this callback
+    // has an empty dependency list, so a closed-over `permissionRequests`
+    // would be whatever it was on first render.
+    let dropped: PendingPermission | undefined
+    setPermissionRequests((prev) => {
+      dropped = prev.find((r) => r.id === id)
+      return prev.filter((r) => r.id !== id)
+    })
+    /* ...and put back if the decision never lands.
+     *
+     * The optimistic drop above is right, but it used to be the whole story:
+     * `void post(...)` with nothing reading the result. So a failed request
+     * -- the backend restarting under the click is the documented case --
+     * closed the dialog, dropped the answer, and left the session waiting on
+     * a decision that no longer existed anywhere. The session looks frozen
+     * and the one control that would unfreeze it is gone from the screen.
+     *
+     * Restoring is the honest recovery: the question is genuinely still
+     * open, so it belongs back on screen. Re-inserted only if it has not
+     * already returned on its own -- the pending poll may have re-added it
+     * first, and two copies of one question is its own confusion. */
     void post(`/v2/sessions/permissions/${id}/decide`, { decision, answers })
+      .then((res) => {
+        const failed = res && typeof res === 'object' && 'error' in res
+        const back = dropped
+        if (!failed || !back) return
+        setPermissionRequests((prev) =>
+          prev.some((r) => r.id === id) ? prev : [...prev, back])
+      })
   }, [])
 
   /* Slash commands.
@@ -1282,7 +1309,16 @@ export default function App() {
             // Close the tab too if it happens to be open, so the app never
             // shows a conversation the store no longer has.
             closeTab(`h${id}`)
-            void del(`/v2/sessions/history/${id}`)
+            /* A delete that fails has to be visible, because the optimistic
+             * close makes it look like it worked: the row leaves the palette
+             * and comes back on the next reload, which reads as the app
+             * losing track rather than as a request that never landed.
+             * Nothing else here can carry the message -- the palette has
+             * already closed -- so it goes where a failure is durable. */
+            void del(`/v2/sessions/history/${id}`).then((ok) => {
+              if (!ok) console.error(`[noctis] could not delete session ${id};`
+                                   + ' it is still in history')
+            })
           }}
           onClose={() => setPalette(false)}
         />

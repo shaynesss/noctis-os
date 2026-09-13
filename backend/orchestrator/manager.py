@@ -199,6 +199,31 @@ class SessionManager:
                 # resolution of the 5h window on a subscription.
                 last = next((e for e in reversed(handle.events)
                              if isinstance(e, TurnEnd)), None)
+                # A turn that ended without ever saying it ended.
+                #
+                # Every branch below reads `last`, so a stream that stops
+                # before the engine reports a result skipped all of them and
+                # the turn simply stopped -- no closing pass, no error, and
+                # a history row that looks like an ordinary short answer.
+                # The driver already names the three loud versions (a failed
+                # spawn, a silent timeout, a non-zero exit); this is the
+                # quiet one, an engine that exits 0 having never emitted a
+                # `result`, and it was the only path out of here that wrote
+                # nothing down.
+                #
+                # Guarded on there being no fatal event already, because the
+                # driver's exit-code error is the better message when it
+                # fired -- this must add an explanation, never a second one.
+                if last is None and not any(getattr(e, "fatal", False)
+                                            for e in handle.events):
+                    lost = EngineError(
+                        message="the engine stopped before finishing this turn "
+                                "(no result was reported). Anything above is "
+                                "what it managed to send.",
+                        fatal=True,
+                    )
+                    handle.events.append(lost)
+                    yield handle, lost
                 if last is not None and last.needs_closing and not spec.continuation:
                     async for event in self._close_turn(handle, spec):
                         handle.events.append(event)

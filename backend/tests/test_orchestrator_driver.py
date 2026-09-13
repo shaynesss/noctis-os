@@ -955,3 +955,52 @@ def test_two_sessions_of_one_mode_run_together():
     assert any(isinstance(e, TextDelta) for e in a)
     assert any(isinstance(e, TextDelta) for e in b)
     assert len(mgr.by_mode("faber")) == 2, "both handles are tracked, not one replacing the other"
+
+
+def test_a_turn_that_never_reports_a_result_says_so():
+    """The quiet death: the engine exits 0 having emitted no `result`.
+
+    Every branch after the stream loop reads the last TurnEnd, so a turn
+    without one skipped all of them -- no closing pass, no error -- and the
+    transcript just stopped after whatever had arrived. It looked exactly
+    like a short answer, which is why it cost turns for a day before anyone
+    could name it.
+
+    The driver already names the loud versions (a failed spawn, a silent
+    timeout, a non-zero exit). This is the one nothing was watching.
+    """
+    async def _truncated_gen():
+        yield SessionStart(session_id="s1", model="m", cwd="/x")
+        yield TextDelta(text="thinking about it")
+        # and then nothing: no TurnEnd, no error, the stream simply ends
+
+    async def go():
+        m = SessionManager(runner=lambda _s: _truncated_gen())
+        return [e async for _h, e in m.start(SessionSpec(mode="faber", prompt="x"))]
+
+    events = asyncio.run(go())
+    errors = [e for e in events if isinstance(e, EngineError)]
+    assert errors, "a turn with no TurnEnd must leave an error behind"
+    assert errors[-1].fatal
+    assert "before finishing" in errors[-1].message
+
+
+def test_it_does_not_pile_a_second_error_on_a_reported_failure():
+    """The driver's exit-code error is the better message when it fired.
+
+    Both paths end without a TurnEnd, so the new check has to defer to an
+    explanation that already exists rather than appending a vaguer one under
+    it -- two errors for one fault reads as two faults.
+    """
+    async def _failed_gen():
+        yield SessionStart(session_id="s1", model="m", cwd="/x")
+        yield EngineError(message="engine exited 1: boom", fatal=True)
+
+    async def go():
+        m = SessionManager(runner=lambda _s: _failed_gen())
+        return [e async for _h, e in m.start(SessionSpec(mode="faber", prompt="x"))]
+
+    events = asyncio.run(go())
+    errors = [e for e in events if isinstance(e, EngineError)]
+    assert len(errors) == 1, f"expected the driver's error alone, got {errors}"
+    assert "boom" in errors[0].message
