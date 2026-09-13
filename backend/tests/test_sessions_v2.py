@@ -1246,3 +1246,22 @@ def test_interactive_args_with_a_resume_id_lifts_its_tombstone(client, monkeypat
     r = client.get("/v2/sessions/interactive-args", headers=AUTH,
                    params={"mode": "general", "cwd": "~"})
     assert r.status_code == 200 and lifted == ["abc-123"], "no resume, nothing lifted"
+
+
+def test_a_malformed_status_line_report_is_kept_and_its_numbers_ignored(client):
+    """The route runs every five seconds per terminal on whatever shape this
+    CLI version writes. A `rate_limits` that is a string answered 500 -- a
+    traceback per terminal per five seconds. The slot stays live; the
+    numbers are simply not a reading."""
+    import routers.sessions_v2 as sv2
+    before = sv2._limits
+    for body in ({"rate_limits": "nope", "session_id": "x"},
+                 {"rate_limits": {"five_hour": "3", "seven_day": {}}, "session_id": "x"},
+                 {"rate_limits": {"five_hour": {"used_percentage": "lots", "resets_at": None},
+                                  "seven_day": {"used_percentage": 1}}, "session_id": "x"}):
+        r = client.post("/v2/sessions/statusline", json=body, headers=AUTH,
+                        params={"mode": "general", "slot": "term-odd"})
+        assert r.status_code == 200, body
+    assert sv2._limits is before, "no reading was taken from garbage"
+    assert "term-odd" in sv2._statusline, "the slot is still live"
+    client.delete("/v2/sessions/statusline/term-odd", headers=AUTH)

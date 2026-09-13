@@ -208,17 +208,28 @@ async def statusline(payload: dict, mode: str | None = None,
     # The rolling windows are a property of the account, not of one session,
     # so the newest report from any terminal is the right answer for all of
     # them -- the same "newest wins" the manager applies to Limits events.
-    rl = payload.get("rate_limits") or {}
-    five, seven = rl.get("five_hour"), rl.get("seven_day")
-    if five and seven:
+    #
+    # Shape-checked rather than trusted: the payload is whatever this CLI
+    # version writes, and this route runs every five seconds for every
+    # terminal. A field that arrives as a string instead of an object must
+    # cost one skipped reading, not a traceback per terminal per five
+    # seconds until the CLI is downgraded. The report itself is kept either
+    # way -- the slot is live, whatever its numbers look like.
+    rl = payload.get("rate_limits")
+    five = rl.get("five_hour") if isinstance(rl, dict) else None
+    seven = rl.get("seven_day") if isinstance(rl, dict) else None
+    if isinstance(five, dict) and isinstance(seven, dict):
         global _limits
-        _limits = Windows(
-            five_hour_used=float(five.get("used_percentage", 0)) / 100,
-            five_hour_resets_at=int(five.get("resets_at", 0)),
-            seven_day_used=float(seven.get("used_percentage", 0)) / 100,
-            seven_day_resets_at=int(seven.get("resets_at", 0)),
-            using_overage=bool(payload.get("using_overage", False)),
-        )
+        try:
+            _limits = Windows(
+                five_hour_used=float(five.get("used_percentage") or 0) / 100,
+                five_hour_resets_at=int(five.get("resets_at") or 0),
+                seven_day_used=float(seven.get("used_percentage") or 0) / 100,
+                seven_day_resets_at=int(seven.get("resets_at") or 0),
+                using_overage=bool(payload.get("using_overage", False)),
+            )
+        except (TypeError, ValueError):
+            pass  # a window whose numbers are not numbers is no reading
     return {"ok": True}
 
 
