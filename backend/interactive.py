@@ -25,12 +25,7 @@ import os
 from pathlib import Path
 
 import vault_io
-from orchestrator.driver import (
-    MODE_MODELS,
-    SHARED_SETTINGS,
-    claude_binary,
-    mcp_config,
-)
+from engine import MODE_MODELS, SHARED_SETTINGS, claude_binary, mcp_config
 from orchestrator.modes import mode_agents, mode_methodology
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

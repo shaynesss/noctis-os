@@ -187,6 +187,8 @@ def lifetime_tokens() -> dict[str, int]:
     the current figure silently misses.
     """
     total = turns = sessions = 0
+    inp = out = cached = cache_write = 0
+    since = ""
     for p in PROJECTS.glob("**/*.jsonl"):
         c = read(p)
         if not c.turns:
@@ -194,7 +196,17 @@ def lifetime_tokens() -> dict[str, int]:
         sessions += 1
         turns += len(c.turns)
         total += c.lifetime
-    return {"tokens": total, "turns": turns, "sessions": sessions}
+        # The four bars Stats draws beside the one number. Still one number:
+        # these are its parts, not a second tier.
+        inp += sum(t.input_tokens for t in c.turns)
+        out += sum(t.output_tokens for t in c.turns)
+        cached += sum(t.cached_tokens for t in c.turns)
+        cache_write += sum(t.cache_write_tokens for t in c.turns)
+        if c.started_at and (not since or c.started_at < since):
+            since = c.started_at
+    return {"tokens": total, "turns": turns, "sessions": sessions,
+            "input": inp, "output": out, "cached": cached,
+            "cache_write": cache_write, "since": since}
 
 
 # ------------------------------------------------------------ beside the recorder

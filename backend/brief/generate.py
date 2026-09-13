@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import vault_io
-from orchestrator.driver import one_shot
+from engine import one_shot
 from orchestrator.store import ConversationStore
 
 BRIEF_PATH = "brief/today.md"

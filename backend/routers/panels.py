@@ -20,8 +20,7 @@ from pydantic import BaseModel, Field
 import vault_io
 from prompts.render import render
 from jobs import MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
-from orchestrator.driver import (EFFORT_CYCLE, MODEL_CATALOG, MODE_MODELS, MODE_TOOLS,
-                                 PERMISSION_CYCLE)
+from engine import (EFFORT_CYCLE, MODEL_CATALOG, MODE_MODELS, MODE_TOOLS, PERMISSION_CYCLE)
 
 router = APIRouter(prefix="/v2", tags=["panels"])
 

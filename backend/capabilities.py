@@ -110,7 +110,7 @@ def _builtin_skills() -> set[str]:
 
 def provided(mode: str) -> set[str]:
     """What this machine can actually give a session of `mode` right now."""
-    from orchestrator.driver import ALL_TOOLS, mcp_config
+    from engine import ALL_TOOLS, mcp_config
     from orchestrator.modes import mode_agents
 
     have = _plugins(config_root()) | _builtin_skills()
@@ -163,8 +163,8 @@ def migration_brief() -> str:
     Generated rather than hand-written so it cannot drift from the code it
     describes -- the failure this whole module exists to prevent.
     """
-    from orchestrator.driver import (ALL_TOOLS, EFFORT_CYCLE, MODE_MODELS,
-                                     PERMISSION_CYCLE, mcp_config, settings_config)
+    from engine import (ALL_TOOLS, EFFORT_CYCLE, MODE_MODELS,
+                        PERMISSION_CYCLE, mcp_config, settings_config)
     from jobs import methodology_path
 
     policy = json.loads(settings_config())

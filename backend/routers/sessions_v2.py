@@ -28,15 +28,14 @@ import interactive
 import jobs
 import vault_io
 from permissions import registry as permission_registry
-from orchestrator.driver import (
-    EFFORT_CYCLE, MODE_MODELS, OPENING_PROMPT, PERMISSION_CYCLE, Image, SessionSpec,
-    one_shot,
-)
+from engine import EFFORT_CYCLE, MODE_MODELS, PERMISSION_CYCLE, one_shot
+from orchestrator.driver import OPENING_PROMPT, Image, SessionSpec
 from orchestrator import jsonl
 from orchestrator.events import EngineError, Limits
 from orchestrator.manager import SessionManager
 from orchestrator.store import ConversationStore
-from orchestrator.wire import blocks_from_messages, to_sse
+from orchestrator.wire import to_sse
+from transcript import blocks_from_messages
 
 log = logging.getLogger(__name__)
 
@@ -434,21 +433,25 @@ def stats() -> dict:
     # the lifetime figure and the history list by the time Stats renders.
     jsonl.index_new(_store, _mode_of)
     life = _store.lifetime_tokens()
+    # The lifetime figure is read from the CLI's own transcripts, not from
+    # rows the recorder wrote. Step 4 of PTY-MIGRATION.md §7, taken on the
+    # evidence of step 3: of sixteen sessions both readers saw, one agreed,
+    # and the recorder was short by 2-5x -- output tokens included, which
+    # cache re-reads cannot explain. The transcript is the more complete
+    # source, and it also counts sessions Noctis never hosted.
+    disk = jsonl.lifetime_tokens_cached()
     return {
-        # Totals include the CLI's background tier. Leaving it out is exactly
-        # the undercount the parser had until 2026-09-08 -- ~900 input tokens
-        # a turn -- and "what have I used" is the question these answer.
         "lifetime": {
-            "input": life["input"],
-            "output": life["output"],
-            "cached": life["cached"],
-            "cache_write": life["cache_write"],
-            "turns": life["turns"],
-            "since": life["since"],
-            # Kept separate so the page can show what the background tier
-            # cost rather than burying it inside a larger number.
-            "aux_input": life["input"] - life["primary_input"],
-            "aux_output": life["output"] - life["primary_output"],
+            "input": disk["input"],
+            "output": disk["output"],
+            "cached": disk["cached"],
+            "cache_write": disk["cache_write"],
+            "turns": disk["turns"],
+            "since": disk["since"][:10] if disk["since"] else life["since"],
+            # One number, no tiers. Kept as fields so an older shell reading
+            # them still renders; always zero, and gone with the next shell.
+            "aux_input": 0,
+            "aux_output": 0,
             # API list price for everything run so far. Named list_cost, not
             # cost or spend, because it is what these turns WOULD have cost
             # on the API and not what anything charged — the subscription's
