@@ -208,6 +208,29 @@ def settings_config() -> str:
 # The file carries no comment key of its own: under --print a settings file
 # that fails validation is *silently ignored*, so an unrecognised key would
 # drop every rule here without saying so.
+#
+# **crossSessionInbound is set rather than left to fall out.** Peer sessions
+# on this machine can post text into a session's inbox, and with the key
+# absent, delivery is decided by comparing permission mode classes: only
+# bypassPermissions counts as bypassing, and PERMISSION_CYCLE deliberately
+# excludes it, so spawned sessions land in the prompting class and messages
+# arrive. That is the right outcome reached by accident -- it holds only
+# while an unrelated tuple keeps its current contents. Anything that *is*
+# held cannot be approved here, because a `-p` session has no dialog to show
+# it, so it expires unseen after five minutes and the sender is told it
+# expired. Naming the value makes the behaviour a decision.
+#
+# Safe against the warning above, checked in the installed engine rather than
+# assumed: the key is a `.optional().catch(void 0)` enum of
+# accept/hold/refuse, so an unrecognised *value* degrades to holding messages
+# and raises a settings warning. It cannot take the deny rule down with it.
+#
+# What it costs: an unattended write path into a session where every tool is
+# pre-approved and Bash is allowed whole, so an inbound message is untrusted
+# text reaching something that can run any command without asking. Bounded by
+# the socket, not by us -- /tmp/cc-socks is 0700 and each socket 0600, so a
+# sender must already be running as this user. Same trust boundary as
+# anything else that can read the vault.
 SHARED_SETTINGS = Path(__file__).resolve().parent / "permissions.json"
 
 

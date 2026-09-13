@@ -401,6 +401,46 @@ def test_the_tracked_policy_reaches_the_spawn():
     assert settings_config()
 
 
+def test_inbound_peer_messages_are_accepted_by_decision():
+    """Set explicitly, because the default reaches the same place by accident.
+
+    With the key absent, delivery falls out of comparing permission mode
+    classes: only bypassPermissions counts as bypassing, PERMISSION_CYCLE
+    excludes it, so a spawned session sits in the prompting class and messages
+    arrive. Right answer, wrong reason -- it survives only while an unrelated
+    tuple keeps its contents, and a `-p` session cannot approve anything that
+    does get held, so a held message expires unseen in five minutes.
+
+    The value is checked against the engine's own enum rather than merely
+    being non-empty: an unrecognised value does not fail the settings parse
+    (the field catches to undefined), it silently reverts to holding, which is
+    the failure this test exists to catch early.
+    """
+    from orchestrator.driver import SHARED_SETTINGS
+    tracked = json.loads(SHARED_SETTINGS.read_text())
+    assert tracked.get("crossSessionInbound") == "accept"
+    for mode in MODE_MODELS:
+        cmd = build_command(SessionSpec(mode=mode, prompt="x"))
+        sent = json.loads(cmd[cmd.index("--settings") + 1])
+        assert sent.get("crossSessionInbound") in ("accept", "hold", "refuse"), mode
+        assert sent["crossSessionInbound"] == "accept", mode
+
+
+def test_composing_the_hooks_keeps_every_other_policy_key():
+    """The hooks are added to the tracked policy, not substituted for it.
+
+    `settings_config` loads the file and assigns one key. Anything else in
+    there -- crossSessionInbound today, whatever is added next -- has to
+    survive that, and a `{"permissions": ..., "hooks": ...}` literal built
+    fresh would drop it without failing anything.
+    """
+    from orchestrator.driver import SHARED_SETTINGS, settings_config
+    tracked = json.loads(SHARED_SETTINGS.read_text())
+    composed = json.loads(settings_config())
+    for key, value in tracked.items():
+        assert composed[key] == value, f"{key} was lost composing the hooks"
+
+
 def test_every_mode_gets_the_same_permission_plumbing():
     """One file, five modes, no per-mode special case.
 
