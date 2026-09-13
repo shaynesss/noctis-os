@@ -193,52 +193,51 @@ turns, so the *condition* largely stops arising — but the explicit `silent`
 block kind and the closing pass would go with it. Removal of a workaround,
 not of a feature.
 
-### The background tier — measured, and not decision-relevant
+### Lifetime tokens: one raw number
 
-**Resolved 2026-09-13. Decision: lifetime tokens come from the JSONL, the
-`aux_*` columns go, and Stats shows one honest total with no split.**
+**Decided 2026-09-13. Stats shows a single lifetime token count. No split, no
+tiers, no footnote.** It is a fun stat, and it should read like one.
 
-`modelUsage` is absent from the JSONL, so the CLI's own background calls —
-titles, quota checks — would not be counted. The first draft of this document
-called that "the one measurable regression" and put the whole decision on it,
-quoting `aux_input_tokens = 141,195` as if the absolute number meant something.
-Measured against the total it does not:
+What the jargon meant, once, so it can stop appearing: alongside your
+conversation the CLI makes its own small background calls on a cheaper model —
+naming a session, checking quota. Today's parser separates those into
+`aux_input_tokens`/`aux_output_tokens`. The JSONL does not record them, so
+sourcing lifetime tokens from disk drops them.
+
+Measured, that is nothing:
 
 ```
-lifetime primary   82,174,586
-lifetime aux          146,327
-aux as % of total       0.178%      (1,230 tokens/turn over 119 turns)
+lifetime conversation   82,174,586
+background calls           146,327
+                             0.178%
 ```
 
-**A fifth of one percent.** `CLAUDE_CODE_ENABLE_TELEMETRY` with
-`claude_code.token.usage` would recover it exactly and costs an OTel collector
-in a single-user local app — not a trade worth making for 0.178%. Nor is a
-caveat in the UI: an asterisk on a number this accurate makes it read as less
-trustworthy than it is.
+An earlier draft of this document made that the deciding question, quoting
+`141,195` as though a large-looking absolute meant something without dividing
+it by anything. A fifth of one percent does not change a fun stat.
+`CLAUDE_CODE_ENABLE_TELEMETRY` would recover it exactly and costs an OTel
+collector in a single-user local app — not a trade worth making.
 
-What the JSONL measures is *conversation* tokens, which is what the Stats page
-is asked about. One number, no split, no footnote.
+**So: `aux_input_tokens` and `aux_output_tokens` are deleted with the
+migration**, the Stats page shows one number sourced from the JSONL, and the
+word "aux" leaves the codebase.
 
-*Method note, because it is the reason the first draft was wrong: a large
-absolute figure was compared against nothing. The per-session reconciliation
-that would have caught it earlier is also confounded — a session Noctis
-streamed and that later continued in VS Code shows a JSONL total 3× the
-store's, because the store only ever saw the turns it hosted.*
+*Method note, because the trap is reusable: the obvious per-session
+reconciliation is confounded. A session Noctis streamed that later continued
+in VS Code shows a JSONL total 3× the store's, because the store only ever saw
+the turns it hosted — which looks like the JSONL over-counting when it is
+really the store under-covering.*
 
-### The real risk, and the spike must settle it
+### Transcript coverage — was the real risk, now cleared
 
-**Not every session writes a transcript.** Of 73 sessions in the store with an
-engine id, **23 have a JSONL on disk**. The missing 50 are `-p` spawns, which
-is the mode being left behind, and interactive sessions demonstrably do write
-them — 128 files, the current one at 14MB. But history would move from
-something Noctis records itself to something it *reads*, and that only works if
-the file is always there.
+History moves from something Noctis *records* to something it *reads*, which
+only holds if the file is always there. Tested against three real sessions on
+2026-09-13, and all three pass — see §3. The one that mattered was a session
+SIGKILLed mid-generation: its partial output was already on disk, so
+transcripts are written incrementally rather than flushed at exit.
 
-The spike must confirm: does every PTY session write a transcript, including a
-very short one, one killed mid-turn, and one resumed? If the answer is no,
-history needs a fallback and this gets much less attractive.
-
----
+23 of 73 stored sessions lack a JSONL, which looks alarming and is not: all 50
+missing are `-p` spawns, the mode being left behind.
 
 ## 5. What it costs to build
 
@@ -309,46 +308,73 @@ the cheapest possible proof that step 4 is safe.
 
 ### It has no taste of its own
 
-xterm.js is a renderer, not a designer — it ships no opinion you have to
-accept. What you supply:
+xterm.js is a renderer, not a designer — it ships no look you have to accept.
+Two layers, both yours.
 
-| you control | the CLI controls |
-|---|---|
-| all 16 ANSI colours + bright variants | *which* slot it prints in |
-| foreground, background, cursor, selection | where it draws boxes and rules |
-| font family, size, weight, line height, letter spacing | its own input prompt layout |
-| cursor style (block/bar/underline) and blink | its spinners and progress glyphs |
-| padding, scrollback, density | |
+**The box it lives in is an ordinary DOM element.** Tailwind, `tokens.css`,
+cards, borders, radius, padding, a header strip above it, the composer below
+— all of it is the same React and the same design system as every other panel.
+Nothing about embedding a terminal makes that part different.
 
-So `tokens.css` maps straight on: ground `#0f0f0f`, ink `#cccccc`, dim
-`#8a8a8a`, Cascadia Code at the shell's own size and leading. It will not look
+**The character grid is themed through an object**, and the surface is
+complete. `ITheme` takes `foreground`, `background`, `cursor`, `cursorAccent`,
+all 16 ANSI colours plus their bright variants, `extendedAnsi` for 16–255,
+three selection colours, three scrollbar colours and `overviewRulerBorder`.
+`ITerminalOptions` takes `fontFamily`, `fontSize`, `fontWeight`,
+`fontWeightBold`, `letterSpacing`, `lineHeight`, `cursorStyle`
+(block/underline/bar), `cursorInactiveStyle`, `cursorWidth`, `cursorBlink`,
+`scrollback`, `smoothScrollDuration`, `minimumContrastRatio`,
+`allowTransparency`, `drawBoldTextInBrightColors` and `customGlyphs`.
+
+So the theme is generated from `tokens.css` rather than written twice —
+ground `#0f0f0f`, ink `#cccccc`, dim `#8a8a8a`, line `#2a2a2a`, Cascadia Code
+at the shell's own size and leading, one source of truth. It will not look
 like Terminal.app.
 
-The right-hand column is the "quirks", and it is inherent — when Claude Code
-prints something in yellow you decide what yellow *is*, not that it chose
-yellow. That is the deal: you are running the real thing, so its visual
-grammar comes with it. Which is the stated goal.
+**What stays the CLI's** is which slot it prints in and where it draws its own
+boxes. You decide what `yellow` *is*; Claude Code decides that this line is
+yellow. That is inherent to running the real thing, and it is the point.
 
-One thing this buys that today's setup cannot: because the palette is
-per-instance, **a tab's terminal can be tinted with its mode's accent** —
-Faber's red, Noctua's amber, Vesper's purple. More design control over the CLI
-than VS Code gives you, not less.
+Two things this gains over today. The palette is per-instance, so **a tab's
+terminal can carry its mode's accent** — Faber red, Noctua amber, Vesper
+purple — which is more control over the CLI's appearance than VS Code offers.
+And `customGlyphs` means box-drawing characters are drawn rather than taken
+from the font, so the CLI's rules and frames stay sharp at any size.
+
+### The renderer question, answered
+
+xterm.js offers three renderers: DOM, canvas, and **WebGL2**
+(`@xterm/addon-webgl`, currently 0.19.0). The worry was that the famous
+xterm.js hosts — VS Code, Cursor, Hyper — are all Electron, i.e. Chromium,
+while Tauri gives you **WKWebView** on macOS. Different engine, unproven path.
+
+It is not unproven. [Termic](https://termic.dev/docs/terminal/) runs xterm.js
+with the WebGL addon inside a Tauri/Rust app with the PTY on the Rust side —
+the exact architecture proposed here — and DomTerm supports Tauri/Wry
+front-ends. Termic's own notes say the WebGL path was the only renderer
+without visible row gaps in full-screen TUI apps, and that it holds frame
+rates under heavy output.
+
+One concrete finding worth carrying into the design: **WKWebView rasterises
+glyphs slightly lighter than Terminal.app**, and a font-weight bump closes the
+gap. `fontWeight` is an option, and Cascadia Code is vendored as a variable
+font covering 200–700, so the correction costs nothing.
 
 ### Still unproven — wiring, not architecture
 
-Everything in §3 is tested. These are not, and they are the honest remainder:
+Two left, and both are measurements rather than unknowns:
 
-1. **xterm.js inside the Tauri WebView.** Conventional, but this is WKWebView
-   rather than Chromium, and the renderer's canvas/WebGL addons are the part
-   most likely to differ. Falls back to the DOM renderer if so.
-2. **Byte throughput over Tauri IPC.** A session printing fast — a long build
-   log — is the load case. Needs a batching window rather than an event per
-   read, and the size of that window is a measurement, not a guess.
-3. **Keystroke routing.** Which keys belong to the terminal and which to the
-   app. `⌘K`, `⌘T` and `⇧⇥` currently belong to the shell; inside a focused
-   terminal most keys must reach the CLI instead. A real design question,
-   though a small one, and VS Code's answer (a small reserved set, everything
-   else passes through) is the obvious starting point.
+1. **Byte throughput over Tauri IPC.** Every chunk the PTY produces has to
+   cross from Rust into the web view, and that crossing is a serialised
+   message rather than a shared buffer. A session printing fast — a build log,
+   a long file — produces hundreds of small reads per second, and emitting one
+   IPC event per read is the naive version that stalls. The fix is ordinary:
+   coalesce reads on the Rust side into a ~16ms window and send one frame per
+   tick. What needs measuring is the window size, not whether it works.
+2. **Keystroke routing.** `⌘K`, `⌘T` and `⇧⇥` belong to the shell today, but
+   inside a focused terminal almost everything must reach the CLI instead.
+   VS Code's answer — a small reserved set, everything else passes through —
+   is the starting point, and the reserved set is a design decision to make
+   deliberately rather than discover.
 
-None of these can invalidate the architecture. They are cost, and they belong
-to step 1 of §7's sequence.
+Neither can invalidate the architecture. They are step-1 cost.

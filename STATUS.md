@@ -209,7 +209,19 @@ Both are local, so this is a rebase today and a force-push over shared
 history once they are pushed — see the open decision below. It is a
 before-you-push item, not an urgent one, but 130 commits are already waiting.
 
-**4. Running the regression suite from Settings.** The cases are listed with
+**4. The PTY decision — spiked, recommended, waiting on Shayne.**
+Noctis drives `-p`, the CLI's scripting mode, once per turn. Running the real
+interactive CLI in a pseudo-terminal would delete the closing pass, the
+per-turn respawn, the permission host and the whole dropped-stream class of
+bug. Every assumption is tested rather than argued: a slash command injected
+into a PTY renders, `statusLine` delivers the full status bar including 5h/7d,
+the CLI writes its own transcripts incrementally (a SIGKILL mid-turn keeps its
+partial output), and `portable-pty` builds on this toolchain at 773 KB. The
+review is `PTY-MIGRATION.md`; the decision is `SPEC.md` Open questions 7.
+Steps 2 and 3 of its sequence — a `statusLine` receiver and a JSONL indexer
+running beside the recorder — are worth doing whatever is decided.
+
+**5. Running the regression suite from Settings.** The cases are listed with
 what running them would cost; firing them needs the orchestrator to host
 thirteen sessions and report back, which is real work rather than a button.
 

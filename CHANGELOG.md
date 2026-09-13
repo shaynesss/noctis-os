@@ -9,6 +9,35 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Under review: the real CLI in a PTY (2026-09-13)
+
+**Not built, not decided.** Noctis spawns `claude -p` — "print response and
+exit" in the CLI's own help — once per turn, and most of the orchestrator
+exists to rebuild the interactive loop on top of a scripting mode. Running the
+CLI in a pseudo-terminal instead would delete that reconstruction.
+
+It was rejected twice before, correctly, under a premise that no longer holds:
+`Modes.md` called PTY capture "the original trap" when the interface launched
+sessions into Terminal.app and read state back from files. v2 hosts its
+sessions, and under hosting a PTY is not mirroring — it is how you run an
+interactive process. The rejection was never re-derived when its foundation
+was removed.
+
+Every assumption tested against 2.1.263 rather than argued: a `/status`
+injected into a PTY from outside renders and the process exits with no
+orphans; `statusLine` delivers `five_hour`/`seven_day`, context window,
+effort, cost, `session_id` and `transcript_path`; the CLI writes its own
+transcripts **incrementally**, so a session SIGKILLed mid-generation keeps its
+partial output; `--resume` appends without forking; `portable-pty` builds on
+this toolchain at 773 KB with 20 dependencies. Termic already ships this exact
+architecture — xterm.js + WebGL2 in Tauri with the PTY in Rust.
+
+**Stats gets one raw lifetime token count.** The CLI's background calls are
+absent from the JSONL, which is 146,327 tokens against 82,174,586 — 0.178%.
+`aux_input_tokens`/`aux_output_tokens` go with the migration.
+
+Review: `PTY-MIGRATION.md`. Decision: `SPEC.md` Open questions 7.
+
 ### One command to run Noctis, and it opens the app (2026-09-13)
 
 **`make app` is now `make dev`.** The naming had it backwards: the command with

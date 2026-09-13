@@ -337,14 +337,14 @@ carrying messages, tool calls, thinking, per-turn `usage` and its own `aiTitle`;
 and `/status` reports `Login method: Claude Pro account`, so the subscription
 premise is unchanged.
 
-**Settled 2026-09-13 — lifetime tokens come from the JSONL, and Stats shows one
-honest total with no per-tier split.** The JSONL carries no `modelUsage`, so the
-CLI's background calls go uncounted; measured, that is 146,327 tokens against
-82,174,586, or **0.178%**. `CLAUDE_CODE_ENABLE_TELEMETRY` would recover it
-exactly at the price of an OTel collector in a single-user app, which is not a
-trade worth making at that scale — and a footnote on a number this accurate
-would make it read as less trustworthy than it is. The `aux_input_tokens` /
-`aux_output_tokens` columns retire with the migration.
+**Settled 2026-09-13 — Stats shows one raw lifetime token count, sourced from
+the JSONL.** No split, no tiers, no footnote; it is a fun stat and should read
+like one. The CLI's own background calls (naming a session, checking quota)
+are not in the JSONL and go uncounted: measured, 146,327 against 82,174,586, or
+**0.178%**. `CLAUDE_CODE_ENABLE_TELEMETRY` would recover that exactly for the
+price of an OTel collector in a single-user app — not a trade worth making for
+a fifth of one percent. `aux_input_tokens`/`aux_output_tokens` are deleted with
+the migration and the word "aux" leaves the codebase.
 
 **Transcript coverage — the open risk — cleared 2026-09-13.** Three real
 sessions: a short one exits with its transcript, usage and the CLI's own
@@ -358,10 +358,21 @@ spawned `claude`, took an injected `/status`, resized, and exited with no
 orphans. 20 transitive dependencies, 773 KB size-optimised, inside the release
 profile's bundle-size intent.
 
-**All spikes pass; recommended, pending your decision.** What remains untested
-is wiring rather than architecture: xterm.js under WKWebView specifically,
-byte throughput over Tauri IPC, and keystroke routing between terminal and app
-shortcuts. Sequence in `PTY-MIGRATION.md` §7, and steps 2–3 (statusLine
+**The renderer path has production precedent.** Termic runs xterm.js with the
+WebGL2 addon inside a Tauri/Rust app with the PTY on the Rust side — this exact
+architecture — and DomTerm supports Tauri/Wry. WKWebView rasterises glyphs
+slightly lighter than Terminal.app; a `fontWeight` bump closes it, and Cascadia
+Code is already vendored as a 200–700 variable font. Styling is not a
+constraint: `ITheme` covers all 16 ANSI colours plus brights, `extendedAnsi`,
+selection and scrollbar, and `ITerminalOptions` covers font, weight, leading,
+letter spacing, cursor style and density — generated from `tokens.css` so there
+is one source of truth.
+
+**All spikes pass; recommended, pending your decision.** What remains is two
+measurements rather than unknowns: coalescing PTY reads into ~16ms frames
+before they cross Tauri's IPC (one event per read is the naive version that
+stalls under a fast-printing session), and deciding which keystrokes stay
+reserved to the shell versus passing through to the CLI. Sequence in `PTY-MIGRATION.md` §7, and steps 2–3 (statusLine
 receiver, JSONL indexer running beside the recorder) are worth doing either
 way.
 

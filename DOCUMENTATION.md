@@ -557,6 +557,9 @@ make test        # pytest + tsc -b + vitest
 
 ## 23. Known gaps
 
+**Under review — the conversation surface itself:**
+- **A PTY instead of `stream-json`.** Noctis drives `claude -p` ("print response and exit") once per turn and rebuilds the interactive loop on top of it; running the CLI in a pseudo-terminal would delete that reconstruction. Spiked 2026-09-13, all assumptions tested, recommended and undecided — `SPEC.md` Open questions 7 and `PTY-MIGRATION.md`. If adopted it replaces §2, §3, §4, §7 and most of §11 of this document, and leaves §9, §10, §12's panels, §14 and §15 untouched.
+
 **Outstanding:**
 - The `launchd`-on-wake scheduler — the only feature left in the build order. `brief/generate.py` writes the brief; nothing fires it, and the vault auto-commit/push job does not exist.
 
