@@ -248,7 +248,7 @@ second-brain/
 
 ## 11. History and storage
 
-**History is read from the CLI's own transcripts.** Claude Code writes `~/.claude/projects/<slugged-cwd>/<session-id>.jsonl` incrementally for every session it runs — a SIGKILL mid-generation keeps its partial output — and `orchestrator/jsonl.py` indexes those into the `sessions`/`messages`/`usage` tables the history routes, search and Stats read. `POST /v2/sessions/index` files anything new; the shell calls it when a terminal session ends, Stats on each visit. The mode a session was launched in comes from its status-line report, since the transcript records only the CLI's permission mode. It counts every session on this machine, not only the ones Noctis hosted.
+**History is read from the CLI's own transcripts.** Claude Code writes `~/.claude/projects/<slugged-cwd>/<session-id>.jsonl` incrementally for every session it runs — a SIGKILL mid-generation keeps its partial output — and `orchestrator/jsonl.py` indexes those into the `sessions`/`messages`/`usage` tables the history routes, search and Stats read. `POST /v2/sessions/index` files anything new and re-reads anything that has grown — a row remembers how many bytes of its transcript it was read from (`indexed_bytes`), so a session filed while still running catches up on the next pass, in place, keeping its id; the shell calls it when a terminal session ends, Stats on each visit. The mode a session was launched in comes from its status-line report, since the transcript records only the CLI's permission mode. It counts every session on this machine, not only the ones Noctis hosted.
 
 **SQLite, not the vault.** Transcripts are application data; the vault is for knowledge. Markdown transcripts would make every message a git diff.
 
@@ -552,8 +552,9 @@ every one.
 background calls are absent from the JSONL, which is 0.178% of the total.
 
 **The indexer runs beside the recorder, and the comparison is live.**
-`POST /v2/sessions/index` files every transcript history has not seen — the
-shell calls it when a terminal session ends, Stats calls it on each visit. Rows
+`POST /v2/sessions/index` files every transcript history has not seen and
+re-reads every one that has grown since it was filed — the shell calls it when
+a terminal session ends, Stats calls it on each visit. Rows
 carry `source` (`recorder` | `transcript`) so the comparison only tests
 sessions the recorder itself wrote. `GET /v2/sessions/stats` returns
 `transcripts` (the lifetime figure read from disk) and `diff` (per-session

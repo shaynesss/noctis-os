@@ -174,6 +174,15 @@ class ConversationStore:
             self.db.execute("ALTER TABLE sessions ADD COLUMN recap TEXT")
         if "recap_at" not in session_cols:
             self.db.execute("ALTER TABLE sessions ADD COLUMN recap_at INTEGER NOT NULL DEFAULT 0")
+        if "indexed_bytes" not in session_cols:
+            # How much of the transcript this row was read from. Zero for
+            # every row that predates the column, which is deliberate: the
+            # next pass sees a file larger than zero and re-reads it, so
+            # a row filed while its session was still live -- frozen at
+            # that moment, 3,387 messages of a 4,219-message conversation
+            # when this was found -- heals on the first pass after upgrade.
+            self.db.execute(
+                "ALTER TABLE sessions ADD COLUMN indexed_bytes INTEGER NOT NULL DEFAULT 0")
 
     @property
     def db(self) -> sqlite3.Connection:
@@ -226,6 +235,18 @@ class ConversationStore:
         )
         self.db.commit()
 
+    def transcript_state(self, engine_session_id: str) -> tuple[int, str, int] | None:
+        """(row id, source, bytes read) for a filed session, or None.
+
+        What `index_new` needs to decide between skip, refresh and leave
+        alone: a row the recorder wrote has no transcript to be behind, and
+        a row the indexer wrote is behind whenever the file has grown.
+        """
+        row = self.db.execute(
+            "SELECT id, source, indexed_bytes FROM sessions WHERE engine_session_id=?",
+            (engine_session_id,)).fetchone()
+        return (int(row["id"]), str(row["source"]), int(row["indexed_bytes"])) if row else None
+
     def find_by_engine_id(self, engine_session_id: str) -> int | None:
         """The row for an existing engine session, if we have one."""
         row = self.db.execute(
@@ -250,7 +271,7 @@ class ConversationStore:
         )
         self.db.commit()
 
-    def ingest(self, conv: "Conversation", mode: str) -> int | None:
+    def ingest(self, conv: "Conversation", mode: str, transcript_bytes: int = 0) -> int | None:
         """Take a conversation read from the CLI's own transcript.
 
         The only door into these tables now. There used to be a recorder
@@ -271,9 +292,10 @@ class ConversationStore:
         try:
             cur = self.db.execute(
                 "INSERT INTO sessions (engine_session_id, mode, state, title, cwd,"
-                " started_at, ended_at, source) VALUES (?,?,?,?,?,?,?,'transcript')",
+                " started_at, ended_at, source, indexed_bytes)"
+                " VALUES (?,?,?,?,?,?,?,'transcript',?)",
                 (conv.engine_session_id, mode, "done", conv.title, conv.cwd,
-                 conv.started_at or _now(), conv.ended_at or _now()),
+                 conv.started_at or _now(), conv.ended_at or _now(), transcript_bytes),
             )
         except sqlite3.IntegrityError:
             # engine_session_id is UNIQUE. Losing this race means another
@@ -283,6 +305,39 @@ class ConversationStore:
             self.db.rollback()
             return None
         row_id = int(cur.lastrowid)
+        self._write_body(row_id, conv, mode)
+        return row_id
+
+    def refresh(self, row_id: int, conv: "Conversation", transcript_bytes: int,
+                mode: str | None = None) -> None:
+        """Bring a filed session up to its transcript.
+
+        A transcript is appended to for as long as its session runs, and a
+        session can be filed at any point in that -- Stats indexes on every
+        visit, and every terminal that ends indexes for all of them. The
+        first version filed once and never looked again, so a session
+        indexed mid-life was a truncated conversation in history for good.
+        Messages and turns are replaced wholesale rather than appended: the
+        CLI rewrites nothing, but reasoning about "the part after byte N"
+        across a line the last read cut in half is not worth a few
+        milliseconds. The recap is left alone; it already knows how far the
+        conversation has moved since it was written (`recap_at`).
+
+        `mode` is only applied when given: a row filed as `general` because
+        the status line had not yet said which mode launched it takes the
+        mode once known, and never loses one it has.
+        """
+        self.db.execute("DELETE FROM messages WHERE session_id=?", (row_id,))
+        self.db.execute("DELETE FROM usage WHERE session_id=?", (row_id,))
+        self.db.execute(
+            "UPDATE sessions SET title=?, cwd=?, ended_at=?, indexed_bytes=?,"
+            " mode=COALESCE(?, mode) WHERE id=?",
+            (conv.title, conv.cwd, conv.ended_at or _now(), transcript_bytes, mode, row_id))
+        row_mode = str(self.db.execute(
+            "SELECT mode FROM sessions WHERE id=?", (row_id,)).fetchone()["mode"])
+        self._write_body(row_id, conv, row_mode)
+
+    def _write_body(self, row_id: int, conv: "Conversation", mode: str) -> None:
         for m in conv.messages:
             meta = m.get("meta")
             self.db.execute(
@@ -302,7 +357,6 @@ class ConversationStore:
                  t.cached_tokens, t.cache_write_tokens, conv.ended_at or _now()),
             )
         self.db.commit()
-        return row_id
 
     def forget(self, engine_session_id: str) -> None:
         """Mark an engine id as deleted on purpose, so the indexer will not

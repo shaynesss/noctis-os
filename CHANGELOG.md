@@ -45,6 +45,18 @@ exit → index → recap — rather than by reading:
   that *refused* (HTTP 400, a directory that does not exist) is told apart
   from a backend that is not there.
 
+- **History follows a session that is still running.** The indexer filed a
+  transcript once and never looked at it again — and a session gets filed
+  at whatever point it has reached, because Stats indexes on every visit
+  and every terminal that ends indexes for all of them. This very session
+  sat in history at 3,387 messages while its transcript held 4,219. Rows
+  now record how many bytes of the transcript they were read from
+  (`sessions.indexed_bytes`); a pass re-reads any file that has grown,
+  replacing the row's messages and turns in place (the id survives, so links
+  do), and a row filed as `general` before the status line named its mode
+  takes the mode once known. Recorder-era rows are left alone. The first
+  pass after upgrading re-reads every transcript row once — 95 in 0.8s.
+
 And one lesson for the probes rather than the product: a long burst of input
 ending in `\r` trips the CLI's paste detection, and Enter becomes a newline.
 The e2e probe sends the text, waits, then sends Enter — which is what a person

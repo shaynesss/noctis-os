@@ -129,12 +129,12 @@ def test_index_new_files_unknown_transcripts_with_their_mode(store, tmp_path, mo
     (proj / "stranger.jsonl").write_text(json.dumps(rec), encoding="utf-8")
     monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
 
-    taken = jsonl.index_new(store, {"known": "noctua"})
+    taken = jsonl.index_new(store, {"known": "noctua"}).taken
     assert sorted(taken) == ["known", "stranger"]
     modes = dict(store.db.execute("SELECT engine_session_id, mode FROM sessions"))
     assert modes == {"known": "noctua", "stranger": "general"}
     # And again: nothing new to take.
-    assert jsonl.index_new(store, {"known": "noctua"}) == []
+    assert jsonl.index_new(store, {"known": "noctua"}).taken == []
 
 
 def test_diff_skips_sessions_only_the_indexer_wrote(store, tmp_path, monkeypatch):
@@ -160,7 +160,7 @@ def test_a_second_indexing_pass_yields_to_the_one_running(store, monkeypatch):
     is running will file everything; a second one returns at once."""
     assert jsonl._indexing.acquire(blocking=False)
     try:
-        assert jsonl.index_new(store, {}) == []
+        assert jsonl.index_new(store, {}) == ([], [])
     finally:
         jsonl._indexing.release()
 
@@ -189,8 +189,67 @@ def test_a_forgotten_transcript_is_not_filed_again(store, tmp_path, monkeypatch)
     (proj / "gone.jsonl").write_text(json.dumps(rec), encoding="utf-8")
     monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
 
-    assert jsonl.index_new(store, {}) == ["gone"]
+    assert jsonl.index_new(store, {}).taken == ["gone"]
     store.forget("gone")
     store.db.execute("DELETE FROM sessions WHERE engine_session_id='gone'"); store.db.commit()
-    assert jsonl.index_new(store, {}) == [], "a deleted conversation came back"
+    assert jsonl.index_new(store, {}).taken == [], "a deleted conversation came back"
     assert store.forget("gone") is None          # idempotent
+
+
+def _rec(text, ts="2026-09-14T10:00:00Z"):
+    return json.dumps({"type": "assistant", "timestamp": ts, "cwd": "/repo",
+                       "message": {"role": "assistant", "model": "m",
+                                   "content": [{"type": "text", "text": text}],
+                                   "usage": {"input_tokens": 1, "output_tokens": 2}}})
+
+
+def test_a_session_filed_mid_life_catches_up_with_its_transcript(store, tmp_path, monkeypatch):
+    """Stats indexes on every visit and every ending terminal indexes for all
+    of them, so a running session is filed at whatever point it has reached.
+    The first version filed once and never looked again: a 4,219-message
+    conversation sat in history at the 3,387 it had when Stats was opened.
+    A file that has grown is re-read; one that has not is left alone; and a
+    row filed as general before the status line named its mode takes the
+    mode once it is known, without ever losing one it has."""
+    proj = tmp_path / "-Users-x-repo"; proj.mkdir()
+    f = proj / "live.jsonl"
+    f.write_text(_rec("one") + "\n", encoding="utf-8")
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+
+    assert jsonl.index_new(store, {}) == (["live"], [])
+    row = store.find_by_engine_id("live")
+    n = lambda: store.db.execute("SELECT count(*) FROM messages WHERE session_id=?", (row,)).fetchone()[0]
+    assert n() == 1
+
+    # Nothing changed: nothing re-read.
+    assert jsonl.index_new(store, {}) == ([], [])
+
+    # The session went on, and the status line has since said which mode it is.
+    with f.open("a", encoding="utf-8") as fh:
+        fh.write(_rec("two", "2026-09-14T11:00:00Z") + "\n")
+    assert jsonl.index_new(store, {"live": "vesper"}) == ([], ["live"])
+    assert n() == 2
+    assert store.db.execute("SELECT count(*) FROM usage WHERE session_id=?", (row,)).fetchone()[0] == 2
+    got = store.db.execute("SELECT mode, ended_at FROM sessions WHERE id=?", (row,)).fetchone()
+    assert (got["mode"], got["ended_at"]) == ("vesper", "2026-09-14T11:00:00Z")
+    assert store.find_by_engine_id("live") == row, "the row keeps its id -- links to it survive"
+
+    # A mode, once known, is not taken away by a pass that does not know it.
+    with f.open("a", encoding="utf-8") as fh:
+        fh.write(_rec("three", "2026-09-14T12:00:00Z") + "\n")
+    assert jsonl.index_new(store, {}) == ([], ["live"])
+    assert store.db.execute("SELECT mode FROM sessions WHERE id=?", (row,)).fetchone()["mode"] == "vesper"
+
+
+def test_a_recorder_row_is_never_refreshed_from_a_transcript(store, tmp_path, monkeypatch):
+    """The rows the old recorder wrote have a transcript on disk too, and a
+    larger one -- the recorder undercounted. They are the migration's
+    evidence, not its subject; a pass leaves them as they were."""
+    proj = tmp_path / "-Users-x-repo"; proj.mkdir()
+    (proj / "old.jsonl").write_text(_rec("one") + "\n" + _rec("two") + "\n", encoding="utf-8")
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    store.db.execute("INSERT INTO sessions (engine_session_id, mode, started_at, source)"
+                     " VALUES ('old', 'faber', '2026-09-01T00:00:00Z', 'recorder')")
+    store.db.commit()
+    assert jsonl.index_new(store, {}) == ([], [])
+    assert store.db.execute("SELECT count(*) FROM messages").fetchone()[0] == 0

@@ -159,8 +159,8 @@ def index_transcripts() -> dict:
     calls it when a terminal session ends; Stats calls it on each visit so
     the count is current. Idempotent by engine id.
     """
-    taken = jsonl.index_new(_store, _mode_of)
-    return {"indexed": taken, "count": len(taken)}
+    taken, refreshed = jsonl.index_new(_store, _mode_of)
+    return {"indexed": taken, "refreshed": refreshed, "count": len(taken)}
 
 
 @router.post("/statusline")

@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, NamedTuple
 
 PROJECTS = Path.home() / ".claude" / "projects"
 
@@ -310,8 +310,16 @@ import threading as _threading
 _indexing = _threading.Lock()
 
 
-def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> list[str]:
-    """Ingest every transcript the store has not seen. Returns the ids taken.
+class IndexPass(NamedTuple):
+    """What one pass did: the ids it filed for the first time, and the ids
+    whose rows it brought up to a transcript that had grown."""
+    taken: list[str]
+    refreshed: list[str]
+
+
+def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> IndexPass:
+    """Ingest every transcript the store has not seen, and re-read every one
+    that has grown since it was filed.
 
     This is the door into history (`store.ingest`): terminal sessions and VS
     Code sessions arrive here from the transcript the CLI itself wrote.
@@ -322,20 +330,38 @@ def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> 
     Returns `[]` immediately if another pass is running; see `_indexing`.
     """
     if not _indexing.acquire(blocking=False):
-        return []
+        return IndexPass([], [])
     try:
         taken: list[str] = []
+        refreshed: list[str] = []
         for p in PROJECTS.glob("**/*.jsonl"):
-            if store.find_by_engine_id(p.stem) is not None:
-                continue
             # Deleted on purpose. The file is the CLI's and stays; the row
             # must not come back.
             if store.is_forgotten(p.stem):
                 continue
-            conv = read(p)
-            if store.ingest(conv, mode_of.get(p.stem, default_mode)) is not None:
-                taken.append(p.stem)
-        return taken
+            try:
+                size = p.stat().st_size
+            except OSError:
+                continue
+            state = store.transcript_state(p.stem)
+            if state is None:
+                conv = read(p)
+                if store.ingest(conv, mode_of.get(p.stem, default_mode), size) is not None:
+                    taken.append(p.stem)
+                continue
+            row_id, source, indexed = state
+            # A row the recorder wrote is not behind a transcript; a row the
+            # indexer wrote is, whenever the file is not the size it read.
+            # Filed once and never revisited was how a session indexed
+            # mid-life stayed truncated in history -- found 2026-09-14,
+            # 3,387 messages filed of 4,219 on disk.
+            if source != "transcript" or size == indexed:
+                continue
+            known = mode_of.get(p.stem)
+            store.refresh(row_id, read(p), size,
+                          mode=known if known and known != default_mode else None)
+            refreshed.append(p.stem)
+        return IndexPass(taken, refreshed)
     finally:
         _indexing.release()
 
