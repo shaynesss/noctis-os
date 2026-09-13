@@ -150,3 +150,27 @@ def test_diff_skips_sessions_only_the_indexer_wrote(store, tmp_path, monkeypatch
 
     d = jsonl.diff_against(store)
     assert d["compared"] == 0, "an indexed-only session is not a comparison"
+
+
+def test_a_second_indexing_pass_yields_to_the_one_running(store, monkeypatch):
+    """Stats calls index_new on every visit and the shell calls it when a
+    terminal ends. Twelve concurrent passes under a sweep all found the same
+    new transcript, all tried to file it, and the writers queued on SQLite's
+    lock past its busy timeout -- the stats route answered 500. A pass that
+    is running will file everything; a second one returns at once."""
+    assert jsonl._indexing.acquire(blocking=False)
+    try:
+        assert jsonl.index_new(store, {}) == []
+    finally:
+        jsonl._indexing.release()
+
+
+def test_losing_the_unique_race_declines_like_seeing_the_row(store, monkeypatch):
+    """Between the existence check and the insert, another pass can file the
+    same transcript. engine_session_id is UNIQUE, so the insert raises; the
+    row exists, which is the outcome wanted, so this returns None."""
+    monkeypatch.setattr(store, "find_by_engine_id", lambda _eid: None)
+    assert store.ingest(_conv("raced"), "faber") is not None
+    # Now the row exists but the (patched) check says it does not.
+    assert store.ingest(_conv("raced"), "faber") is None
+    assert store.db.execute("SELECT count(*) FROM sessions").fetchone()[0] == 1

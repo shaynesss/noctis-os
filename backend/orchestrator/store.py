@@ -257,12 +257,20 @@ class ConversationStore:
         if self.find_by_engine_id(conv.engine_session_id) is not None:
             return None
 
-        cur = self.db.execute(
-            "INSERT INTO sessions (engine_session_id, mode, state, title, cwd,"
-            " started_at, ended_at, source) VALUES (?,?,?,?,?,?,?,'transcript')",
-            (conv.engine_session_id, mode, "done", conv.title, conv.cwd,
-             conv.started_at or _now(), conv.ended_at or _now()),
-        )
+        try:
+            cur = self.db.execute(
+                "INSERT INTO sessions (engine_session_id, mode, state, title, cwd,"
+                " started_at, ended_at, source) VALUES (?,?,?,?,?,?,?,'transcript')",
+                (conv.engine_session_id, mode, "done", conv.title, conv.cwd,
+                 conv.started_at or _now(), conv.ended_at or _now()),
+            )
+        except sqlite3.IntegrityError:
+            # engine_session_id is UNIQUE. Losing this race means another
+            # pass filed the same transcript between the check above and
+            # here -- the row exists, which is the outcome wanted, so this
+            # declines the same way it would have had it seen the row first.
+            self.db.rollback()
+            return None
         row_id = int(cur.lastrowid)
         for m in conv.messages:
             meta = m.get("meta")

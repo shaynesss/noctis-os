@@ -175,6 +175,17 @@ def read(path: Path) -> Conversation:
 
     if stamps:
         c.started_at, c.ended_at = min(stamps), max(stamps)
+    # The CLI names only some of its conversations: 125 of the 140
+    # transcripts on this machine had no aiTitle when the indexer first ran
+    # over them, and an untitled row in history is a row nobody can pick out.
+    # The first thing the person asked is what they came to it for, which
+    # beats anything derivable from the reply.
+    if not c.title:
+        first = next((m["content"] for m in c.messages
+                      if m["role"] == "user" and m["content"].strip()), "")
+        line = first.strip().split("\n")[0].strip().rstrip("?.!")
+        if line:
+            c.title = line if len(line) <= 60 else line[:60].rstrip() + "…"
     return c
 
 
@@ -244,24 +255,42 @@ def lifetime_tokens_cached() -> dict[str, int]:
     return result
 
 
+import threading as _threading
+
+# One pass at a time. Stats calls this on every visit and the shell calls it
+# when a terminal ends, so two can easily land together -- and twelve did,
+# under a concurrency sweep, all finding the same new transcript and all
+# trying to file it. The writers then queued on SQLite's lock past its busy
+# timeout and the stats route answered 500. A pass that is already running
+# will file everything there is to file; a second one has nothing to add, so
+# it returns at once rather than waiting to discover that.
+_indexing = _threading.Lock()
+
+
 def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> list[str]:
     """Ingest every transcript the store has not seen. Returns the ids taken.
 
-    This is the second door into history (`store.ingest`): terminal sessions
-    and VS Code sessions never pass through the recorder, and without this
-    they exist on disk and nowhere in the interface. `mode_of` is the
-    statusLine's record of which mode launched which session; a transcript it
-    does not know -- one started in a terminal outside Noctis -- is filed as
-    general rather than guessed at.
+    This is the door into history (`store.ingest`): terminal sessions and VS
+    Code sessions arrive here from the transcript the CLI itself wrote.
+    `mode_of` is the statusLine's record of which mode launched which
+    session; a transcript it does not know -- one started in a terminal
+    outside Noctis -- is filed as general rather than guessed at.
+
+    Returns `[]` immediately if another pass is running; see `_indexing`.
     """
-    taken: list[str] = []
-    for p in PROJECTS.glob("**/*.jsonl"):
-        if store.find_by_engine_id(p.stem) is not None:
-            continue
-        conv = read(p)
-        if store.ingest(conv, mode_of.get(p.stem, default_mode)) is not None:
-            taken.append(p.stem)
-    return taken
+    if not _indexing.acquire(blocking=False):
+        return []
+    try:
+        taken: list[str] = []
+        for p in PROJECTS.glob("**/*.jsonl"):
+            if store.find_by_engine_id(p.stem) is not None:
+                continue
+            conv = read(p)
+            if store.ingest(conv, mode_of.get(p.stem, default_mode)) is not None:
+                taken.append(p.stem)
+        return taken
+    finally:
+        _indexing.release()
 
 
 def diff_against(store, limit: int = 50) -> dict:

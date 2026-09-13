@@ -1197,3 +1197,13 @@ def test_a_report_says_whether_its_session_can_be_resumed(client, tmp_path):
     assert slots["term-no"]["transcript_exists"] is False
     assert slots["term-none"]["transcript_exists"] is False
     sv2._statusline.clear()
+
+
+def test_an_empty_cwd_is_refused_not_defaulted(client):
+    """`Path("")` is `Path(".")`, which resolves to wherever the backend runs
+    -- inside home, so the confinement passed and a session opened in the
+    backend's own directory. Found by the route sweep."""
+    for cwd in ("", "   "):
+        r = client.get("/v2/sessions/interactive-args", headers=AUTH,
+                       params={"mode": "faber", "cwd": cwd})
+        assert r.status_code == 400, cwd

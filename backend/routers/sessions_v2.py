@@ -72,6 +72,12 @@ _HOME = Path.home().resolve()
 
 def _safe_cwd(raw: str) -> Path:
     """Resolve and confine a client-supplied working directory."""
+    # An empty path is `Path(".")`, which resolves to wherever the backend
+    # happens to be running -- inside home, so the confinement below let it
+    # through and a session opened in the backend's own directory. Found by
+    # the route sweep; nothing legitimate sends an empty cwd.
+    if not raw or not raw.strip():
+        raise HTTPException(status_code=400, detail="A working directory is required")
     path = Path(raw).expanduser()
     try:
         resolved = path.resolve(strict=True)

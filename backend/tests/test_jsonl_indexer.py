@@ -117,3 +117,29 @@ def test_transcript_path_finds_a_session_without_knowing_its_project(monkeypatch
     monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
     assert jsonl.transcript_path("abc-123") == proj / "abc-123.jsonl"
     assert jsonl.transcript_path("missing") is None
+
+
+def test_an_untitled_transcript_is_named_after_the_first_question(tmp_path):
+    """The CLI names only some conversations -- 125 of 140 on the machine
+    this first ran on had no aiTitle -- and an untitled row in history is a
+    row nobody can pick out. The first thing asked is what they came for."""
+    p = _write(tmp_path, [
+        {"type": "user", "message": {"role": "user",
+                                     "content": "why does the batcher only flush on the next read?\nmore context"}},
+        _assistant(text="because", usage=USAGE),
+    ])
+    assert jsonl.read(p).title == "why does the batcher only flush on the next read"
+
+
+def test_a_long_first_question_is_cut_with_an_ellipsis(tmp_path):
+    p = _write(tmp_path, [{"type": "user", "message": {"role": "user", "content": "x" * 200}},
+                          _assistant(text="ok", usage=USAGE)])
+    t = jsonl.read(p).title
+    assert t.endswith("…") and len(t) <= 61
+
+
+def test_an_ai_title_still_wins(tmp_path):
+    p = _write(tmp_path, [{"type": "user", "message": {"role": "user", "content": "first question"}},
+                          _assistant(text="ok", usage=USAGE),
+                          {"type": "ai-title", "aiTitle": "The CLI's name"}])
+    assert jsonl.read(p).title == "The CLI's name"
