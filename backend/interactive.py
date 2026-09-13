@@ -70,7 +70,7 @@ def statusline_settings(mode: str = "general", port: int | None = None,
 
 
 def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
-               slot: str | None = None) -> dict:
+               slot: str | None = None, prompt: str | None = None) -> dict:
     """Everything the shell needs to open one interactive session.
 
     Returns the binary separately from the arguments because the Rust side
@@ -102,6 +102,14 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
 
     if resume_id:
         args += ["--resume", resume_id]
+
+    # A first prompt, submitted as the session opens. `claude "text"` starts
+    # interactively with that text already sent, which is what a handoff
+    # needs: the summary the previous session carried over arrives as the
+    # opening message rather than sitting in a clipboard. Last, because it
+    # is positional and everything before it is a flag.
+    if prompt and prompt.strip():
+        args.append(prompt)
 
     return {
         "binary": claude_binary(),

@@ -132,118 +132,50 @@ export function patchEntry<T>(
  * Every read and write is wrapped: storage throws outright in a private
  * window and in some embedded contexts, and losing the arrangement is a far
  * smaller failure than refusing to start. */
-const OPEN_TABS_KEY = 'noctis.openTabs'
 
-export interface RememberedTab {
+/* Which terminals are open, so a reload brings them back.
+ *
+ * A terminal cannot survive a reload -- the PTY belongs to the window that
+ * opened it -- but its *session* can: the engine's session id, learned from
+ * the terminal's own status-line report, is what `--resume` takes. So the
+ * arrangement is remembered as mode, directory and session id, and each
+ * comes back resumed rather than blank.
+ *
+ * Written on every change rather than on unload: a crash or a force-quit
+ * never fires unload, and those are exactly when losing it hurts. */
+export interface RememberedSlot {
   mode: Mode
-  label: string
-  /** The engine's session id, which is what history rows are matched on. */
-  engineId?: string
+  cwd: string
+  sessionId?: string
 }
 
-export function rememberOpenTabs(tabs: readonly RememberedTab[]): void {
+const OPEN_SLOTS_KEY = 'noctis.open-slots'
+
+export function rememberSlots(slots: readonly RememberedSlot[]): void {
   try {
-    localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(tabs))
+    localStorage.setItem(OPEN_SLOTS_KEY, JSON.stringify(slots))
   } catch {
     // A window that cannot remember its arrangement still works.
   }
 }
 
-export function recallOpenTabs(): RememberedTab[] {
+export function recallSlots(): RememberedSlot[] {
   try {
-    const raw = localStorage.getItem(OPEN_TABS_KEY)
+    const raw = localStorage.getItem(OPEN_SLOTS_KEY)
     if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    // Only entries that can actually be restored. A tab with no engine id
-    // never reached the backend, so there is no transcript to fetch.
     return parsed.filter(
-      (t): t is RememberedTab =>
-        typeof t === 'object' && t !== null && typeof (t as RememberedTab).engineId === 'string',
+      (t): t is RememberedSlot =>
+        typeof t === 'object' && t !== null
+        && typeof (t as RememberedSlot).mode === 'string'
+        && typeof (t as RememberedSlot).cwd === 'string',
     )
   } catch {
     return []
   }
 }
 
-export interface Tab {
-  id: string
-  mode: Mode
-  label: string
-  pinned?: boolean
-}
-
-export interface SessionState {
-  mode: Mode
-  blocks: Block[]
-  draft: string
-  /** Where the engine runs. Sent on every turn; the backend confines it. */
-  cwd: string
-  /** The engine's own id, learned from the first event. `--resume` takes
-   *  it, so a turn without one starts a fresh session rather than
-   *  continuing -- which is why it is stored per session, not per app. */
-  engineId?: string
-  /** A turn is in flight. The composer disables on it: a second prompt sent
-   *  mid-turn would race the first rather than queue behind it. */
-  busy?: boolean
-  /** Live thinking-token estimate during a pause, null otherwise. */
-  thinking?: number | null
-  /** 0-1 of the context window, from the last turn that reported one. */
-  context?: number | null
-  /** Epoch ms when the running turn began, null when nothing is running. */
-  startedAt?: number | null
-  /** One-line reminder of where a restored conversation left off. */
-  recap?: string | null
-  /** Per-session model override; the mode's default when absent. */
-  model?: string
-  /** The model the engine reported running. Authoritative, unlike the
-   *  request — and unlike the session's own answer, since a model cannot
-   *  introspect its weights. */
-  ranModel?: string
-  /** The last turn's duration and end time, for the line it leaves behind. */
-  lastTurn?: { seconds: number; at: number } | null
-}
-
-/* The seed is now only what an empty install starts with: one General tab
- * and nothing in it. Real conversations are loaded from the backend on
- * than on a demo.
- *
- * TABS/SESSIONS below are the sample transcripts, no longer wired to the
- * app. They stay because the screens still need something to render when
- * working on them with no backend running -- import them in place of the
- * empty seed for that. */
-export const EMPTY_TAB: Tab = { id: 't0', mode: 'general', label: 'General', pinned: true }
-export const EMPTY_SESSION: SessionState = {
-  mode: 'general', blocks: [], draft: '', cwd: '~/Developer/noctis-os',
-}
-
-export const PERMISSION_CYCLE = ['plan', 'manual', 'acceptEdits', 'auto'] as const
-export type Permission = (typeof PERMISSION_CYCLE)[number]
-
-export const PERMISSION_LABEL: Record<Permission, string> = {
-  plan: 'plan only',
-  manual: 'ask each time',
-  acceptEdits: 'auto-accept edits',
-  auto: 'auto',
-}
-
-/* Escalating: green through amber to the accent, so the permissive end of
- * the cycle reads as warmer without being alarming -- these are all valid
- * states, not warnings. */
-export const PERMISSION_TONE: Record<Permission, string> = {
-  plan: 'var(--color-good)',
-  manual: 'var(--color-ink-dim)',
-  acceptEdits: 'var(--color-noctua)',
-  auto: 'var(--color-faber)',
-}
-
-/* How hard the engine thinks. This is what the composer's chip cycles now.
- *
- * It replaced the permission chip, and the swap is not cosmetic: every mode
- * spawns with the same tools and one shared allowlist, so the permission
- * mode changes little anyone would notice, while effort changes the answer.
- * `max` is a real level, left out of the cycle so it cannot be landed on by
- * tapping a key -- the same treatment bypassPermissions gets. */
 export const EFFORT_CYCLE = ['low', 'medium', 'high', 'xhigh'] as const
 export type Effort = (typeof EFFORT_CYCLE)[number]
 

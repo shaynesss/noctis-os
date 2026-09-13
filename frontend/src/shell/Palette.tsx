@@ -11,7 +11,7 @@
  * worse than one that is absent.
  */
 import { useEffect, useRef, useState } from 'react'
-import { get } from './engine'
+import { getResult, type GetFailure } from './engine'
 import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
 interface Results {
@@ -31,9 +31,11 @@ export function Palette({
   onClose: () => void
 }) {
   const [q, setQ] = useState('')
-  // `false` is a search that could not run, which is not a search with no
-  // results -- see the setter below for why the difference matters.
-  const [results, setResults] = useState<Results | null | false>(null)
+  // `null` is no search yet. A `GetFailure` is a search that could not run,
+  // which is not a search with no results -- see the setter below for why the
+  // difference matters, and why the *kind* of failure is kept rather than a
+  // bare `false`.
+  const [results, setResults] = useState<Results | null | GetFailure>(null)
   const [busy, setBusy] = useState(false)
   const [cursor, setCursor] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -56,13 +58,15 @@ export function Palette({
     let timer: ReturnType<typeof setTimeout>
 
     const run = async () => {
-      const data = await get<Results>(`/v2/search?q=${encodeURIComponent(term)}`)
+      const res = await getResult<Results>(`/v2/search?q=${encodeURIComponent(term)}`)
       if (inputRef.current?.value.trim() !== term) return
-      // Keep trying while it cannot reach the backend. A restart takes a
-      // second or two, and the palette is usually opened *during* work --
-      // which is exactly when a restart is most likely -- so recovering on
-      // its own is the difference between a blip and a broken feature.
-      if (data === null) timer = setTimeout(run, 2000)
+      // Keep trying while it fails. A restart takes a second or two, and the
+      // palette is usually opened *during* work -- which is exactly when a
+      // restart is most likely -- so recovering on its own is the difference
+      // between a blip and a broken feature. A 500 is retried too: the one
+      // that prompted this was a per-request race, so the next attempt had a
+      // real chance of succeeding.
+      if (!res.ok) timer = setTimeout(run, 2000)
       /* A failed search is not an empty one.
        *
        * This coerced an unreachable backend into `{conversations: [],
@@ -71,7 +75,7 @@ export function Palette({
        * the conversation you were looking for not existing. The backend
        * restarts on its own, so this is a state the palette is genuinely in
        * from time to time and has to be able to say. */
-      setResults(data ?? false)
+      setResults(res.ok ? res.data : res)
       setCursor(0)
       setBusy(false)
     }
@@ -83,11 +87,11 @@ export function Palette({
   // Deleted ids are hidden immediately rather than by re-running the query:
   // a row that stays until the next search reads as a delete that failed.
   const [removed, setRemoved] = useState<Set<number>>(new Set())
-  const failed = results === false
-  const sessions = (failed ? [] : results?.conversations ?? []).filter(
+  const failure = results && 'ok' in results ? results : null
+  const sessions = (failure ? [] : (results as Results | null)?.conversations ?? []).filter(
     (s) => !removed.has(s.session_id),
   )
-  const docs = failed ? [] : results?.documents ?? []
+  const docs = failure ? [] : (results as Results | null)?.documents ?? []
   const total = sessions.length + docs.length
 
   const activate = (i: number) => {
@@ -143,10 +147,12 @@ export function Palette({
             <Empty>Type at least two characters.</Empty>
           ) : busy && !results ? (
             <Empty>Searching…</Empty>
-          ) : failed ? (
+          ) : failure ? (
             <Empty>
-              Could not reach the backend, so this search did not run. Retrying —
-              or press esc and try again in a moment.
+              {failure.kind === 'offline'
+                ? 'Could not reach the backend, so this search did not run.'
+                : `The search failed on the backend (HTTP ${failure.status}), so these are not your results.`}{' '}
+              Retrying — or press esc and try again in a moment.
             </Empty>
           ) : total === 0 ? (
             <Empty>No matches.</Empty>

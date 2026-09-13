@@ -1328,7 +1328,7 @@ def test_a_status_line_post_never_rejects_a_shape(client):
 
 def test_interactive_args_are_served_per_mode(client):
     r = client.get("/v2/sessions/interactive-args",
-                   params={"mode": "faber", "cwd": "/tmp"}, headers=AUTH)
+                   params={"mode": "faber", "cwd": str(Path.home())}, headers=AUTH)
     assert r.status_code == 200
     body = r.json()
     assert body["model"] and body["binary"]
@@ -1337,7 +1337,7 @@ def test_interactive_args_are_served_per_mode(client):
 
 def test_interactive_args_refuse_an_unknown_mode(client):
     r = client.get("/v2/sessions/interactive-args",
-                   params={"mode": "nonsense", "cwd": "/tmp"}, headers=AUTH)
+                   params={"mode": "nonsense", "cwd": str(Path.home())}, headers=AUTH)
     assert r.status_code == 400
 
 

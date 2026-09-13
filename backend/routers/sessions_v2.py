@@ -283,7 +283,7 @@ def list_sessions() -> dict:
 
 @router.get("/interactive-args")
 def interactive_args(mode: str, cwd: str, resume_id: str | None = None,
-                     slot: str | None = None) -> dict:
+                     slot: str | None = None, prompt: str | None = None) -> dict:
     """The argv for a session the shell hosts in a pseudo-terminal.
 
     The Rust side owns the terminal and knows nothing about modes; this owns
@@ -292,8 +292,13 @@ def interactive_args(mode: str, cwd: str, resume_id: str | None = None,
     the terminal, baked into the status-line command so reports come back
     labelled with it.
     """
+    # Resolved and confined here, the same way the old launch route did it:
+    # the Rust side hands this straight to the process as its working
+    # directory and does not expand `~`, so a remembered "~/Developer/x"
+    # would otherwise be a literal directory called "~".
     try:
-        return interactive.spawn_args(mode, cwd, resume_id, slot=slot)
+        return interactive.spawn_args(mode, str(_safe_cwd(cwd)), resume_id,
+                                      slot=slot, prompt=prompt)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -369,6 +374,19 @@ async def statusline(payload: dict, mode: str | None = None,
             using_overage=bool(payload.get("using_overage", False)),
         )
     return {"ok": True}
+
+
+@router.get("/statusline/all")
+def statusline_all() -> dict:
+    """Every slot's newest reading, in one call.
+
+    The shell polls this once for all of its terminals rather than once per
+    terminal: it needs each slot's session id to remember the arrangement
+    (a remembered slot reopens with `--resume`), and the model/context of
+    the one on screen for the bar. Session-keyed entries -- sessions the
+    shell did not start -- are left out; they are not slots.
+    """
+    return {"slots": {k: v for k, v in _statusline.items() if k.startswith("term-")}}
 
 
 @router.get("/statusline")

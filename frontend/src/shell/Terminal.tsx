@@ -67,12 +67,18 @@ const theme = (accent: string) => ({
 })
 
 export function Terminal({
-  id, mode, cwd, accent, onExit,
+  id, mode, cwd, accent, resumeId, prompt, onExit,
 }: {
   id: string
   mode: Mode
   cwd: string
   accent: string
+  /** An engine session id to `--resume`: a remembered terminal coming back
+   *  after a reload, or a history row reopened to continue. */
+  resumeId?: string
+  /** A first message, submitted as the session opens. A handoff's carried
+   *  summary arrives this way rather than through a clipboard. */
+  prompt?: string
   onExit?: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
@@ -188,7 +194,9 @@ export function Terminal({
       if (!live) return
 
       const args = await get<{ binary: string; args: string[] }>(
-        `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`)
+        `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`
+        + (resumeId ? `&resume_id=${encodeURIComponent(resumeId)}` : '')
+        + (prompt ? `&prompt=${encodeURIComponent(prompt)}` : ''))
       if (!live) return
       if (!args) {
         term_.writeln('\r\n  the backend did not answer, so this session has no')
