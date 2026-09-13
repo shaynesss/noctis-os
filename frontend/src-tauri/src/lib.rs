@@ -17,6 +17,8 @@ use tauri::{
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
+mod pty;
+
 /// Opt+Space. Chosen over Cmd-anything because the summon has to work while
 /// another app has focus, and the Cmd space is crowded with per-app bindings
 /// it would silently shadow.
@@ -79,6 +81,14 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(pty::Ptys::default())
+        .invoke_handler(tauri::generate_handler![
+            pty::pty_spawn,
+            pty::pty_write,
+            pty::pty_resize,
+            pty::pty_kill,
+            pty::pty_list,
+        ])
         .plugin(tauri_plugin_notification::init())
         // Read-image only, by the capability file. The shell checks whether
         // an image is waiting so the composer can offer to paste it; it

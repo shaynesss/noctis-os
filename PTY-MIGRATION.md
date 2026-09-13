@@ -1,9 +1,10 @@
 # Running the real CLI: a PTY instead of `stream-json`
 
-> **Status: spikes complete, recommended, awaiting your decision.** Written
-> 2026-09-13. Nothing is built — the spike code is throwaway and lives in the
-> session scratchpad. `SPEC.md`'s Open questions item 7 is the decision; this
-> is the review behind it.
+> **Status: steps 1–3 shipped 2026-09-13. Steps 4–5 deliberately not started.**
+> The Terminal runs beside the `stream-json` transcript; nothing was deleted,
+> and switching the default is gated on the two agreeing over real use.
+> `DOCUMENTATION.md` §24 is the reference for what exists; this file is the
+> reasoning and the sequence. `SPEC.md` Open questions 7 is the decision record.
 >
 > **Every assumption this rests on has now been tested against the installed
 > CLI (2.1.263) rather than argued.** §3 is the evidence. §8 is what remains

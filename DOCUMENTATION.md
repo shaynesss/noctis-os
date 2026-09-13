@@ -557,8 +557,8 @@ make test        # pytest + tsc -b + vitest
 
 ## 23. Known gaps
 
-**Under review — the conversation surface itself:**
-- **A PTY instead of `stream-json`.** Noctis drives `claude -p` ("print response and exit") once per turn and rebuilds the interactive loop on top of it; running the CLI in a pseudo-terminal would delete that reconstruction. Spiked 2026-09-13, all assumptions tested, recommended and undecided — `SPEC.md` Open questions 7 and `PTY-MIGRATION.md`. If adopted it replaces §2, §3, §4, §7 and most of §11 of this document, and leaves §9, §10, §12's panels, §14 and §15 untouched.
+**In progress — the conversation surface:**
+- **The real CLI in a PTY.** Step 1 of `PTY-MIGRATION.md` §7 shipped 2026-09-13: a Terminal rail view hosting an interactive `claude` session in a pseudo-terminal, **beside** the `stream-json` transcript rather than instead of it. See §24. Steps 4–5 (switch the default, delete the orchestrator) are not started and are gated on the two running side by side without disagreeing.
 
 **Outstanding:**
 - The `launchd`-on-wake scheduler — the only feature left in the build order. `brief/generate.py` writes the brief; nothing fires it, and the vault auto-commit/push job does not exist.
@@ -571,3 +571,65 @@ make test        # pytest + tsc -b + vitest
 - `--input-format stream-json` as a persistent bidirectional session is untested; it would address ~1.9s spawn-per-turn latency.
 
 **Permanently out of scope:** multi-user or hosting · code editing / custom IDE · any deployment story.
+
+
+---
+
+## 24. The Terminal — the real CLI, hosted
+
+**Shipped 2026-09-13, alongside the `stream-json` transcript, not replacing it.**
+Chat is still the orchestrator; Terminal is the interactive CLI in a
+pseudo-terminal. Both work. `PTY-MIGRATION.md` has the full reasoning; this
+section is what exists.
+
+**Why.** Noctis drives `claude -p` — "print response and exit" in the CLI's own
+help — once per turn, and much of the orchestrator exists to rebuild the
+interactive loop on top of a scripting mode: the closing pass, the permission
+host, per-turn respawn, `TurnEnd` bookkeeping. Run interactively, the loop is
+the CLI's own.
+
+**The split.** `frontend/src-tauri/src/pty.rs` owns the terminal and knows
+nothing about modes. `backend/interactive.py` owns the mode and knows nothing
+about terminals. The shell asks `GET /v2/sessions/interactive-args` for an
+argv and hands it to `pty_spawn`.
+
+**Three things the Rust side has to get right**, each found by testing:
+
+| | |
+|---|---|
+| Size the PTY **before** spawning | at 0×0 the TUI exits instantly, no error, no output |
+| Coalesce reads into ~16ms frames | every chunk is serialised across Tauri's IPC; one event per read stalls a fast-printing session |
+| Kill the session, not the process | the immediate child is not the only thing holding the terminal |
+
+Bytes cross the IPC **base64-encoded**. A read can split a multi-byte
+character, and xterm.js has its own UTF-8 decoder that holds the seam.
+
+**The status bar has a second source.** `statusLine` is a command the CLI runs
+on every render, handed a JSON payload on stdin: `rate_limits.five_hour` and
+`seven_day`, `context_window`, `effort`, `cost`, `session_id`,
+`transcript_path`. `backend/scripts/statusline.sh` POSTs it to
+`/v2/sessions/statusline`. Unlike the stream this **survives a page reload**,
+because the numbers live in the backend rather than in React state.
+
+**History becomes something read, not recorded.** `orchestrator/jsonl.py`
+reconstructs a conversation from `~/.claude/projects/**/*.jsonl` — messages,
+tool calls with their ids, thinking blocks, per-turn usage, and the CLI's own
+`aiTitle`. Verified against three failure shapes: a clean short session, one
+SIGKILLed mid-generation (its partial output was **already on disk** — the file
+is appended live, not flushed at exit), and a resumed one (appends, no fork).
+
+**Thinking blocks are kept even with no text.** Models default to
+`display: "omitted"`, so reasoning is billed and never returned; all 34 blocks
+in the first real transcript were empty. The transcript renders thinking as a
+counter, so the block's existence is the signal — guarding on its text dropped
+every one.
+
+**Lifetime tokens: one raw number.** No split, no tiers. The CLI's own
+background calls are absent from the JSONL, which is 0.178% of the total.
+
+**Styling is the shell's.** xterm.js ships no look of its own: the theme is
+generated from `tokens.css`, so ground, ink and the character accents are the
+same values the cards use, and a tab's terminal can carry its mode's accent.
+`fontWeight: 450` is deliberate — WKWebView rasterises glyphs lighter than
+Terminal.app, and Cascadia Code is vendored as a 200–700 variable font.
+WebGL2 where available, DOM renderer where not.

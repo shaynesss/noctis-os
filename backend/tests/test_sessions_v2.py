@@ -1285,3 +1285,53 @@ def test_clearing_the_worklist_on_purpose_still_works(vault, client):
     """The distinction that matters: `{}` says nothing, `{"markdown": ""}`
     says empty."""
     assert client.put("/v2/worklist", headers=AUTH, json={"markdown": ""}).status_code == 200
+
+
+def test_the_status_line_feeds_the_rolling_windows(client):
+    """An interactive session's only route for what the stream used to carry.
+
+    It also survives a page reload, which the stream never did: the numbers
+    live in the backend rather than in React state, so the bar is right the
+    moment the window opens instead of after the first turn.
+    """
+    payload = {
+        "session_id": "s-1",
+        "rate_limits": {"five_hour": {"used_percentage": 3, "resets_at": 1789338000},
+                        "seven_day": {"used_percentage": 9, "resets_at": 1789383600}},
+        "context_window": {"used_percentage": 20},
+        "model": {"id": "claude-opus-5"},
+    }
+    assert client.post("/v2/sessions/statusline", json=payload, headers=AUTH).status_code == 200
+
+    limits = client.get("/v2/sessions/limits", headers=AUTH).json()
+    assert limits["known"] is True
+    assert limits["five_hour"]["used"] == 0.03
+    assert limits["seven_day"]["used"] == 0.09
+    assert limits["five_hour"]["resets_at"] == 1789338000
+
+    back = client.get("/v2/sessions/statusline", headers=AUTH).json()
+    assert back["payload"]["context_window"]["used_percentage"] == 20
+
+
+def test_a_status_line_post_never_rejects_a_shape(client):
+    """A hot path on every render of every open terminal. A validation error
+    would put a traceback in the middle of somebody's session, and a status
+    line is not worth that."""
+    for junk in ({}, {"rate_limits": None}, {"rate_limits": {"five_hour": {}}},
+                 {"session_id": 12, "cost": "not an object"}):
+        assert client.post("/v2/sessions/statusline", json=junk, headers=AUTH).status_code == 200
+
+
+def test_interactive_args_are_served_per_mode(client):
+    r = client.get("/v2/sessions/interactive-args",
+                   params={"mode": "faber", "cwd": "/tmp"}, headers=AUTH)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["model"] and body["binary"]
+    assert "-p" not in body["args"]
+
+
+def test_interactive_args_refuse_an_unknown_mode(client):
+    r = client.get("/v2/sessions/interactive-args",
+                   params={"mode": "nonsense", "cwd": "/tmp"}, headers=AUTH)
+    assert r.status_code == 400

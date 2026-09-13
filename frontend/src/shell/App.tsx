@@ -16,6 +16,7 @@ import {
   type Attachment, type HistorySession, type HistoryTranscript,
   type Stats as StatsPayload, type Window,
 } from './engine'
+import { Terminal } from './Terminal'
 import { Unreachable } from './Async'
 import { useFetched } from './useFetched'
 import { hasImage } from './clipboard'
@@ -1169,7 +1170,8 @@ export default function App() {
             onRetry={(text) => void turn(activeTab, text)}
           />
         ) : (
-          <Pane view={view} limits={limits} />
+          <Pane view={view} limits={limits} mode={session.mode}
+                cwd={activeCwd} accent={accent} />
         )}
 
         </div>
@@ -1353,8 +1355,28 @@ export default function App() {
 /* The non-chat views are stubs at this stage. They exist so the rail is
  * honest -- a nav item that goes nowhere is worse than one that says "not
  * built yet" -- and so the shell's layout is exercised at every width. */
-function Pane({ view, limits }: { view: string; limits?: { five_hour: Window; seven_day: Window } | null }) {
+function Pane({ view, limits, mode, cwd, accent }: {
+  view: string
+  limits?: { five_hour: Window; seven_day: Window } | null
+  mode: Mode
+  cwd: string
+  accent: string
+}) {
   if (view === 'stats') return <Stats limits={limits} />
+  /* Full-bleed, not inside the 840px reading column: a terminal is sized in
+     rows and columns, and boxing it would waste half the width the CLI is
+     laying its own output out against.
+
+     Keyed by mode and cwd so switching either opens a new session rather
+     than pointing an existing one somewhere it was not started. */
+  if (view === 'terminal') {
+    return (
+      <div className="min-h-0 flex-1">
+        <Terminal key={`${mode}:${cwd}`} id={`${mode}:${cwd}`}
+                  mode={mode} cwd={cwd} accent={accent} />
+      </div>
+    )
+  }
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">

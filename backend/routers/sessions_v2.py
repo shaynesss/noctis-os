@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
+import interactive
 import jobs
 import vault_io
 from permissions import registry as permission_registry
@@ -30,7 +31,7 @@ from orchestrator.driver import (
     EFFORT_CYCLE, MODE_MODELS, OPENING_PROMPT, PERMISSION_CYCLE, Image, SessionSpec,
     one_shot,
 )
-from orchestrator.events import EngineError
+from orchestrator.events import EngineError, Limits
 from orchestrator.manager import SessionManager
 from orchestrator.store import ConversationStore
 from orchestrator.wire import blocks_from_messages, to_sse
@@ -277,6 +278,73 @@ def list_sessions() -> dict:
             for h in _manager.sessions.values()
         ],
     }
+
+
+@router.get("/interactive-args")
+def interactive_args(mode: str, cwd: str, resume_id: str | None = None) -> dict:
+    """The argv for a session the shell hosts in a pseudo-terminal.
+
+    The Rust side owns the terminal and knows nothing about modes; this owns
+    the mode and knows nothing about terminals. See `interactive.py` for why
+    this is not `build_command` with a flag.
+    """
+    try:
+        return interactive.spawn_args(mode, cwd, resume_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+# The most recent status-line payload, and the session it came from.
+#
+# In memory rather than stored: it is a live reading, worth nothing once it is
+# stale, and a restart should show "unknown" rather than yesterday's number.
+# Keyed by session so several open terminals do not overwrite each other.
+_statusline: dict[str, dict] = {}
+
+
+@router.post("/statusline")
+async def statusline(payload: dict) -> dict:
+    """Where an interactive session reports what the stream used to.
+
+    Claude Code runs the configured `statusLine` command on every render and
+    hands it this on stdin: `rate_limits.five_hour`/`seven_day`,
+    `context_window`, `effort`, `cost`, `session_id` and `transcript_path`.
+    Forwarding it is what lets the status bar know the 5h and 7d windows
+    without a `stream-json` turn in flight -- and unlike the stream, it
+    survives a page reload, because the numbers live here rather than in
+    React state.
+
+    Accepts whatever shape arrives. This is a hot path on every render of
+    every open terminal, and a validation error here would put a traceback in
+    the middle of somebody's session.
+    """
+    sid = str(payload.get("session_id") or "unknown")
+    _statusline[sid] = payload
+
+    # The rolling windows are a property of the account, not of one session,
+    # so the newest report from any terminal is the right answer for all of
+    # them -- the same "newest wins" the manager applies to Limits events.
+    rl = payload.get("rate_limits") or {}
+    five, seven = rl.get("five_hour"), rl.get("seven_day")
+    if five and seven:
+        _manager.limits = Limits(
+            five_hour_used=float(five.get("used_percentage", 0)) / 100,
+            five_hour_resets_at=int(five.get("resets_at", 0)),
+            seven_day_used=float(seven.get("used_percentage", 0)) / 100,
+            seven_day_resets_at=int(seven.get("resets_at", 0)),
+            using_overage=bool(payload.get("using_overage", False)),
+        )
+    return {"ok": True}
+
+
+@router.get("/statusline")
+def statusline_read(session_id: str | None = None) -> dict:
+    """The newest status-line reading, for the bar."""
+    if session_id:
+        return {"payload": _statusline.get(session_id)}
+    newest = max(_statusline.values(), key=lambda p: p.get("cost", {}).get(
+        "total_duration_ms", 0), default=None)
+    return {"payload": newest, "sessions": len(_statusline)}
 
 
 @router.get("/limits")

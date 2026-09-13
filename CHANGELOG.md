@@ -9,9 +9,10 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
-### Under review: the real CLI in a PTY (2026-09-13)
+### The real CLI, hosted in a terminal (2026-09-13)
 
-**Not built, not decided.** Noctis spawns `claude -p` — "print response and
+**Step 1 of the migration is in: a Terminal rail view running an interactive
+`claude` in a pseudo-terminal, beside the existing transcript.** Noctis spawns `claude -p` — "print response and
 exit" in the CLI's own help — once per turn, and most of the orchestrator
 exists to rebuild the interactive loop on top of a scripting mode. Running the
 CLI in a pseudo-terminal instead would delete that reconstruction.
@@ -36,7 +37,21 @@ architecture — xterm.js + WebGL2 in Tauri with the PTY in Rust.
 absent from the JSONL, which is 146,327 tokens against 82,174,586 — 0.178%.
 `aux_input_tokens`/`aux_output_tokens` go with the migration.
 
-Review: `PTY-MIGRATION.md`. Decision: `SPEC.md` Open questions 7.
+**What shipped:** `pty.rs` (PTY host: spawn, write, resize, kill, 16ms output
+frames, base64 across the IPC), `interactive.py` (the argv — deliberately not
+`build_command` with a flag), `Terminal.tsx` (xterm.js themed from
+`tokens.css`, WebGL2 with a DOM fallback), `scripts/statusline.sh` +
+`/v2/sessions/statusline` (the status bar's second source, which survives a
+reload where the stream never did), and `orchestrator/jsonl.py` (history read
+from the CLI's own transcripts).
+
+**Nothing was deleted.** Chat still runs on the orchestrator. Switching the
+default and removing the orchestrator are gated on the two paths agreeing over
+real use — the 09-12 cutover removed `launch_config/` while a guard still
+required it and broke every spawn.
+
+Review: `PTY-MIGRATION.md`. Decision record: `SPEC.md` Open questions 7.
+Reference: `DOCUMENTATION.md` §24.
 
 ### One command to run Noctis, and it opens the app (2026-09-13)
 

@@ -368,8 +368,17 @@ selection and scrollbar, and `ITerminalOptions` covers font, weight, leading,
 letter spacing, cursor style and density — generated from `tokens.css` so there
 is one source of truth.
 
-**All spikes pass; recommended, pending your decision.** What remains is two
-measurements rather than unknowns: coalescing PTY reads into ~16ms frames
+**Step 1 shipped 2026-09-13.** A Terminal rail view hosts an interactive
+`claude` in a pseudo-terminal beside the `stream-json` transcript: `pty.rs`
+(the PTY host), `interactive.py` (the argv), `Terminal.tsx` (xterm.js themed
+from `tokens.css`), `scripts/statusline.sh` + `/v2/sessions/statusline` (the
+status bar's second source, which survives a reload where the stream never
+did), and `orchestrator/jsonl.py` (history read from the CLI's own
+transcripts). Steps 4–5 — switch the default, delete the orchestrator — are
+**not started** and are gated on the two paths running side by side without
+disagreeing. `DOCUMENTATION.md` §24.
+
+What remains is two measurements rather than unknowns: coalescing PTY reads into ~16ms frames
 before they cross Tauri's IPC (one event per read is the naive version that
 stalls under a fast-printing session), and deciding which keystrokes stay
 reserved to the shell versus passing through to the CLI. Sequence in `PTY-MIGRATION.md` §7, and steps 2–3 (statusLine
