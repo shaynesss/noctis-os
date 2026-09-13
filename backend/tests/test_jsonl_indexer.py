@@ -143,3 +143,31 @@ def test_an_ai_title_still_wins(tmp_path):
                           _assistant(text="ok", usage=USAGE),
                           {"type": "ai-title", "aiTitle": "The CLI's name"}])
     assert jsonl.read(p).title == "The CLI's name"
+
+
+def test_scan_usage_agrees_with_read_to_the_token(tmp_path):
+    """The lifetime figure is summed from `scan_usage`, which walks the same
+    records as `read` but keeps no text. If the two ever disagree, Stats and
+    history disagree about what a session cost."""
+    import json
+    from orchestrator import jsonl
+    p = tmp_path / "s.jsonl"
+    rows = [
+        {"type": "user", "timestamp": "2026-09-14T01:00:00Z", "cwd": "/x",
+         "message": {"role": "user", "content": "hi"}},
+        {"type": "assistant", "timestamp": "2026-09-14T00:59:00Z",
+         "message": {"role": "assistant", "content": [{"type": "text", "text": "yo"}],
+                     "usage": {"input_tokens": 3, "output_tokens": 5,
+                               "cache_read_input_tokens": 7, "cache_creation_input_tokens": 11}}},
+        {"type": "assistant", "timestamp": "2026-09-14T01:01:00Z",
+         "message": {"role": "assistant", "content": [], "usage": {"output_tokens": 2}}},
+        "not json at all",
+    ]
+    p.write_text("\n".join(json.dumps(r) if isinstance(r, dict) else r for r in rows) + "\n")
+    c, u = jsonl.read(p), jsonl.scan_usage(p)
+    assert u.turns == len(c.turns) == 2
+    assert u.lifetime == c.lifetime == 28
+    assert u.started_at == c.started_at == "2026-09-14T00:59:00Z"
+    assert (u.input_tokens, u.output_tokens, u.cached_tokens, u.cache_write_tokens) == \
+        (sum(t.input_tokens for t in c.turns), sum(t.output_tokens for t in c.turns),
+         sum(t.cached_tokens for t in c.turns), sum(t.cache_write_tokens for t in c.turns))

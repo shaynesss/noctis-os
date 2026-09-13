@@ -89,17 +89,60 @@ def _records(path: Path) -> Iterator[dict[str, Any]]:
     appended to live, so a read can land mid-write. Skipping one line is
     right; refusing the whole transcript for it is not.
     """
+    # Line by line rather than `read_text().splitlines()`: that held the whole
+    # file and a second copy of it as a list, and the parsed records on top.
+    # Streaming keeps the peak at one line, whatever the file's size.
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        with path.open(encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
     except OSError:
         return
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        try:
-            yield json.loads(line)
-        except json.JSONDecodeError:
-            continue
+
+
+@dataclass
+class Usage:
+    """What one transcript cost, and nothing else it says."""
+    turns: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_tokens: int = 0
+    cache_write_tokens: int = 0
+    started_at: str = ""
+
+    @property
+    def lifetime(self) -> int:
+        return (self.input_tokens + self.output_tokens + self.cached_tokens
+                + self.cache_write_tokens)
+
+
+def scan_usage(path: Path) -> Usage:
+    """The token figures of one transcript, without building the conversation.
+
+    `read` reconstructs every message body, which is what indexing needs and
+    what the lifetime figure does not: the backend sat at 640MB resident after
+    one Stats visit because the sum over 155 transcripts held each one's text
+    in memory on the way to four integers. This walks the same records and
+    keeps the integers. It must agree with `read` to the token --
+    `test_jsonl_indexer` holds the two together.
+    """
+    u = Usage()
+    for r in _records(path):
+        if ts := r.get("timestamp"):
+            if not u.started_at or ts < u.started_at:
+                u.started_at = ts
+        if usage := (r.get("message") or {}).get("usage"):
+            u.turns += 1
+            u.input_tokens += int(usage.get("input_tokens", 0))
+            u.output_tokens += int(usage.get("output_tokens", 0))
+            u.cached_tokens += int(usage.get("cache_read_input_tokens", 0))
+            u.cache_write_tokens += int(usage.get("cache_creation_input_tokens", 0))
+    return u
 
 
 def read(path: Path) -> Conversation:
@@ -201,20 +244,20 @@ def lifetime_tokens() -> dict[str, int]:
     inp = out = cached = cache_write = 0
     since = ""
     for p in PROJECTS.glob("**/*.jsonl"):
-        c = read(p)
-        if not c.turns:
+        u = scan_usage(p)
+        if not u.turns:
             continue
         sessions += 1
-        turns += len(c.turns)
-        total += c.lifetime
+        turns += u.turns
+        total += u.lifetime
         # The four bars Stats draws beside the one number. Still one number:
         # these are its parts, not a second tier.
-        inp += sum(t.input_tokens for t in c.turns)
-        out += sum(t.output_tokens for t in c.turns)
-        cached += sum(t.cached_tokens for t in c.turns)
-        cache_write += sum(t.cache_write_tokens for t in c.turns)
-        if c.started_at and (not since or c.started_at < since):
-            since = c.started_at
+        inp += u.input_tokens
+        out += u.output_tokens
+        cached += u.cached_tokens
+        cache_write += u.cache_write_tokens
+        if u.started_at and (not since or u.started_at < since):
+            since = u.started_at
     return {"tokens": total, "turns": turns, "sessions": sessions,
             "input": inp, "output": out, "cached": cached,
             "cache_write": cache_write, "since": since}
@@ -224,8 +267,8 @@ def lifetime_tokens() -> dict[str, int]:
 
 import time as _time
 
-# `lifetime_tokens` parses every transcript on disk -- 128 files, the largest
-# 15MB -- and Stats asks for it on every visit. Cached on a signature of the
+# `lifetime_tokens` scans every transcript on disk -- 155 files, the largest
+# 26MB -- and Stats asks for it on every visit. Cached on a signature of the
 # directory (file count and newest mtime) rather than a clock: a session that
 # is still writing bumps the mtime, so the number moves while it is live and
 # holds still while nothing is.
@@ -311,7 +354,7 @@ def diff_against(store, limit: int = 50) -> dict:
         recorded = store.tokens_for_engine_id(p.stem)
         if recorded is None:
             continue
-        seen = read(p).lifetime
+        seen = scan_usage(p).lifetime
         rows.append({"session": p.stem, "recorded": recorded, "transcript": seen,
                      "delta": seen - recorded})
     agree = sum(1 for r in rows if r["delta"] == 0)
