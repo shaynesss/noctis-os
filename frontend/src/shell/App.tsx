@@ -16,7 +16,7 @@ import {
   type Attachment, type HistorySession, type HistoryTranscript,
   type Stats as StatsPayload, type Window,
 } from './engine'
-import { Terminal } from './Terminal'
+import { Terminals } from './Terminals'
 import { Unreachable } from './Async'
 import { useFetched } from './useFetched'
 import { hasImage } from './clipboard'
@@ -625,6 +625,21 @@ export default function App() {
       // looking at would change something you cannot see.
       if (launcherRef.current || paletteRef.current || docRef.current || pickerRef.current) return
 
+      /* Keys inside a terminal belong to the CLI.
+       *
+       * This listener runs in the capture phase, so it sees every key before
+       * xterm does -- and the shell binds Shift+Tab, Escape and the arrows
+       * for its own purposes, all of which Claude Code's TUI also uses
+       * (Shift+Tab cycles its permission mode, Escape cancels, arrows move
+       * its menus). Without this the trust dialog's ↓ would have cycled
+       * Noctis's effort chip instead.
+       *
+       * The reserved set is every ⌘-chord: ⌘K, ⌘T, ⌘W, ⌘⇧H, ⌘1–9. Those stay
+       * with the shell because they are about tabs and the app, not about
+       * what is in the terminal. Everything without ⌘ passes through. This is
+       * VS Code's split, and it is the one the hands already know. */
+      if (!e.metaKey && (e.target as Element | null)?.closest?.('[data-terminal]')) return
+
       // Shift+Tab cycles effort, the affordance carried over from the CLI's
       // TUI. It cycled the permission mode until every mode came to spawn
       // with the same tools, at which point it changed almost nothing a
@@ -978,10 +993,24 @@ export default function App() {
   const [live, setLive] = useState<{ running: number; max: number } | null>(null)
   useEffect(() => {
     let alive = true
-    const read = () =>
+    const read = () => {
       void get<{ running: number; max_concurrent: number }>('/v2/sessions').then((d) => {
         if (alive && d) setLive({ running: d.running, max: d.max_concurrent })
       })
+      /* The windows too, on the same cadence.
+       *
+       * They used to arrive only as a stream event, so the bar was right
+       * during a Chat turn and frozen otherwise. A terminal session reports
+       * them to the backend on every render via statusLine -- and the seed
+       * at boot was the only read, so the numbers landed and sat there until
+       * the window was reloaded. Four seconds is the same staleness the live
+       * counter beside them already accepts, for the same reason: nothing
+       * turns on a few seconds of lag in a rolling window. */
+      void get<{ known: boolean; five_hour: Window; seven_day: Window
+                 using_overage: boolean }>('/v2/sessions/limits').then((d) => {
+        if (alive && d?.known) setLimits(d)
+      })
+    }
     read()
     const id = setInterval(read, 4000)
     return () => {
@@ -1170,9 +1199,13 @@ export default function App() {
             onRetry={(text) => void turn(activeTab, text)}
           />
         ) : (
-          <Pane view={view} limits={limits} mode={session.mode}
-                cwd={activeCwd} accent={accent} />
+          <Pane view={view} limits={limits} />
         )}
+        {/* Always mounted, shown only on its rail item. A terminal's session
+            dies with its component, so this cannot live inside the ternary
+            above the way the panels do. */}
+        <Terminals hidden={view !== 'terminal'} mode={session.mode}
+                   cwd={activeCwd} accent={accent} />
 
         </div>
       </div>
@@ -1355,28 +1388,11 @@ export default function App() {
 /* The non-chat views are stubs at this stage. They exist so the rail is
  * honest -- a nav item that goes nowhere is worse than one that says "not
  * built yet" -- and so the shell's layout is exercised at every width. */
-function Pane({ view, limits, mode, cwd, accent }: {
-  view: string
-  limits?: { five_hour: Window; seven_day: Window } | null
-  mode: Mode
-  cwd: string
-  accent: string
-}) {
+function Pane({ view, limits }: { view: string; limits?: { five_hour: Window; seven_day: Window } | null }) {
   if (view === 'stats') return <Stats limits={limits} />
-  /* Full-bleed, not inside the 840px reading column: a terminal is sized in
-     rows and columns, and boxing it would waste half the width the CLI is
-     laying its own output out against.
-
-     Keyed by mode and cwd so switching either opens a new session rather
-     than pointing an existing one somewhere it was not started. */
-  if (view === 'terminal') {
-    return (
-      <div className="min-h-0 flex-1">
-        <Terminal key={`${mode}:${cwd}`} id={`${mode}:${cwd}`}
-                  mode={mode} cwd={cwd} accent={accent} />
-      </div>
-    )
-  }
+  // 'terminal' is not handled here on purpose: the Terminals view is mounted
+  // permanently beside this one and hidden when not showing, because
+  // unmounting a terminal kills its session -- see Terminals.tsx.
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">

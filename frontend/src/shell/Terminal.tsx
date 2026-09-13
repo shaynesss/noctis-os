@@ -21,7 +21,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import '@xterm/xterm/css/xterm.css'
-import { get } from './engine'
+import { get, post } from './engine'
 import type { Mode } from './domain'
 
 /** Read a design token, so the terminal cannot drift from the rest of the UI. */
@@ -227,6 +227,11 @@ export function Terminal({
          * hands are on. */
         term_.writeln('\r\n\x1b[2m  session ended — press \x1b[0mr\x1b[2m to start a new one\x1b[0m')
         setDead(true)
+        /* Into history, now rather than on the next Stats visit. The recorder
+         * never saw this session -- it was never streamed -- so until the
+         * transcript is indexed it exists on disk and nowhere in the
+         * interface. The exit is the moment the file is complete. */
+        void post('/v2/sessions/index', {})
         onExit?.()
       })
       cleanups.push(unData, unExit)
@@ -304,5 +309,7 @@ export function Terminal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, generation])
 
-  return <div ref={host} className="h-full w-full overflow-hidden px-[10px] py-[8px]" />
+  // `data-terminal` is what the shell's key handler looks for to decide that
+  // a keystroke belongs to the CLI rather than to the app.
+  return <div ref={host} data-terminal className="h-full w-full overflow-hidden px-[10px] py-[8px]" />
 }

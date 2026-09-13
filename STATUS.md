@@ -209,7 +209,7 @@ Both are local, so this is a rebase today and a force-push over shared
 history once they are pushed — see the open decision below. It is a
 before-you-push item, not an urgent one, but 130 commits are already waiting.
 
-**4. The PTY migration — step 1 shipped, steps 4-5 deliberately not.**
+**4. The PTY migration — steps 1-3 shipped; step 3 found the recorder wrong.**
 Noctis drives `-p`, the CLI's scripting mode, once per turn. Running the real
 interactive CLI in a pseudo-terminal would delete the closing pass, the
 per-turn respawn, the permission host and the whole dropped-stream class of

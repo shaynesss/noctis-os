@@ -199,6 +199,17 @@ not of a feature.
 **Decided 2026-09-13. Stats shows a single lifetime token count. No split, no
 tiers, no footnote.** It is a fun stat, and it should read like one.
 
+**And the source of that number should be the transcript, not the recorder.**
+Found the same evening, by the diff this document asked for: of 16 sessions
+both readers saw, 1 agrees. The other 15 are all larger on disk, by 2–5×.
+One checked field by field — `dc88ea90`: recorder 4 rows, 6,486 output
+tokens; transcript 29 rows, 13,252 output tokens. Output cannot be inflated by
+cache re-reads, so this is not a counting artifact: the recorder writes one
+row per Noctis turn from `result.usage`, and `result.usage` does not cover
+the turn's other API calls. The 82M lifetime figure this section was measured
+against was itself an undercount. What it undercounts *by* is now measurable,
+and the 0.178% background-tier question is a rounding error beside it.
+
 What the jargon meant, once, so it can stop appearing: alongside your
 conversation the CLI makes its own small background calls on a cheaper model —
 naming a session, checking quota. Today's parser separates those into
@@ -293,7 +304,13 @@ Sequence, and never a cutover:
    on the stream even before the migration lands.
 3. **JSONL indexer** writing the same SQLite tables, so search, Stats and
    history keep their queries. Run it beside the current recorder and diff the
-   two for a week.
+   two for a week. *Shipped 2026-09-13 — and the first honest diff is not
+   boring: 1/16 agree, the transcript is 2–5× larger every time, and on the
+   session checked per field even output tokens are 2×. The recorder has
+   been undercounting since it was written; the transcript is the more
+   complete reader. §4 has the numbers. The gate was misnamed: it is not
+   "the diff is boring", it is "every delta is understood", and this one is
+   understood enough to act on once `result.usage`'s contents are pinned.*
 4. **Switch the default** once the diff is boring.
 5. **Delete the orchestrator** only when nothing reads it — the 2026-09-12
    cutover removed `launch_config/` while a guard still required it and broke

@@ -232,7 +232,11 @@ def test_an_older_database_gains_the_new_columns(tmp_path):
 
 def test_stats_route_shape(client):
     body = client.get("/v2/sessions/stats", headers=AUTH).json()
-    assert set(body) == {"lifetime", "activity"}
+    # `transcripts` and `diff` are the migration's gate: the same number read
+    # from the CLI's own files beside the recorder's, and where they disagree.
+    assert set(body) == {"lifetime", "activity", "transcripts", "diff"}
+    assert set(body["transcripts"]) == {"tokens", "turns", "sessions"}
+    assert set(body["diff"]) == {"compared", "agree", "rows"}
     assert set(body["lifetime"]) >= {"input", "output", "cached", "turns", "aux_input"}
 
 

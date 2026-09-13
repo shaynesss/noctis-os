@@ -9,6 +9,33 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Beside the recorder, and the recorder loses (2026-09-13)
+
+Steps 2 and 3 of the migration wired in, plus three things the first real
+click needed. **The status bar is live** — limits are polled on the same
+four-second cadence as the live counter, so a terminal's `statusLine` reports
+reach the bar instead of waiting for a reload. **Keys inside a terminal go to
+the CLI** — the shell captures Shift+Tab, Escape and the arrows for itself,
+and Claude Code's TUI uses all three; every ⌘-chord stays with the shell,
+everything else passes through. **Several terminals, kept alive** — the view
+stays mounted whichever rail item is showing, because the first version
+unmounted on Stats and unmounting a terminal kills its session.
+
+**The indexer files every transcript into history** (109 on first run) and
+`/v2/sessions/stats` returns the lifetime figure from disk beside the
+recorder's, with a per-session diff. Rows carry `source` so the diff only
+tests what the recorder wrote — a row the indexer filed agrees with its own
+transcript by construction, and the first version counted those.
+
+**The honest diff: 1 of 16 agree, and the recorder is wrong.** Every
+disagreement is the transcript being larger, 2–5×. On `dc88ea90`, checked
+per field: 4 usage rows for 29 API calls, 6,486 output tokens recorded
+against 13,252 on disk. Output cannot be inflated by cache re-reads. The
+recorder writes one row per turn from `result.usage`, and that is not the
+whole turn — it has undercounted since it was written, and the 09-08 fix
+corrected the model's name, not its number. The transcript is the more
+complete source; Stats switching to it is step 4, not yet done.
+
 ### The real CLI, hosted in a terminal (2026-09-13)
 
 **Step 1 of the migration is in: a Terminal rail view running an interactive

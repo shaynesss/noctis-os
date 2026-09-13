@@ -627,6 +627,40 @@ every one.
 **Lifetime tokens: one raw number.** No split, no tiers. The CLI's own
 background calls are absent from the JSONL, which is 0.178% of the total.
 
+**The indexer runs beside the recorder, and the comparison is live.**
+`POST /v2/sessions/index` files every transcript history has not seen — the
+shell calls it when a terminal session ends, Stats calls it on each visit. Rows
+carry `source` (`recorder` | `transcript`) so the comparison only tests
+sessions the recorder itself wrote. `GET /v2/sessions/stats` returns
+`transcripts` (the lifetime figure read from disk) and `diff` (per-session
+recorded vs transcript) beside `lifetime`.
+
+**First honest run, 2026-09-13: 1 of 16 agree, and the recorder is the one
+that is wrong.** Every disagreement runs the same way — transcript 2–5×
+larger — and on the session checked field by field, *output* tokens are 2×
+too (6,486 recorded, 13,252 on disk; 4 usage rows for 29 API calls). Cache
+reads can be inflated by per-call re-reads; generated output cannot. So
+`result.usage` is not the whole turn, and the recorder has undercounted since
+it was written — the 09-08 fix corrected the model's *name*, not its number.
+The transcript is the more complete source. What `result.usage` actually
+contains is the open question; switching Stats to `transcripts.tokens` is
+step 4 and has not been done.
+
+**Several terminals, kept alive.** `Terminals.tsx` holds a strip of them and
+stays mounted whichever rail item is showing — the first version unmounted on
+Stats, and unmounting a terminal kills its session. Slots are their own strip
+rather than a fourth kind of Chat tab, because a Chat tab is a conversation
+the orchestrator owns and a terminal owns itself.
+
+**Keys inside a terminal belong to the CLI.** The shell's key handler runs in
+the capture phase, before xterm, and binds Shift+Tab, Escape and the arrows —
+all of which Claude Code's TUI uses. Every ⌘-chord (⌘K/T/W/⇧H/1–9) stays with
+the shell; everything without ⌘ passes through. VS Code's split.
+
+**The status bar is live.** `/v2/sessions/limits` is read on the same
+four-second cadence as the live counter, so a terminal session's `statusLine`
+reports reach the bar rather than sitting in the backend until a reload.
+
 **Styling is the shell's.** xterm.js ships no look of its own: the theme is
 generated from `tokens.css`, so ground, ink and the character accents are the
 same values the cards use, and a tab's terminal can carry its mode's accent.

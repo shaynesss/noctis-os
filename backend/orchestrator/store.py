@@ -28,6 +28,11 @@ from .events import (
     ToolResult, TurnEnd,
 )
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # the indexer imports this module; a runtime import would cycle
+    from .jsonl import Conversation
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = Path(os.environ.get("NOCTIS_DATA_DIR", REPO_ROOT / "backend" / "data"))
 
@@ -46,7 +51,13 @@ CREATE TABLE IF NOT EXISTS sessions (
     -- engine call, and regenerated only once the conversation has moved on
     -- enough for the old one to be misleading.
     recap             TEXT,
-    recap_at          INTEGER NOT NULL DEFAULT 0
+    recap_at          INTEGER NOT NULL DEFAULT 0,
+    -- Which door the row came in through: 'recorder' folded stream events
+    -- as Noctis hosted the session, 'transcript' read the CLI's own file
+    -- afterwards. The migration's gate compares the two, and a row the
+    -- indexer wrote agrees with its transcript by construction -- so the
+    -- comparison has to know which rows are a real test and which are not.
+    source            TEXT NOT NULL DEFAULT 'recorder'
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -130,6 +141,14 @@ class ConversationStore:
         idempotent add-column pass: safe to run on every open, and doing
         nothing when the columns are already there.
         """
+        session_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(sessions)")}
+        if "source" not in session_cols:
+            # Every row that exists before this column did was written by the
+            # recorder -- the indexer did not exist yet -- so the default is
+            # also the truth for them.
+            self.db.execute(
+                "ALTER TABLE sessions ADD COLUMN source TEXT NOT NULL DEFAULT 'recorder'")
+
         usage_cols = {r["name"] for r in self.db.execute("PRAGMA table_info(usage)")}
         for column in ("aux_input_tokens", "aux_output_tokens"):
             if column not in usage_cols:
@@ -254,6 +273,70 @@ class ConversationStore:
                  u.aux_output_tokens, event.duration_ms, u.list_cost_usd, _now()),
             )
             self.db.commit()
+
+    def ingest(self, conv: "Conversation", mode: str) -> int | None:
+        """Take a conversation read from the CLI's own transcript.
+
+        The other way into these tables is `record`, which folds stream
+        events as they arrive -- and can only see sessions Noctis itself is
+        streaming. A terminal session, or one started in VS Code, never
+        passes through it. This is the second door, and it is what lets
+        history and Stats stop depending on Noctis having been present.
+
+        Idempotent on the engine id. A session that `record` already wrote
+        is left alone rather than duplicated, which is what makes it safe to
+        run this beside the recorder while the two are being compared. It
+        returns the row id when it wrote one, None when it declined.
+        """
+        if not conv.engine_session_id or not conv.turns:
+            return None
+        if self.find_by_engine_id(conv.engine_session_id) is not None:
+            return None
+
+        cur = self.db.execute(
+            "INSERT INTO sessions (engine_session_id, mode, state, title, cwd,"
+            " started_at, ended_at, source) VALUES (?,?,?,?,?,?,?,'transcript')",
+            (conv.engine_session_id, mode, "done", conv.title, conv.cwd,
+             conv.started_at or _now(), conv.ended_at or _now()),
+        )
+        row_id = int(cur.lastrowid)
+        for m in conv.messages:
+            meta = m.get("meta")
+            self.db.execute(
+                "INSERT INTO messages (session_id, role, content, meta, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (row_id, m["role"], m["content"], meta, conv.started_at or _now()),
+            )
+        for t in conv.turns:
+            # One raw count, no split: aux_* are written as zero, which is what
+            # they become once the migration retires them.
+            self.db.execute(
+                "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
+                " cached_tokens, cache_write_tokens, aux_input_tokens, aux_output_tokens,"
+                " duration_ms, list_cost_usd, created_at)"
+                " VALUES (?,?,?,?,?,?,?,0,0,0,0,?)",
+                (row_id, mode, t.model, t.input_tokens, t.output_tokens,
+                 t.cached_tokens, t.cache_write_tokens, conv.ended_at or _now()),
+            )
+        self.db.commit()
+        return row_id
+
+    def tokens_for_engine_id(self, engine_session_id: str) -> int | None:
+        """What the recorder counted for one session, for comparison with what
+        the transcript says. None when the recorder never saw it.
+
+        Recorder rows only. A session the indexer filed has usage rows copied
+        from its transcript, so comparing those against the transcript is a
+        tautology that would pad the agreement count with rows that tested
+        nothing -- on first run 30/45 "agreed" and an unknown share of those
+        were exactly that.
+        """
+        row = self.db.execute(
+            "SELECT sum(u.input_tokens+u.output_tokens+u.cached_tokens+u.cache_write_tokens)"
+            " FROM usage u JOIN sessions s ON s.id=u.session_id"
+            " WHERE s.engine_session_id=? AND s.source='recorder'",
+            (engine_session_id,)).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
 
     def close_session(self, session_id: int, state: str = "done") -> None:
         self.db.execute("UPDATE sessions SET state=?, ended_at=? WHERE id=?",

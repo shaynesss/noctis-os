@@ -37,7 +37,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 STATUSLINE = REPO_ROOT / "backend" / "scripts" / "statusline.sh"
 
 
-def statusline_settings(port: int | None = None) -> dict:
+def statusline_settings(mode: str = "general", port: int | None = None) -> dict:
     """The tracked policy plus a status line that reports back here.
 
     `statusLine` is how an interactive session hands over what the stream used
@@ -51,9 +51,13 @@ def statusline_settings(port: int | None = None) -> dict:
     cannot be committed.
     """
     policy = json.loads(SHARED_SETTINGS.read_text())
+    # The mode rides along as an argument. The transcript on disk does not
+    # record which Noctis mode launched a session -- its `mode` field is the
+    # CLI's permission mode -- so this is the one place the mapping can be
+    # captured, at the moment the session first identifies itself.
     policy["statusLine"] = {
         "type": "command",
-        "command": f"bash {STATUSLINE} {port or os.environ.get('PORT', '8000')}",
+        "command": f"bash {STATUSLINE} {port or os.environ.get('PORT', '8000')} {mode}",
     }
     return policy
 
@@ -80,7 +84,7 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None) -> dict:
         args += ["--agents", agents]
 
     args += ["--mcp-config", mcp_config()]
-    args += ["--settings", json.dumps(statusline_settings())]
+    args += ["--settings", json.dumps(statusline_settings(mode))]
 
     # The vault, always. A session sandboxed to its working directory cannot
     # read its own methodology, job context or lessons -- all of which live

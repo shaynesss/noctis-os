@@ -31,6 +31,7 @@ from orchestrator.driver import (
     EFFORT_CYCLE, MODE_MODELS, OPENING_PROMPT, PERMISSION_CYCLE, Image, SessionSpec,
     one_shot,
 )
+from orchestrator import jsonl
 from orchestrator.events import EngineError, Limits
 from orchestrator.manager import SessionManager
 from orchestrator.store import ConversationStore
@@ -302,8 +303,29 @@ def interactive_args(mode: str, cwd: str, resume_id: str | None = None) -> dict:
 _statusline: dict[str, dict] = {}
 
 
+# Which Noctis mode launched which interactive session. The transcript on disk
+# does not say -- its `mode` is the CLI's permission mode -- so the indexer
+# reads this when it files a terminal session into history. Filled by the
+# statusLine, which is the first thing a session says about itself.
+_mode_of: dict[str, str] = {}
+
+
+@router.post("/index")
+def index_transcripts() -> dict:
+    """File every transcript history has not seen.
+
+    The second door into the `sessions` table. `store.record` only sees
+    sessions Noctis streams; a terminal session, or one started in VS Code,
+    exists on disk and nowhere in the interface until this runs. The shell
+    calls it when a terminal session ends; Stats calls it on each visit so
+    the count is current. Idempotent by engine id.
+    """
+    taken = jsonl.index_new(_store, _mode_of)
+    return {"indexed": taken, "count": len(taken)}
+
+
 @router.post("/statusline")
-async def statusline(payload: dict) -> dict:
+async def statusline(payload: dict, mode: str | None = None) -> dict:
     """Where an interactive session reports what the stream used to.
 
     Claude Code runs the configured `statusLine` command on every render and
@@ -320,6 +342,8 @@ async def statusline(payload: dict) -> dict:
     """
     sid = str(payload.get("session_id") or "unknown")
     _statusline[sid] = payload
+    if mode in MODE_MODELS and sid != "unknown":
+        _mode_of[sid] = mode
 
     # The rolling windows are a property of the account, not of one session,
     # so the newest report from any terminal is the right answer for all of
@@ -375,6 +399,9 @@ def stats() -> dict:
     would zero an in-process tally, and a lifetime figure that resets when
     the backend reloads is worse than no figure at all.
     """
+    # File anything new first, so a terminal session that just ended is in
+    # the lifetime figure and the history list by the time Stats renders.
+    jsonl.index_new(_store, _mode_of)
     life = _store.lifetime_tokens()
     return {
         # Totals include the CLI's background tier. Leaving it out is exactly
@@ -404,6 +431,15 @@ def stats() -> dict:
             {"day": r["day"], "sessions": r["sessions"]}
             for r in _store.daily_activity(days=365)
         ],
+        # The same number read from the CLI's own transcripts, beside the
+        # recorder's. This is the migration's gate (PTY-MIGRATION.md §7 step
+        # 3): the default switches to the transcript reader once the two
+        # agree over real use, and this is where that agreement is watched.
+        # `transcripts` counts sessions the recorder never saw -- terminals,
+        # VS Code -- so it is expected to be larger; `diff` is per session
+        # both saw, and that is the one that should be boring.
+        "transcripts": jsonl.lifetime_tokens_cached(),
+        "diff": jsonl.diff_against(_store),
     }
 
 

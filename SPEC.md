@@ -368,6 +368,17 @@ selection and scrollbar, and `ITerminalOptions` covers font, weight, leading,
 letter spacing, cursor style and density — generated from `tokens.css` so there
 is one source of truth.
 
+**Steps 1–3 shipped 2026-09-13, and step 3's first result changes the plan.**
+The indexer runs beside the recorder with a live per-session diff, and 1 of 16
+sessions agree. Every disagreement is the transcript being larger, 2–5×, and
+on the session checked per field *output* tokens are 2× — which cache
+re-reads cannot explain. The recorder writes one usage row per Noctis turn
+from `result.usage`, and that is not the whole turn; it has undercounted since
+it was written. So the migration's gate was misnamed: it is not "the diff is
+boring", it is "every delta is understood", and this one is. The transcript
+is the more complete source and Stats should read from it — step 4, not yet
+done, pending pinning what `result.usage` actually contains.
+
 **Step 1 shipped 2026-09-13.** A Terminal rail view hosts an interactive
 `claude` in a pseudo-terminal beside the `stream-json` transcript: `pty.rs`
 (the PTY host), `interactive.py` (the argv), `Terminal.tsx` (xterm.js themed

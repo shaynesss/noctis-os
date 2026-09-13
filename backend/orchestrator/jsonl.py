@@ -195,3 +195,79 @@ def lifetime_tokens() -> dict[str, int]:
         turns += len(c.turns)
         total += c.lifetime
     return {"tokens": total, "turns": turns, "sessions": sessions}
+
+
+# ------------------------------------------------------------ beside the recorder
+
+import time as _time
+
+# `lifetime_tokens` parses every transcript on disk -- 128 files, the largest
+# 15MB -- and Stats asks for it on every visit. Cached on a signature of the
+# directory (file count and newest mtime) rather than a clock: a session that
+# is still writing bumps the mtime, so the number moves while it is live and
+# holds still while nothing is.
+_lifetime_cache: tuple[tuple[int, float], dict[str, int]] | None = None
+_lifetime_stamp = 0.0
+_LIFETIME_MIN_INTERVAL_S = 5.0     # a signature check still stats every file
+
+
+def _signature() -> tuple[int, float]:
+    files = list(PROJECTS.glob("**/*.jsonl"))
+    newest = max((p.stat().st_mtime for p in files), default=0.0)
+    return len(files), newest
+
+
+def lifetime_tokens_cached() -> dict[str, int]:
+    """`lifetime_tokens`, recomputed only when a transcript has changed."""
+    global _lifetime_cache, _lifetime_stamp
+    now = _time.monotonic()
+    if _lifetime_cache and now - _lifetime_stamp < _LIFETIME_MIN_INTERVAL_S:
+        return _lifetime_cache[1]
+    sig = _signature()
+    if _lifetime_cache and _lifetime_cache[0] == sig:
+        _lifetime_stamp = now
+        return _lifetime_cache[1]
+    result = lifetime_tokens()
+    _lifetime_cache, _lifetime_stamp = (sig, result), now
+    return result
+
+
+def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> list[str]:
+    """Ingest every transcript the store has not seen. Returns the ids taken.
+
+    This is the second door into history (`store.ingest`): terminal sessions
+    and VS Code sessions never pass through the recorder, and without this
+    they exist on disk and nowhere in the interface. `mode_of` is the
+    statusLine's record of which mode launched which session; a transcript it
+    does not know -- one started in a terminal outside Noctis -- is filed as
+    general rather than guessed at.
+    """
+    taken: list[str] = []
+    for p in PROJECTS.glob("**/*.jsonl"):
+        if store.find_by_engine_id(p.stem) is not None:
+            continue
+        conv = read(p)
+        if store.ingest(conv, mode_of.get(p.stem, default_mode)) is not None:
+            taken.append(p.stem)
+    return taken
+
+
+def diff_against(store, limit: int = 50) -> dict:
+    """Where the recorder and the transcripts disagree, session by session.
+
+    The migration's step 4 -- switching the default -- is gated on this being
+    boring. A session both saw should count the same tokens; one they count
+    differently is either a session that continued outside Noctis (the
+    transcript is right and larger) or a real defect in one reader.
+    """
+    rows = []
+    for p in sorted(PROJECTS.glob("**/*.jsonl"), key=lambda q: q.stat().st_mtime,
+                    reverse=True)[:limit]:
+        recorded = store.tokens_for_engine_id(p.stem)
+        if recorded is None:
+            continue
+        seen = read(p).lifetime
+        rows.append({"session": p.stem, "recorded": recorded, "transcript": seen,
+                     "delta": seen - recorded})
+    agree = sum(1 for r in rows if r["delta"] == 0)
+    return {"compared": len(rows), "agree": agree, "rows": rows[:12]}
