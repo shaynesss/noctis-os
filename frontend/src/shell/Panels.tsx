@@ -47,6 +47,29 @@ export interface InboxPayload {
   counts: { proposals: number; flagged: number }
 }
 
+export interface RepoPayload {
+  repo: null | {
+    root: string
+    name: string
+    branch: string | null
+    upstream: string | null
+    ahead: number | null
+    behind: number | null
+    dirty: string[]
+    commits: { sha: string; subject: string; at: number; pushed: boolean }[]
+    remote: string | null
+    github: null | {
+      slug: string
+      url: string | null
+      private: boolean
+      default_branch: string | null
+      pull_requests: { number: number; title: string; branch: string | null; draft: boolean; mergeable: string | null; url: string | null; checks: 'pass' | 'fail' | 'pending' | null }[]
+      issues: { number: number; title: string; url: string | null; labels: string[] }[]
+    }
+    github_reason: string | null
+  }
+}
+
 export interface BillingPayload {
   list_cost: number
   turns: number
@@ -263,6 +286,165 @@ function Section({ label, children }: { label: string; children: React.ReactNode
       {children}
     </div>
   )
+}
+
+/* The repository the showing terminal is in.
+ *
+ * Read-only on purpose. The local half is what you are looking at -- the
+ * branch, what is not on GitHub yet, what is dirty, the last twenty commits
+ * with the unpushed ones marked. The GitHub half is what you are being told
+ * about -- open pull requests with their checks, open issues -- and it can
+ * be absent (offline, signed out, a remote elsewhere) without taking the
+ * local half with it. The one action this view wants, push, it asks for in
+ * words: a session never pushes, and that rule is what keeps a crashed
+ * session from half-shipping; a button here would be that power through
+ * another door. */
+export function Repo({ data, cwd }: { data: RepoPayload; cwd: string }) {
+  const r = data.repo
+  if (!r) {
+    return (
+      <>
+        <Heading>Repo</Heading>
+        <Card>
+          <div className="px-4 py-[13px] text-[12.5px] text-ink-dim">
+            <span className="font-mono">{cwd}</span> is not inside a git repository. <span className="text-ink-faint">git init</span> in a terminal starts one.
+          </div>
+        </Card>
+      </>
+    )
+  }
+  const gh = r.github
+  const unpushed = r.ahead ?? 0
+  return (
+    <>
+      <Heading>
+        Repo · {r.name}{r.branch ? ` · ${r.branch}` : ''}
+      </Heading>
+
+      {/* Where it stands, in one line: the numbers that decide what to do
+          next, then the sentence that says what that is. */}
+      <Card>
+        <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] px-4 py-[11px] font-mono text-[11.5px]">
+          <span className="text-ink">{r.branch ?? 'detached'}</span>
+          {r.upstream ? (
+            <>
+              <span className={unpushed ? 'text-ink' : 'text-ink-faint'}>↑ {unpushed} not on GitHub</span>
+              <span className={r.behind ? 'text-ink' : 'text-ink-faint'}>↓ {r.behind ?? 0} behind</span>
+            </>
+          ) : (
+            <span className="text-ink-faint">no upstream</span>
+          )}
+          <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'}>{r.dirty.length} uncommitted</span>
+          {gh && (
+            <a href={gh.url ?? '#'} target="_blank" rel="noreferrer" className="ml-auto text-ink-dim hover:text-ink">
+              {gh.slug} · {gh.private ? 'private' : 'public'} ↗
+            </a>
+          )}
+        </div>
+        <div className="border-t border-line px-4 py-[10px] text-[12px] leading-[1.55] text-ink-dim">
+          {nextStep(r)}
+        </div>
+      </Card>
+
+      {r.dirty.length > 0 && (
+        <>
+          <Heading className="mt-7">Uncommitted</Heading>
+          <Card>
+            <div className="px-4 py-[9px] font-mono text-[11.5px] leading-[1.7] text-ink-dim">
+              {r.dirty.slice(0, 20).map((f) => <div key={f}>{f}</div>)}
+              {r.dirty.length > 20 && <div className="text-ink-faint">… and {r.dirty.length - 20} more</div>}
+            </div>
+          </Card>
+        </>
+      )}
+
+      <Heading className="mt-7">Commits</Heading>
+      <Card>
+        {r.commits.map((c, i) => (
+          <div key={c.sha} className={`flex items-baseline gap-[10px] px-4 py-[7px] font-mono text-[11.5px] ${i ? 'border-t border-line' : ''}`}>
+            <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
+                  style={{ color: c.pushed ? 'var(--color-ink-faint)' : 'var(--color-faber)' }}>
+              {c.pushed ? '·' : '●'}
+            </span>
+            <span className="shrink-0 text-ink-faint">{c.sha}</span>
+            <span className="min-w-0 flex-1 truncate text-ink">{c.subject}</span>
+            <span className="shrink-0 text-ink-faint">{ago(c.at)}</span>
+          </div>
+        ))}
+        {r.commits.length === 0 && <div className="px-4 py-[9px] text-[12px] text-ink-faint">no commits yet</div>}
+      </Card>
+
+      <Heading className="mt-7">GitHub</Heading>
+      <Card>
+        {!gh ? (
+          <div className="px-4 py-[11px] text-[12.5px] text-ink-dim">
+            Not available: {r.github_reason ?? 'unknown'}.
+          </div>
+        ) : (
+          <>
+            <div className="px-4 py-[9px] font-mono text-[11px] text-ink-faint">
+              pull requests · {gh.pull_requests.length} open
+            </div>
+            {gh.pull_requests.map((p) => (
+              <div key={p.number} className="flex items-center gap-[10px] border-t border-line px-4 py-[8px] text-[12px]">
+                <span className="shrink-0 font-mono text-ink-faint">#{p.number}</span>
+                <a href={p.url ?? '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-ink hover:underline">{p.title}</a>
+                <span className="shrink-0 font-mono text-[10.5px] text-ink-faint">{p.branch}</span>
+                {p.draft && <Tag>draft</Tag>}
+                {p.checks && <Tag tone={p.checks === 'fail' ? 'bad' : p.checks === 'pass' ? 'good' : undefined}>checks {p.checks}</Tag>}
+                {p.mergeable === 'CONFLICTING' && <Tag tone="bad">conflicts</Tag>}
+              </div>
+            ))}
+            {gh.pull_requests.length === 0 && (
+              <div className="border-t border-line px-4 py-[8px] text-[12px] text-ink-faint">none — a branch pushed with a PR is how work gets reviewed before it reaches {gh.default_branch ?? 'main'}</div>
+            )}
+            <div className="border-t border-line px-4 py-[9px] font-mono text-[11px] text-ink-faint">
+              issues · {gh.issues.length} open
+            </div>
+            {gh.issues.map((it) => (
+              <div key={it.number} className="flex items-center gap-[10px] border-t border-line px-4 py-[8px] text-[12px]">
+                <span className="shrink-0 font-mono text-ink-faint">#{it.number}</span>
+                <a href={it.url ?? '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-ink hover:underline">{it.title}</a>
+                {it.labels.map((l) => <Tag key={l}>{l}</Tag>)}
+              </div>
+            ))}
+            {gh.issues.length === 0 && (
+              <div className="border-t border-line px-4 py-[8px] text-[12px] text-ink-faint">none — an issue per piece of work is the backlog a branch and a PR close</div>
+            )}
+          </>
+        )}
+      </Card>
+    </>
+  )
+}
+
+/** What to do next, from the numbers -- the sentence a person new to git
+ *  needs and a person used to it can skim past. */
+function nextStep(r: NonNullable<RepoPayload['repo']>): string {
+  if (!r.upstream) return 'This branch has no upstream. `git push -u origin ' + (r.branch ?? 'main') + '` in a terminal publishes it.'
+  const parts: string[] = []
+  if (r.dirty.length) parts.push(`${r.dirty.length} file${r.dirty.length === 1 ? '' : 's'} changed and not committed — a session commits as it goes, so this is either in progress or forgotten.`)
+  if (r.ahead) parts.push(`${r.ahead} commit${r.ahead === 1 ? '' : 's'} on this machine only. \`git push\` in a terminal puts ${r.ahead === 1 ? 'it' : 'them'} on GitHub — a session never pushes; that is yours.`)
+  if (r.behind) parts.push(`${r.behind} commit${r.behind === 1 ? '' : 's'} on GitHub that this machine does not have — \`git pull\` before building on it.`)
+  if (!parts.length) parts.push('Everything here is on GitHub and nothing is uncommitted.')
+  return parts.join(' ')
+}
+
+function Tag({ children, tone }: { children: React.ReactNode; tone?: 'good' | 'bad' }) {
+  const color = tone === 'bad' ? 'var(--color-faber)' : tone === 'good' ? 'var(--color-noctua)' : 'var(--color-ink-faint)'
+  return (
+    <span className="shrink-0 rounded-[3px] border px-[6px] py-px font-mono text-[10px]" style={{ borderColor: 'var(--color-line)', color }}>
+      {children}
+    </span>
+  )
+}
+
+const ago = (unix: number): string => {
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - unix))
+  if (s < 60) return 'now'
+  if (s < 3600) return `${Math.floor(s / 60)}m`
+  if (s < 86400) return `${Math.floor(s / 3600)}h`
+  return `${Math.floor(s / 86400)}d`
 }
 
 /* Settings is now only things that are true until you change them: the

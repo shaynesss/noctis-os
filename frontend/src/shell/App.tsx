@@ -21,7 +21,7 @@ import { Launcher, type LaunchRequest } from './Launcher'
 import { Palette } from './Palette'
 import {
   Brief, Inbox, ListPriceFact, Settings,
-  type BillingPayload, type BriefPayload, type InboxPayload,
+  type BillingPayload, type BriefPayload, type InboxPayload, type RepoPayload, Repo,
 } from './Panels'
 import { Reader } from './Reader'
 import { Terminals, newSlot, shortenHome, type Slot } from './Terminals'
@@ -315,7 +315,7 @@ export function App() {
         <Rail view={view} onView={setView} badges={{ inbox: inboxCount }} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {view !== 'terminal' && <Pane view={view} limits={limits} onInboxDecided={() => setInboxTick((t) => t + 1)} />}
+          {view !== 'terminal' && <Pane view={view} limits={limits} cwd={cwd} onInboxDecided={() => setInboxTick((t) => t + 1)} />}
           {/* Always mounted, shown only on its rail item: a terminal's
               session dies with its component, so it cannot live inside a
               conditional the way the panels do. */}
@@ -429,9 +429,11 @@ function HistoryView({ transcript, full, onResume, onClose, onOpenDoc }: {
   )
 }
 
-function Pane({ view, limits, onInboxDecided }: {
+function Pane({ view, limits, cwd, onInboxDecided }: {
   view: string
   limits?: { five_hour: Window; seven_day: Window } | null
+  /** The showing terminal's directory: what the Repo view is about. */
+  cwd: string
   /** A proposal was just accepted or rejected here; the rail's badge re-reads. */
   onInboxDecided?: () => void
 }) {
@@ -440,6 +442,7 @@ function Pane({ view, limits, onInboxDecided }: {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
         {view === 'brief' && <Fetched<BriefPayload> path="/v2/brief" what="the brief" render={(d) => <Brief data={d} />} />}
+        {view === 'repo' && <Fetched<RepoPayload> key={cwd} path={`/v2/repo?cwd=${encodeURIComponent(cwd)}`} what="the repository" render={(d) => <Repo data={d} cwd={cwd} />} />}
         {view === 'inbox' && <Fetched<InboxPayload> path="/v2/inbox" what="the inbox" render={(d) => <Inbox data={d} onDecided={onInboxDecided} />} />}
         {view === 'settings' && <Settings />}
       </div>

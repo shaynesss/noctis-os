@@ -11,6 +11,7 @@ says the generator has not run, because the invented one gets believed.
 """
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -422,6 +423,144 @@ def vault_doc(path: str = Query(min_length=1)) -> dict:
     if not resolved.is_file():
         raise HTTPException(status_code=404, detail=f"No such document: {path}")
     return {"path": path, "markdown": resolved.read_text(encoding="utf-8")}
+
+
+def _git(root: Path, *args: str, timeout: float = 5) -> str | None:
+    try:
+        out = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
+def _gh(root: Path, *args: str) -> list | dict | None:
+    """One `gh` call, or None when gh is absent, unauthenticated, offline or
+    the remote is not on GitHub. The panel says which; it never fails over
+    the network half when the local half is fine."""
+    try:
+        out = subprocess.run(["gh", *args], cwd=str(root), capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    try:
+        return json.loads(out.stdout or "null")
+    except json.JSONDecodeError:
+        return None
+
+
+def _github_slug(remote_url: str | None) -> str | None:
+    if not remote_url:
+        return None
+    m = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?$", remote_url)
+    return f"{m.group(1)}/{m.group(2)}" if m else None
+
+
+@router.get("/repo")
+def repo(cwd: str = Query(min_length=1)) -> dict:
+    """What a working directory's repository looks like right now, local and
+    on GitHub, in one read.
+
+    The visualiser's data. Local first and always: root, branch, upstream,
+    how far ahead and behind, what is dirty, the recent commits with the
+    ones GitHub has not seen marked. Then GitHub through `gh`, when the
+    remote is there and `gh` is signed in: open pull requests with their
+    checks and the default branch, open issues. GitHub failing -- offline,
+    no token, a remote elsewhere -- leaves `github` null with a reason and
+    the local half intact, because the local half is what you are looking
+    at and the network half is what you are being told about.
+
+    Read-only by construction. Nothing here pushes, and the one thing this
+    view asks a person to do -- push -- it asks in words, because the rule
+    that a session never pushes is what keeps a crashed session from
+    half-shipping, and a button here would be that power through another
+    door.
+    """
+    try:
+        resolved = _safe_home_dir(cwd)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    top = _git(resolved, "rev-parse", "--show-toplevel")
+    if not top:
+        return {"repo": None}
+    root = Path(top)
+    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    upstream = _git(root, "rev-parse", "--abbrev-ref", "@{u}")
+    ahead = behind = None
+    if upstream:
+        counts = _git(root, "rev-list", "--left-right", "--count", f"{upstream}...HEAD")
+        if counts:
+            b, a = counts.split()
+            ahead, behind = int(a), int(b)
+    porcelain = _git(root, "status", "--porcelain") or ""
+    dirty = [l[3:] for l in porcelain.splitlines() if l.strip()]
+    remote_url = _git(root, "remote", "get-url", "origin")
+    slug = _github_slug(remote_url)
+
+    # The last twenty, newest first, each marked with whether the upstream
+    # has it -- the honest version of "ahead by 201".
+    unpushed: set[str] = set()
+    if upstream:
+        unpushed = set((_git(root, "rev-list", f"{upstream}..HEAD") or "").split())
+    log = _git(root, "log", "-n", "20", "--format=%H%x1f%h%x1f%s%x1f%ct") or ""
+    commits = []
+    for line in log.splitlines():
+        parts = line.split("\x1f")
+        if len(parts) != 4:
+            continue
+        full, short, subject, ts = parts
+        commits.append({"sha": short, "subject": subject, "at": int(ts), "pushed": full not in unpushed})
+
+    github: dict | None = None
+    reason: str | None = None
+    if not slug:
+        reason = "the remote is not on GitHub" if remote_url else "no remote named origin"
+    else:
+        view = _gh(root, "repo", "view", slug, "--json", "defaultBranchRef,isPrivate,url")
+        if not isinstance(view, dict):
+            reason = "gh could not reach GitHub (not signed in, offline, or gh is not installed)"
+        else:
+            prs = _gh(root, "pr", "list", "-R", slug, "--json",
+                      "number,title,headRefName,isDraft,mergeable,statusCheckRollup,url,updatedAt", "--limit", "20")
+            issues = _gh(root, "issue", "list", "-R", slug, "--json", "number,title,labels,url,updatedAt", "--limit", "20")
+            github = {
+                "slug": slug,
+                "url": view.get("url"),
+                "private": bool(view.get("isPrivate")),
+                "default_branch": (view.get("defaultBranchRef") or {}).get("name"),
+                "pull_requests": [
+                    {"number": p["number"], "title": p["title"], "branch": p.get("headRefName"),
+                     "draft": bool(p.get("isDraft")), "mergeable": p.get("mergeable"), "url": p.get("url"),
+                     # One word from many checks: the panel shows a state, not a list.
+                     "checks": _rollup(p.get("statusCheckRollup") or [])}
+                    for p in (prs or []) if isinstance(p, dict)
+                ],
+                "issues": [
+                    {"number": i["number"], "title": i["title"], "url": i.get("url"),
+                     "labels": [l.get("name") for l in (i.get("labels") or []) if isinstance(l, dict)]}
+                    for i in (issues or []) if isinstance(i, dict)
+                ],
+            }
+
+    return {
+        "repo": {
+            "root": str(root), "name": root.name, "branch": branch, "upstream": upstream,
+            "ahead": ahead, "behind": behind, "dirty": dirty, "commits": commits,
+            "remote": remote_url, "github": github, "github_reason": reason,
+        },
+    }
+
+
+def _rollup(checks: list) -> str | None:
+    """pass / fail / pending / none from a PR's check list."""
+    if not checks:
+        return None
+    states = {str(c.get("conclusion") or c.get("state") or "").upper() for c in checks if isinstance(c, dict)}
+    if any(s in {"FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"} for s in states):
+        return "fail"
+    if any(s in {"PENDING", "QUEUED", "IN_PROGRESS", "EXPECTED", ""} for s in states):
+        return "pending"
+    return "pass"
 
 
 @router.get("/git")

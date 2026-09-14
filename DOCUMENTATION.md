@@ -265,7 +265,7 @@ Default location `backend/data/`, overridable with `NOCTIS_DATA_DIR`.
 
 React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `main.tsx` imports it and nothing else.
 
-**Rail:** Brief · Terminal · Stats · Inbox · Settings.
+**Rail:** Brief · Terminal · Repo · Stats · Inbox · Settings. **Repo** is the repository the showing terminal is in — `GET /v2/repo?cwd=`: branch, upstream, ahead/behind, dirty files, the last twenty commits with the unpushed ones marked, and, through `gh` when signed in and the remote is on GitHub, open pull requests with a one-word check state and open issues; GitHub failing leaves the local half intact with a reason. Read-only: it never pushes, and says in words when a push is what is missing.
 
 **Transcript blocks** are how a *history* transcript renders (read-only, from the store); a live session is the CLI's own TUI in a terminal. The block kinds:
 

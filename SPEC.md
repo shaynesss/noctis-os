@@ -412,6 +412,46 @@ and deliberately not started — the spike code is throwaway.
 6. ~~**Should a session outlive its window?**~~ **Closed 2026-09-14: yes, and done** (`6ec10dc`, `617ffd5`). The PTY registry belongs to the Rust process; slots keep their ids; a reload reattaches with a replay of what the session printed; and the web view no longer suspends while the window is hidden. The question as it stood: VS Code's model: the pty host owns long-running work, so a window reload reattaches rather than losing it. Noctis binds a session's lifetime to the HTTP request, so closing a tab kills the turn. Detaching would fix that and creates eight problems worth naming before it is built — unwatched budget burn, no stop control once the window is gone, orphans counting invisibly against the cap, who owns the stream on reattach, an unbounded or lossy replay buffer, nothing ending an abandoned session, **unwatched writes with no reachable permission dialog**, and the fact that sessions are subprocesses of uvicorn so it would not survive a backend restart anyway.
 
 8. **Could a second CLI be a guest?** *Opened 2026-09-14, after Shayne asked
+
+9. **The GitHub workflow.** *Opened 2026-09-14.* Shayne wants work on GitHub
+and wants to use it the conventional way — branches, pull requests, issues —
+without it becoming a second job tracker beside the vault. The state at
+opening, read from the machine: two repos with remotes, `noctis-os` 201
+commits ahead of a **public** remote and `second-brain` 17 ahead of a private
+one, zero issues, zero pull requests, zero projects, ever; `gh` signed in as
+`shaynesss`. The Repo view (`/v2/repo`, shipped the same day) is the
+visualiser: local truth — branch, ahead/behind, dirty files, the last twenty
+commits with the unpushed ones marked — beside GitHub's open PRs with their
+checks and open issues, and one sentence saying what to do next. Read-only:
+the one thing it asks for, push, it asks for in words.
+
+**Recommendation, not yet decided:** the smallest conventional loop that
+fits `dev.md` as written. *(a)* `main` is what is on GitHub and green; a
+session never commits to it directly on a job — it works on `job/<slug>`
+(a worktree when two run at once, per 3.2). *(b)* A finished piece becomes a
+pull request, even solo: the PR body is what/why/verify, the review gates
+already in 3.3 (critic, code-review plugin) run against the branch, and the
+merge — squash, so `main` reads one commit per piece and the PR keeps the
+detail — is Shayne's click on GitHub. *(c)* One issue per piece of work,
+opened at Plan, named in the branch (`job/12-…`), closed by the PR
+(`Closes #12`); this is 3.1's "spec milestones → GitHub Issues" actually
+done. *(d)* **No Projects board**: the vault's jobs are the tracker, and a
+board would be the job list again under a second name — the same reasoning
+that settled the worklist. *(e)* The push rule stays exactly as it is: a
+session never pushes. The branch reaches GitHub when Shayne pushes it — from
+a terminal today, from a button in the Repo view if he wants one, because
+the button is his hand. A crashed session still cannot have half-shipped
+anything, which is what the rule is for.
+
+**Before the next push of `noctis-os`, a decision that cannot wait for the
+rest:** the 201 local commits carry `backend/data/history.db` and its WAL
+(added in `2856b5a`, untracked since `02e5425`) — real transcripts, in the
+history of a public repository. All 201 are local, so rewriting them to drop
+`backend/data/` touches nothing on GitHub and needs no force-push; it is a
+`git filter-repo --path backend/data --invert-paths` (not installed; `brew
+install git-filter-repo`) on a tree that is otherwise clean. Do that, or
+make the repo private, before the push. The STATUS note of 09-13 called this
+"a rebase today"; it is now a filter and still today.
 whether Codex or Gemini's CLI could run in Noctis "while having the interface
 orchestrating statuses."* First, what Noctis does with Claude today, stated
 without flattery: it does **not** orchestrate the CLI's work. It *hosts* the

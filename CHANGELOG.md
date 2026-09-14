@@ -9,6 +9,19 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Repo: the repository, seen from Noctis (2026-09-14)
+
+A rail item for the repository the showing terminal is in. Local truth
+first and always — branch, how far ahead of and behind GitHub, what is
+dirty, the last twenty commits with the ones GitHub has not seen marked —
+and beside it what GitHub says through `gh`: open pull requests with a
+one-word check state, open issues. One sentence under the numbers says what
+to do next, written for someone new to git. Read-only by construction: a
+session never pushes, so the view asks for a push in words rather than
+offering the button. Opened against the real repos: `noctis-os` 201 commits
+ahead of a public remote, `second-brain` 17 ahead, no PRs, no issues. The
+workflow those numbers argue for is SPEC open question 9.
+
 ### The inbox decides, and says what deciding does (2026-09-14)
 
 Found live with two real proposals waiting: titles were slugs, summaries
