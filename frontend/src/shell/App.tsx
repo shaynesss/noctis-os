@@ -375,12 +375,13 @@ export function App() {
             onSelect={(id) => { setActive(id); setView('terminal') }}
             onClose={close}
             onAdd={() => setLauncher({})}
-            onReorder={(id, before) => setSlots((all) => {
-              const moving = all.find((s) => s.id === id)
-              if (!moving) return all
-              const rest = all.filter((s) => s.id !== id)
+            onReorder={(ids, before) => setSlots((all) => {
+              // A block -- one tab or a whole bracket -- keeps its order.
+              const moving = all.filter((s) => ids.includes(s.id))
+              if (!moving.length || (before && ids.includes(before))) return all
+              const rest = all.filter((s) => !ids.includes(s.id))
               const at = before ? rest.findIndex((s) => s.id === before) : -1
-              return at < 0 ? [...rest, moving] : [...rest.slice(0, at), moving, ...rest.slice(at)]
+              return at < 0 ? [...rest, ...moving] : [...rest.slice(0, at), ...moving, ...rest.slice(at)]
             })}
             onSplit={split}
           />

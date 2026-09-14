@@ -9,6 +9,27 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### A group moves as one, links open, and the Repo view answers at once (2026-09-14)
+
+- **A split drags as a module.** The bracket around a group's tabs is what
+  you drag; its tabs are not draggable on their own, so a group cannot be
+  pulled apart by accident. Dropping anything onto a grouped tab lands
+  before the whole bracket. `onReorder` moves a block of ids in order.
+- **Links open.** The webview does not honour `target="_blank"`, so the
+  slug, pull-request and issue links did nothing. A Rust `open_url`
+  command hands http(s) links to macOS's `open`; outside Tauri the page
+  falls back to `window.open`.
+- **The Repo view no longer waits on GitHub.** `/v2/repos` returns the local
+  half at once (git answers in a tenth of a second) and carries the slug;
+  the shell reads `/v2/repos/github?slug=` per repository afterwards, with
+  "Asking GitHub…" in the card until it lands. That route runs its three
+  `gh` calls at once and caches an answer for a minute; failures are not
+  cached. Two repositories went from three seconds of "Loading…" to instant.
+- The folded commits row shows the newest subject, so two columns that both
+  read `20 · 20 not on GitHub` still say whose history each is. Terminals
+  and the path sit on their own truncating rows so two columns keep the
+  same rhythm.
+
 ### Split screen, and the views seen again (2026-09-14)
 
 - **Terminals side by side, then in a grid.** Slots that share a group are

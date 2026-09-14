@@ -537,54 +537,88 @@ def _repo_at(root: Path) -> dict:
         full, short, subject, ts = parts
         commits.append({"sha": short, "subject": subject, "at": int(ts), "pushed": full not in unpushed})
 
-    github: dict | None = None
-    reason: str | None = None
-    if not slug:
-        reason = "the remote is not on GitHub" if remote_url else "no remote named origin"
-    else:
-        view = _gh(root, "repo", "view", slug, "--json", "defaultBranchRef,isPrivate,url")
-        if not isinstance(view, dict):
-            # Two different absences. `gh` answering for the account but not
-            # for this slug means the repository is not there, or not this
-            # account's to see -- a remote pointing at a repo that was never
-            # created, renamed, or made private under another login. The
-            # probe reported both as "could not reach GitHub", which sends
-            # a person to check their network when they should check the
-            # remote.
-            who = _gh(root, "api", "user", "--jq", "{login: .login}")
-            if isinstance(who, dict) and who.get("login"):
-                reason = (f"GitHub has no repository at {slug} that {who['login']} can see -- "
-                          f"check the remote (`git remote -v`) or create it (`gh repo create`)")
-            else:
-                reason = "gh could not reach GitHub (not signed in, offline, or gh is not installed)"
-        else:
-            prs = _gh(root, "pr", "list", "-R", slug, "--json",
-                      "number,title,headRefName,isDraft,mergeable,statusCheckRollup,url,updatedAt", "--limit", "20")
-            issues = _gh(root, "issue", "list", "-R", slug, "--json", "number,title,labels,url,updatedAt", "--limit", "20")
-            github = {
-                "slug": slug,
-                "url": view.get("url"),
-                "private": bool(view.get("isPrivate")),
-                "default_branch": (view.get("defaultBranchRef") or {}).get("name"),
-                "pull_requests": [
-                    {"number": p["number"], "title": p["title"], "branch": p.get("headRefName"),
-                     "draft": bool(p.get("isDraft")), "mergeable": p.get("mergeable"), "url": p.get("url"),
-                     # One word from many checks: the panel shows a state, not a list.
-                     "checks": _rollup(p.get("statusCheckRollup") or [])}
-                    for p in (prs or []) if isinstance(p, dict)
-                ],
-                "issues": [
-                    {"number": i["number"], "title": i["title"], "url": i.get("url"),
-                     "labels": [l.get("name") for l in (i.get("labels") or []) if isinstance(l, dict)]}
-                    for i in (issues or []) if isinstance(i, dict)
-                ],
-            }
-
+    # The GitHub half is not read here. It is three network calls per
+    # repository, and with two repositories open the view sat on "Loading…"
+    # for three seconds while `git` had answered in a tenth of one. The
+    # local half returns at once; the shell asks /repos/github per slug and
+    # fills that card in when it arrives.
+    reason = None if slug else ("the remote is not on GitHub" if remote_url else "no remote named origin")
     return {
         "root": str(root), "name": root.name, "branch": branch, "upstream": upstream,
         "ahead": ahead, "behind": behind, "dirty": dirty, "commits": commits,
-        "remote": remote_url, "github": github, "github_reason": reason,
+        "remote": remote_url, "slug": slug, "github_reason": reason,
     }
+
+
+# What GitHub said about a slug, for a minute. The Repo view re-reads on
+# every tab change and every visit; open PRs do not change at that rate,
+# and `gh` costs a third of a second per call.
+_GITHUB_CACHE: dict[str, tuple[float, dict]] = {}
+_GITHUB_TTL = 60.0
+
+
+@router.get("/repos/github")
+def repos_github(slug: str = Query(min_length=3, pattern=r"^[\w.-]+/[\w.-]+$")) -> dict:
+    """Open pull requests with a one-word check state, open issues, and the
+    repository's visibility and default branch -- through `gh`, when signed
+    in. Failing leaves `github` null with a reason that tells "no such
+    repository for this account" apart from "could not reach GitHub".
+
+    The three `gh` calls run at once rather than in turn: the answer is the
+    slowest of them, not the sum.
+    """
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    hit = _GITHUB_CACHE.get(slug)
+    if hit and time.monotonic() - hit[0] < _GITHUB_TTL:
+        return hit[1]
+
+    root = Path.home()
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_view = pool.submit(_gh, root, "repo", "view", slug, "--json", "defaultBranchRef,isPrivate,url")
+        f_prs = pool.submit(_gh, root, "pr", "list", "-R", slug, "--json",
+                            "number,title,headRefName,isDraft,mergeable,statusCheckRollup,url,updatedAt", "--limit", "20")
+        f_issues = pool.submit(_gh, root, "issue", "list", "-R", slug, "--json", "number,title,labels,url,updatedAt", "--limit", "20")
+        view, prs, issues = f_view.result(), f_prs.result(), f_issues.result()
+
+    if not isinstance(view, dict):
+        # Two different absences. `gh` answering for the account but not
+        # for this slug means the repository is not there, or not this
+        # account's to see -- a remote pointing at a repo that was never
+        # created, renamed, or made private under another login. The
+        # probe reported both as "could not reach GitHub", which sends
+        # a person to check their network when they should check the
+        # remote.
+        who = _gh(root, "api", "user", "--jq", "{login: .login}")
+        if isinstance(who, dict) and who.get("login"):
+            reason = (f"GitHub has no repository at {slug} that {who['login']} can see -- "
+                      f"check the remote (`git remote -v`) or create it (`gh repo create`)")
+        else:
+            reason = "gh could not reach GitHub (not signed in, offline, or gh is not installed)"
+        # A failure is not cached: the next look should be a fresh one.
+        return {"github": None, "reason": reason}
+
+    out = {"github": {
+        "slug": slug,
+        "url": view.get("url"),
+        "private": bool(view.get("isPrivate")),
+        "default_branch": (view.get("defaultBranchRef") or {}).get("name"),
+        "pull_requests": [
+            {"number": p["number"], "title": p["title"], "branch": p.get("headRefName"),
+             "draft": bool(p.get("isDraft")), "mergeable": p.get("mergeable"), "url": p.get("url"),
+             # One word from many checks: the panel shows a state, not a list.
+             "checks": _rollup(p.get("statusCheckRollup") or [])}
+            for p in (prs or []) if isinstance(p, dict)
+        ],
+        "issues": [
+            {"number": i["number"], "title": i["title"], "url": i.get("url"),
+             "labels": [l.get("name") for l in (i.get("labels") or []) if isinstance(l, dict)]}
+            for i in (issues or []) if isinstance(i, dict)
+        ],
+    }, "reason": None}
+    _GITHUB_CACHE[slug] = (time.monotonic(), out)
+    return out
 
 
 def _rollup(checks: list) -> str | None:

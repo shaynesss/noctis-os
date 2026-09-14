@@ -29,7 +29,7 @@ def test_a_repo_reads_its_local_state(tmp_path, monkeypatch, client, auth_header
     assert r["dirty"] == ["a.txt"]
     assert [c["subject"] for c in r["commits"]] == ["first"]
     assert r["commits"][0]["pushed"] is True, "with no upstream nothing is 'unpushed'"
-    assert r["github"] is None and r["github_reason"] == "no remote named origin"
+    assert r["slug"] is None and r["github_reason"] == "no remote named origin"
     assert r["cwds"] == [str(root)]
 
 
@@ -47,7 +47,7 @@ def test_unpushed_commits_are_marked_and_github_failure_keeps_the_local_half(tmp
     r = _one(client, auth_headers, root)
     assert r["ahead"] == 1 and r["behind"] == 0
     assert [(c["subject"], c["pushed"]) for c in r["commits"]] == [("local only", False), ("first", True)]
-    assert r["github"] is None and "remote is not on GitHub" in r["github_reason"]
+    assert r["slug"] is None and "remote is not on GitHub" in r["github_reason"]
 
 
 def test_not_a_repository_is_outside_not_an_error(tmp_path, monkeypatch, client, auth_headers):
@@ -91,18 +91,47 @@ def test_check_rollup_is_one_word():
     assert panels._rollup([{"conclusion": "FAILURE"}, {"state": "PENDING"}]) == "fail"
 
 
-def test_a_missing_repository_is_told_apart_from_an_unreachable_github(tmp_path, monkeypatch, client, auth_headers):
+def test_the_local_half_names_the_slug_and_leaves_github_to_its_own_route(tmp_path, monkeypatch, client, auth_headers):
+    """Three network calls per repository made the whole view wait; the
+    local read answers at once and carries the slug for the second read."""
     root = _repo(tmp_path)
-    subprocess.run(["git", "remote", "add", "origin", "git@github.com:someone/gone.git"], cwd=root, check=True)
+    subprocess.run(["git", "remote", "add", "origin", "git@github.com:someone/proj.git"], cwd=root, check=True)
     monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    calls = []
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: calls.append(a) or None)
+    r = _one(client, auth_headers, root)
+    assert r["slug"] == "someone/proj" and r["github_reason"] is None
+    assert calls == [], "the local read must not touch gh"
+
+
+def test_a_missing_repository_is_told_apart_from_an_unreachable_github(monkeypatch, client, auth_headers):
+    panels._GITHUB_CACHE.clear()
     # gh answers for the account, not for the slug.
     monkeypatch.setattr(panels, "_gh", lambda root, *a: {"login": "someone"} if a[:2] == ("api", "user") else None)
-    r = _one(client, auth_headers, root)
-    assert "no repository at someone/gone that someone can see" in r["github_reason"]
+    r = client.get("/v2/repos/github", params={"slug": "someone/gone"}, headers=auth_headers).json()
+    assert r["github"] is None and "no repository at someone/gone that someone can see" in r["reason"]
     # gh answers for nothing: that is the network / sign-in case.
     monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
-    r = _one(client, auth_headers, root)
-    assert "could not reach GitHub" in r["github_reason"]
+    r = client.get("/v2/repos/github", params={"slug": "someone/gone"}, headers=auth_headers).json()
+    assert "could not reach GitHub" in r["reason"]
+
+
+def test_github_answers_are_cached_for_a_minute_and_failures_are_not(monkeypatch, client, auth_headers):
+    panels._GITHUB_CACHE.clear()
+    calls = []
+    def gh(root, *a):
+        calls.append(a[:2])
+        if a[:2] == ("repo", "view"):
+            return {"url": "https://github.com/me/x", "isPrivate": True, "defaultBranchRef": {"name": "main"}}
+        return [{"number": 1, "title": "t", "headRefName": "b", "isDraft": False, "mergeable": "MERGEABLE",
+                 "url": "u", "statusCheckRollup": [{"conclusion": "SUCCESS"}], "labels": []}]
+    monkeypatch.setattr(panels, "_gh", gh)
+    first = client.get("/v2/repos/github", params={"slug": "me/x"}, headers=auth_headers).json()
+    assert first["github"]["private"] is True and first["github"]["pull_requests"][0]["checks"] == "pass"
+    assert len(calls) == 3, "view, prs and issues -- once each"
+    client.get("/v2/repos/github", params={"slug": "me/x"}, headers=auth_headers)
+    assert len(calls) == 3, "the second read within a minute is the cache"
+    assert client.get("/v2/repos/github", params={"slug": "not a slug"}, headers=auth_headers).status_code == 422
 
 
 def test_a_detached_head_is_not_a_branch_called_head(tmp_path, monkeypatch, client, auth_headers):

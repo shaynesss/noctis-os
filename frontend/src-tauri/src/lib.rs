@@ -78,6 +78,24 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Open a link in the person's browser.
+///
+/// The webview does not honour `target="_blank"`: a link to a pull request
+/// clicked in the Repo view did nothing at all. macOS's own `open` is the
+/// whole implementation -- no plugin, no capability file entry -- and it is
+/// limited to http(s), because `open` will also run a file or an app.
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        return Err("only http(s) links open".into());
+    }
+    std::process::Command::new("open")
+        .arg(&url)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -89,6 +107,7 @@ pub fn run() {
             pty::pty_kill,
             pty::pty_list,
             pty::pty_attach,
+            open_url,
         ])
         .plugin(tauri_plugin_notification::init())
         // Read-image only, by the capability file. The shell checks whether

@@ -61,8 +61,9 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onAdd: () => void
-  /** Drop `id` into the position `before` holds (or at the end). */
-  onReorder: (id: string, before: string | null) => void
+  /** Drop `ids` -- one tab, or a whole group -- into the position `before`
+   *  holds (or at the end), keeping their order. */
+  onReorder: (ids: string[], before: string | null) => void
   /** Toggle `id` into or out of a split with the showing terminal. */
   onSplit: (id: string) => void
 }) {
@@ -70,10 +71,13 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
   const visible = visibleWith(slots, shown).map((s) => s.id)
   /* Tabs move by dragging, the way a browser's do. Labels are positional
    * and so are ⌘1–9, so the order on screen is the order under the keys;
-   * moving a tab is how you put the one you reach for most under ⌘1. The
-   * id travels on the drag itself rather than in state -- there is nothing
-   * to clean up if the drop lands outside. */
-  const dragging = useRef<string | null>(null)
+   * moving a tab is how you put the one you reach for most under ⌘1. What
+   * travels on the drag is the ids being moved -- one tab, or a whole
+   * bracket -- rather than state: there is nothing to clean up if the drop
+   * lands outside. A grouped tab is not draggable on its own; its bracket
+   * is, and moves as one module, because a group pulled apart tab by tab
+   * read as a mess. */
+  const dragging = useRef<string[] | null>(null)
 
   /* Consecutive tabs of one group are drawn inside one bracket. The shell
    * keeps a group's members adjacent when it forms one, so a run is the
@@ -84,24 +88,37 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
     if (last && s.group && last[0].group === s.group) last.push(s)
     else runs.push([s])
   }
+  const runOf = (s: Slot) => runs.find((r) => r.includes(s)) ?? [s]
+  /* Dropping onto a grouped tab lands before its whole bracket: a module
+   * cannot be split by something landing inside it. */
+  const dropBefore = (target: Slot) => runOf(target)[0].id
+  const startDrag = (ids: string[]) => (e: React.DragEvent) => {
+    dragging.current = ids
+    e.dataTransfer.effectAllowed = 'move'
+  }
+  const dropOn = (target: Slot) => (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const ids = dragging.current
+    dragging.current = null
+    if (ids && !ids.includes(target.id)) onReorder(ids, dropBefore(target))
+  }
+  const canDropOn = (target: Slot) => (e: React.DragEvent) => {
+    if (dragging.current && !dragging.current.includes(target.id)) e.preventDefault()
+  }
 
-  const tab = (s: Slot) => {
+  const tab = (s: Slot, grouped: boolean) => {
     const i = slots.indexOf(s)
     const on = s.id === shown?.id
     const inSplit = visible.length > 1 && visible.includes(s.id)
     return (
       <div
         key={s.id}
-        draggable
-        onDragStart={(e) => { dragging.current = s.id; e.dataTransfer.effectAllowed = 'move' }}
+        draggable={!grouped}
+        onDragStart={grouped ? undefined : startDrag([s.id])}
         onDragEnd={() => { dragging.current = null }}
-        onDragOver={(e) => { if (dragging.current && dragging.current !== s.id) e.preventDefault() }}
-        onDrop={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          if (dragging.current && dragging.current !== s.id) onReorder(dragging.current, s.id)
-          dragging.current = null
-        }}
+        onDragOver={canDropOn(s)}
+        onDrop={dropOn(s)}
         className={`group flex h-[26px] cursor-default items-center gap-[7px] rounded-[4px] px-[9px] ${
           on ? 'bg-elevated text-ink' : inSplit ? 'text-ink' : 'text-ink-dim hover:text-ink'
         }`}
@@ -154,18 +171,23 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
              dragging.current = null
            }}>
         {runs.map((run) =>
-          run.length === 1 ? tab(run[0]) : (
+          run.length === 1 ? tab(run[0], false) : (
             /* One bracket around a split's tabs, with a rule between them:
-               the strip says which terminals share the screen. Keyed by
-               the run's first tab, not its group: a drag can leave a
-               group's tabs non-adjacent, and two runs of one group under
-               one key had React warning on every render. */
-            <div key={run[0].id} className="flex h-[26px] items-center rounded-[5px] border border-line px-[2px]"
-                 title="shown side by side">
+               the strip says which terminals share the screen, and the
+               bracket is what you drag. Keyed by the run's first tab, not
+               its group: a drag can leave a group's tabs non-adjacent, and
+               two runs of one group under one key had React warning on
+               every render. */
+            <div key={run[0].id}
+                 draggable
+                 onDragStart={startDrag(run.map((s) => s.id))}
+                 onDragEnd={() => { dragging.current = null }}
+                 className="flex h-[26px] cursor-grab items-center rounded-[5px] border border-line px-[2px] active:cursor-grabbing"
+                 title="shown together — drag to move the group">
               {run.map((s, k) => (
                 <div key={s.id} className="flex items-center">
                   {k > 0 && <span className="mx-[1px] h-[14px] w-px bg-line" />}
-                  {tab(s)}
+                  {tab(s, true)}
                 </div>
               ))}
             </div>

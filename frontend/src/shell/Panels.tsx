@@ -13,6 +13,7 @@ import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
 import { MODE_ACCENT, MODE_LABEL, VAULT_MODE, type Mode } from './domain'
 import { ModeMark } from './Chrome'
+import { openExternal } from './host'
 
 export interface BriefPayload {
   brief: Doc
@@ -58,17 +59,27 @@ export interface RepoInfo {
   dirty: string[]
   commits: { sha: string; subject: string; at: number; pushed: boolean }[]
   remote: string | null
-  github: null | {
-    slug: string
-    url: string | null
-    private: boolean
-    default_branch: string | null
-    pull_requests: { number: number; title: string; branch: string | null; draft: boolean; mergeable: string | null; url: string | null; checks: 'pass' | 'fail' | 'pending' | null }[]
-    issues: { number: number; title: string; url: string | null; labels: string[] }[]
-  }
+  /** `owner/name` when the remote is on GitHub; the GitHub half is read
+   *  separately by slug, so the local half never waits on the network. */
+  slug: string | null
+  /** Why there is no slug, when there is none. */
   github_reason: string | null
   /** The open terminals' directories that resolve to this repository. */
   cwds: string[]
+}
+
+export interface GithubInfo {
+  slug: string
+  url: string | null
+  private: boolean
+  default_branch: string | null
+  pull_requests: { number: number; title: string; branch: string | null; draft: boolean; mergeable: string | null; url: string | null; checks: 'pass' | 'fail' | 'pending' | null }[]
+  issues: { number: number; title: string; url: string | null; labels: string[] }[]
+}
+
+export interface GithubPayload {
+  github: GithubInfo | null
+  reason: string | null
 }
 
 export interface RepoPayload {
@@ -412,8 +423,16 @@ function TerminalChip({ t }: { t: RepoTerminal }) {
   )
 }
 
+/** A link that leaves the app. */
+function Ext({ href, className, children }: { href: string; className?: string; children: React.ReactNode }) {
+  return (
+    <a href={href} className={className} onClick={(e) => { e.preventDefault(); openExternal(href) }}>
+      {children}
+    </a>
+  )
+}
+
 function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: RepoTerminal[]; first: boolean; folded: boolean }) {
-  const gh = r.github
   const unpushed = r.ahead ?? 0
   const [commitsOpen, setCommitsOpen] = useState(!folded)
   const local = r.commits.filter((c) => !c.pushed).length
@@ -427,9 +446,13 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
           next, then the sentence that says what that is. Above it, which
           terminals are in this repository -- the reason it is on the page. */}
       <Card>
-        <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] px-4 py-[9px]">
-          {terminals.map((t) => <TerminalChip key={t.id} t={t} />)}
-          <span className="ml-auto min-w-0 truncate font-mono text-[11px] text-ink-faint">{r.root}</span>
+        {/* Terminals on one row, the path on the next -- each truncating
+            rather than wrapping, so two columns keep the same rhythm. */}
+        <div className="px-4 py-[9px]">
+          <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px]">
+            {terminals.map((t) => <TerminalChip key={t.id} t={t} />)}
+          </div>
+          <div className="mt-[4px] truncate font-mono text-[11px] text-ink-faint" title={r.root}>{r.root}</div>
         </div>
         <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[11px] font-mono text-[11.5px]">
           <span className="text-ink">{r.branch ?? 'detached'}</span>
@@ -442,10 +465,10 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
             <span className="text-ink-faint">no upstream</span>
           )}
           <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'}>{r.dirty.length} uncommitted</span>
-          {gh && (
-            <a href={gh.url ?? '#'} target="_blank" rel="noreferrer" className="ml-auto text-ink-dim hover:text-ink">
-              {gh.slug} · {gh.private ? 'private' : 'public'} ↗
-            </a>
+          {r.slug && (
+            <Ext href={`https://github.com/${r.slug}`} className="ml-auto text-ink-dim hover:text-ink">
+              {r.slug} ↗
+            </Ext>
           )}
         </div>
         <div className="border-t border-line px-4 py-[10px] text-[12px] leading-[1.55] text-ink-dim">
@@ -475,6 +498,13 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
         <span className="font-normal normal-case tracking-normal text-ink-faint">
           · {r.commits.length}{local ? ` · ${local} not on GitHub` : ''}
         </span>
+        {/* Folded, the newest subject still shows: it is what says whose
+            history this is, when two columns both read "20 · 20". */}
+        {!commitsOpen && r.commits[0] && (
+          <span className="min-w-0 flex-1 truncate font-normal normal-case tracking-normal text-ink-dim">
+            · {r.commits[0].sha} {r.commits[0].subject}
+          </span>
+        )}
       </button>
       {commitsOpen && <Card>
         {r.commits.map((c, i) => (
@@ -492,20 +522,42 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
       </Card>}
 
       <Heading className="mt-7">GitHub</Heading>
+      {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
+    </>
+  )
+}
+
+/** The GitHub half, read by slug once the local half is on screen. */
+function GithubLive({ slug }: { slug: string }) {
+  const data = useFetched<GithubPayload>(`/v2/repos/github?slug=${encodeURIComponent(slug)}`)
+  if (data === null) return <GithubCard gh={null} reason={null} pending />
+  if (data === false) return <GithubCard gh={null} reason="the backend did not answer" />
+  return <GithubCard gh={data.github} reason={data.reason} />
+}
+
+export function GithubCard({ gh, reason, pending = false }: { gh: GithubInfo | null; reason: string | null; pending?: boolean }) {
+  if (!gh) {
+    return (
       <Card>
-        {!gh ? (
-          <div className="px-4 py-[11px] text-[12.5px] text-ink-dim">
-            Not available: {r.github_reason ?? 'unknown'}.
-          </div>
-        ) : (
+        <div className="px-4 py-[11px] text-[12.5px] text-ink-dim">
+          {pending ? 'Asking GitHub…' : `Not available: ${reason ?? 'unknown'}.`}
+        </div>
+      </Card>
+    )
+  }
+  return (
+      <Card>
           <>
-            <div className="px-4 py-[9px] font-mono text-[11px] text-ink-faint">
-              pull requests · {gh.pull_requests.length} open
+            <div className="flex items-center px-4 py-[9px] font-mono text-[11px] text-ink-faint">
+              <span>pull requests · {gh.pull_requests.length} open</span>
+              <Ext href={gh.url ?? `https://github.com/${gh.slug}`} className="ml-auto text-ink-dim hover:text-ink">
+                {gh.slug} · {gh.private ? 'private' : 'public'} ↗
+              </Ext>
             </div>
             {gh.pull_requests.map((p) => (
               <div key={p.number} className="flex items-center gap-[10px] border-t border-line px-4 py-[8px] text-[12px]">
                 <span className="shrink-0 font-mono text-ink-faint">#{p.number}</span>
-                <a href={p.url ?? '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-ink hover:underline">{p.title}</a>
+                <Ext href={p.url ?? '#'} className="min-w-0 flex-1 truncate text-ink hover:underline">{p.title}</Ext>
                 <span className="shrink-0 font-mono text-[10.5px] text-ink-faint">{p.branch}</span>
                 {p.draft && <Tag>draft</Tag>}
                 {p.checks && <Tag tone={p.checks === 'fail' ? 'bad' : p.checks === 'pass' ? 'good' : undefined}>checks {p.checks}</Tag>}
@@ -521,7 +573,7 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
             {gh.issues.map((it) => (
               <div key={it.number} className="flex items-center gap-[10px] border-t border-line px-4 py-[8px] text-[12px]">
                 <span className="shrink-0 font-mono text-ink-faint">#{it.number}</span>
-                <a href={it.url ?? '#'} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-ink hover:underline">{it.title}</a>
+                <Ext href={it.url ?? '#'} className="min-w-0 flex-1 truncate text-ink hover:underline">{it.title}</Ext>
                 {it.labels.map((l) => <Tag key={l}>{l}</Tag>)}
               </div>
             ))}
@@ -529,9 +581,7 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
               <div className="border-t border-line px-4 py-[8px] text-[12px] text-ink-faint">none — an issue per piece of work is the backlog a branch and a PR close</div>
             )}
           </>
-        )}
       </Card>
-    </>
   )
 }
 
