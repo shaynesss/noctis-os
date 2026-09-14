@@ -45,6 +45,10 @@ export interface Slot {
 export const newSlot = (mode: Mode, cwd: string, extra: Partial<Slot> = {}): Slot =>
   ({ id: `term-${mode}-${crypto.randomUUID().slice(0, 8)}`, mode, cwd, ...extra })
 
+/** Columns for `n` terminals on screen: a row up to three, a square-ish
+ *  grid after -- 2 for 4, 3 for 5–9. */
+export const gridColumns = (n: number): number => (n <= 3 ? Math.max(1, n) : Math.ceil(Math.sqrt(n)))
+
 /** The slots shown together with `shown`: its group, or itself. */
 export const visibleWith = (slots: readonly Slot[], shown: Slot | undefined): Slot[] =>
   !shown ? [] : shown.group ? slots.filter((s) => s.group === shown.group) : [shown]
@@ -152,8 +156,11 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
         {runs.map((run) =>
           run.length === 1 ? tab(run[0]) : (
             /* One bracket around a split's tabs, with a rule between them:
-               the strip says which terminals share the screen. */
-            <div key={run[0].group} className="flex h-[26px] items-center rounded-[5px] border border-line px-[2px]"
+               the strip says which terminals share the screen. Keyed by
+               the run's first tab, not its group: a drag can leave a
+               group's tabs non-adjacent, and two runs of one group under
+               one key had React warning on every render. */
+            <div key={run[0].id} className="flex h-[26px] items-center rounded-[5px] border border-line px-[2px]"
                  title="shown side by side">
               {run.map((s, k) => (
                 <div key={s.id} className="flex items-center">
@@ -180,18 +187,30 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
           no sessions — ⌘T to start one
         </div>
       )}
-      {/* Every slot is mounted; the visible ones share the row as equal
-          columns. Display is set inline rather than through `hidden`: a
-          column needs `display: flex` for its focus rule, and a utility
-          class would win over the attribute. */}
-      <div className="flex min-h-0 flex-1">
+      {/* Every slot is mounted; the visible ones share a grid of equal
+          cells. Up to three sit in a row; from four on the grid squares up
+          -- 2×2, then 3×2, then 3×3 for the nine ⌘-digits reach -- rather
+          than thinning into strips. A hidden slot is `display: none`, which
+          takes no cell. Display is set inline rather than through `hidden`:
+          a cell needs `display: flex` for its focus rule, and a utility
+          class would win over the attribute. Rules between cells are
+          borders on the cell -- left when it is not first in its row, top
+          when it is not in the first row -- rather than a gap over a
+          coloured ground, because the ground is translucent and a gap's
+          colour would show through every pane. */}
+      <div className="grid min-h-0 flex-1"
+           style={{
+             gridTemplateColumns: `repeat(${gridColumns(visible.length)}, minmax(0, 1fr))`,
+             gridAutoRows: 'minmax(0, 1fr)',
+           }}>
         {slots.map((s) => {
           const at = visible.indexOf(s.id)
+          const cols = gridColumns(visible.length)
           const focused = s.id === shown?.id
           return (
             <div key={s.id}
                  style={{ display: at < 0 ? 'none' : 'flex' }}
-                 className={`min-h-0 min-w-0 flex-1 flex-col ${at > 0 ? 'border-l border-line' : ''}`}
+                 className={`min-h-0 min-w-0 flex-col ${at % cols > 0 ? 'border-l border-line' : ''} ${at >= cols ? 'border-t border-line' : ''}`}
                  onMouseDown={() => { if (at >= 0 && !focused) onSelect(s.id) }}>
               {/* Which column has the keyboard, when there is more than one:
                   a rule in the mode's accent along its top, nothing on the

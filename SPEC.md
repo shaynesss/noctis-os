@@ -472,15 +472,21 @@ a terminal today, from a button in the Repo view if he wants one, because
 the button is his hand. A crashed session still cannot have half-shipped
 anything, which is what the rule is for.
 
-**Before the next push of `noctis-os`, a decision that cannot wait for the
-rest:** the 201 local commits carry `backend/data/history.db` and its WAL
-(added in `2856b5a`, untracked since `02e5425`) — real transcripts, in the
-history of a public repository. All 201 are local, so rewriting them to drop
-`backend/data/` touches nothing on GitHub and needs no force-push; it is a
-`git filter-repo --path backend/data --invert-paths` (not installed; `brew
-install git-filter-repo`) on a tree that is otherwise clean. Do that, or
-make the repo private, before the push. The STATUS note of 09-13 called this
-"a rebase today"; it is now a filter and still today.
+**Before the next push of `noctis-os`, a hygiene decision, corrected
+2026-09-14 (evening):** the local commits carry `backend/data/history.db` and
+its WAL (added in `2856b5a`, untracked since `02e5425`) — the app's own
+conversation store, in the history of a public repository. Read back from
+every committed version that same evening: **13 sessions, 27 messages, all of
+them probe prompts from the orchestrator's testing** ("Reply with exactly:
+ALPHA", "Count slowly from 1 to 400", "hello?") and their replies; no vault
+content, nothing personal. The earlier wording ("real transcripts", "cannot
+wait") overstated it. What remains is categorical: a database the app writes
+should not be in a public repo's history at all, and the same file would
+have carried real conversations a week later. All the commits are local, so
+dropping `backend/data/` is a `git filter-repo --path backend/data
+--invert-paths` (not installed; `brew install git-filter-repo`) on a clean
+tree, touching nothing on GitHub. Worth doing before the push; not a blocker
+on the content.
 
 ---
 

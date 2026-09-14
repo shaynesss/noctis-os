@@ -11,9 +11,14 @@ scheduler, which is the only feature left in the build order.
 
 ### Split screen, and the views seen again (2026-09-14)
 
-- **Terminals side by side.** Slots that share a group are shown together,
-  each in its own column fitting its own box, the focused one marked by a
-  rule in the mode's accent along its top. `⌘⇧-number` splits the showing
+- **Terminals side by side, then in a grid.** Slots that share a group are
+  shown together, each fitting its own cell, the focused one marked by a
+  rule in the mode's accent along its top. Up to three sit in a row; from
+  four the grid squares up — 2×2, then 3×2, then 3×3 for the nine ⌘-digits
+  reach — rather than thinning into strips.
+- **Tabs drag in the app now.** They always could in a browser; inside
+  Tauri the window's native drag-and-drop handler took the HTML5 drag first,
+  so a tab never moved. `dragDropEnabled: false` on the window hands it back. `⌘⇧-number` splits the showing
   terminal with that tab (or unsplits it); each tab also has a `⊞`/`⊟` on
   hover. The strip brackets a split's tabs together so it is visible from
   the tab bar which terminals share the screen. Joining moves the tab next

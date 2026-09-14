@@ -608,9 +608,11 @@ Each tab carries its mode's mark — the character's sprite from
 `assets/characters/`, the Noctis star for General — and the Repo view names
 terminals with the same mark, so a terminal is one picture in both places.
 
-**Split screen.** Slots sharing a `group` are shown side by side as equal
-columns, each terminal fitting its own box, the focused one under a rule in
-the mode's accent. `⌘⇧-number` splits the showing terminal with that tab or
+**Split screen.** Slots sharing a `group` are shown together as equal cells
+— a row up to three, a grid from four (2×2, 3×2, 3×3) — each terminal
+fitting its own cell, the focused one under a rule in the mode's accent.
+Tabs drag to reorder; inside Tauri that needs `dragDropEnabled: false` on
+the window, or the native drop handler swallows the HTML5 drag. `⌘⇧-number` splits the showing terminal with that tab or
 unsplits it; each tab has `⊞`/`⊟` on hover. The strip brackets a split's tabs
 as one run — joining moves the tab beside its group — so the tab bar says
 which terminals share the screen. Selecting a grouped tab shows the group

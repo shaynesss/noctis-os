@@ -31,7 +31,8 @@
             "hudWindow"
           ]
         },
-        "backgroundThrottling": "disabled"
+        "backgroundThrottling": "disabled",
+        "dragDropEnabled": false
       }
     ],
     "security": {
