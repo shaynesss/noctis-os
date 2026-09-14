@@ -311,7 +311,7 @@ Runtime logs live in `backend/runtime/` — high-churn, ephemeral, gitignored. *
 
 **`launchd`, fires on wake.** Morning brief · vault auto-commit and push (secret-scan first) · maintenance. Exits if already run today.
 
-**Audit → Propose → Apply, propose-never-commit.** Every proposal is accepted or rejected by hand. `POST /nightshift/inbox/{id}/accept` applies *before* removing from the inbox, so a failed apply leaves the item pending rather than losing it.
+**Audit → Propose → Apply, propose-never-commit.** Every proposal is accepted or rejected by hand, from the Inbox. `POST /v2/inbox/{id}/accept` applies the diff *before* archiving — all hunks or none — then honours the proposal's markers (a lessons cursor to advance, a job to close), drops the entry from `maintenance/state.md`'s index and commits the vault; a diff that no longer applies is a 409 with the reason and the item stays, visibly stale. `reject` archives, drops the entry and commits. The listing joins each file with its index entry (description, rationale, confidence) and derives from the diff what accepting does — which file, how many places — so the row states the consequence before the argument; `full` carries rationale, diff, evidence and confidence for the read.
 
 **The brief is generated in two halves.** Facts are counted in Python — open jobs, ages, inbox, where the last session got to. The prose is written by a cheap-tier session from those facts and nothing else, which is what makes it read like a person rather than assembled fields. One paragraph, three sentences at most. **If the prose call fails the brief still renders**, because the rows are the part that must not be missing.
 
