@@ -6,9 +6,9 @@
 
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />
-  <img alt="status" src="https://img.shields.io/badge/v2-mid--build-orange.svg" />
+  <img alt="status" src="https://img.shields.io/badge/v2-daily%20driver-orange.svg" />
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS-black.svg" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-372%20%2B%2080-brightgreen.svg" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-325%20%2B%2075-brightgreen.svg" />
 </p>
 
 ---
@@ -41,6 +41,46 @@ They differ by **method**, never by capability. Every mode gets the same tools; 
 | **Maintenance** | Audit the vault and propose repairs | Haiku 4.5 |
 
 A mode is passed into a session in its argv — never inherited from a config file on disk. Varying capability instead was tried, and it produced a mode handed work it could not perform with no way to say so.
+
+## The app, tab by tab
+
+The window is a rail of six tabs beside a terminal area. Each tab is a view over state that already exists — the CLI's own transcripts, the vault, git, GitHub — never a second copy of it.
+
+### Terminal
+
+The real interactive `claude`, hosted in a pseudo-terminal and drawn in the app's palette. Sessions:
+
+- **open by saying what they are** — a fresh session gets an opening prompt to state its mode, purpose and directory, so no terminal ever sits at a bare prompt looking like nothing loaded;
+- **start where their work is** — General and the vault modes at the vault, Faber in the projects directory (which project is the session's to establish);
+- **survive a reload** — the PTY registry lives in the Rust process; the page reattaches with a replay of what each session printed;
+- **resume by engine session id**, so a conversation you closed comes back, not a copy that forgot its screen;
+- **split** — `⌘⇧-number` puts a tab beside the showing one; a row up to three, then a 2×2, 3×2, 3×3 grid. The tab strip brackets a split's tabs and drags them as one module. Each tab wears its mode's sprite.
+
+`⌘T` opens the launcher (mode, directory, optional opening prompt). `⌘⇧H` hands a conversation off to another mode with a carried summary. `⌘W` closes; `⌘1–9` focus by position.
+
+### Repo
+
+The repositories the open terminals are in, one group per repository, the showing terminal's first — two Faber sessions on one project are one group naming both terminals; a session on another project is a second column.
+
+Per repository: branch, ahead/behind, uncommitted files, the last twenty commits with a red dot for "not on GitHub" and a green one for "on GitHub", and each commit wearing the sprite of **whose work it was** — a dev job's project is Faber's, so its commits are; elsewhere the session live at the time. GitHub's half — open pull requests with a one-word check state, open issues — loads after the local half so the view never waits on the network.
+
+**The push is a button, and it is yours.** A session never pushes (`git push` is denied to hosted sessions; the prompt sends every other one here). The button runs `git push` as your own git identity, reads every outgoing commit message first and refuses if any carries an attribution trailer, and asks separately before a force push when the histories disagree.
+
+### Stats
+
+The engine's rolling **5-hour and 7-day windows** — the real currency on a subscription; no dollar figure is ever shown as spend — lifetime tokens by kind, a year of activity, and the **history of every session on this machine**, indexed from the transcripts the CLI writes itself. Open a past transcript, search it, or resume it into a terminal. `⌘K` searches history across all modes from anywhere.
+
+### Brief
+
+The morning brief and an editable worklist. The brief is generated over facts computed in Python — what is flagged, what is waiting, what went stale — with the prose written on top of those facts rather than instead of them. The scheduler that writes it on wake is the one unbuilt piece of the build order; until then the page says so and names the file it is waiting for.
+
+### Inbox
+
+Maintenance's proposals and flagged jobs, as packages: the sender's sprite, what the change is, what accepting does, the full rationale, evidence and a red/green diff on demand. **Accepting applies the diff** — all hunks or none — archives the proposal, and commits the vault; rejecting archives it. Maintenance itself never edits a methodology; the person accepting is the edit.
+
+### Settings
+
+The prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault, with a regression suite that checks a change still produces the right mode. And the scheduler's switches, once it exists.
 
 ## Architecture
 
@@ -84,6 +124,7 @@ Each of these is verifiable on your own machine rather than taken on trust.
 | Modes differ by method, not capability | `make doctor` — every mode reports the same tool surface, and any gap between what a methodology assumes and what exists is printed |
 | Sessions inherit your real toolkit | No `CLAUDE_CONFIG_DIR` anywhere: `ps eww <pid> \| grep CLAUDE_CONFIG_DIR` finds nothing |
 | No API billing | `Limits` reports 5-hour and 7-day windows, never dollars; `list_cost_usd` is documented as notional |
+| A session never pushes | `backend/orchestrator/permissions.json` denies `git push`; the Repo tab's button is the only push, and it runs as you |
 | A move to another harness has a known cost | `python -m capabilities --migrate` — the brief describing everything that would not port |
 
 ## Stack
@@ -95,7 +136,7 @@ Each of these is verifiable on your own machine rather than taken on trust.
 | Session runtime | [Claude Code](https://claude.com/claude-code) CLI, interactive, in a pseudo-terminal |
 | Durable state | Markdown + YAML frontmatter |
 | History + retrieval | SQLite FTS5 (BM25), no added dependencies |
-| Testing | `pytest` + `vitest` + `tsc -b` |
+| Testing | `pytest` + `vitest` + `tsc -b`, Playwright for the screens |
 
 ## Quickstart
 
@@ -126,31 +167,25 @@ for a file-watching reloader, which are alternatives rather than layers.
 
 **Sessions have full tool access.** `Bash`, `Edit`, `Write`, `Read`, `WebSearch`, `WebFetch` — pre-approved, no prompt. A session can run any shell command and edit any file it can reach.
 
-**`git push` is denied outright.** Commits happen; pushing is always manual.
+**`git push` is denied outright.** Commits happen; pushing is yours, from the Repo tab or a terminal of your own.
 
 **Two reachable directories:** the launched project, and `VAULT_PATH`. The engine sandboxes file access to those.
 
-**It writes to your vault** — lessons, job contexts, staged proposals. Keep the vault in git so you can see and revert. Nothing is committed for you.
+**It writes to your vault** — lessons, job contexts, staged proposals. Keep the vault in git so you can see and revert. Accepting an inbox proposal commits the vault; nothing else does.
 
-**And outside it:** `backend/data/` (SQLite) and `backend/runtime/` (action logs, gitignored).
+**And outside it:** `backend/data/` (SQLite) and `backend/runtime/` (action logs), both gitignored.
 
 **`bootstrap.sh` modifies the machine**, not just the repo — config directories, a `launchd` job, telemetry hooks. `./bootstrap/bootstrap.sh --dry-run` shows exactly what it would do first.
 
-**Every working turn spends a second short spawn** to produce its closing summary. Free on a subscription; roughly double the notional cost on metered billing.
-
 ## Status
 
-**v2 is the system.** Stage 1 complete; Stage 2 items 1–5, 7, 8 and 9 closed, item 6 outstanding on its `launchd`-on-wake scheduler.
-
-**v1 is gone.** The 2026-09-12 cutover removed its world screen, launch surfaces, four routers and every mode config directory, and moved maintenance's state to root-level `maintenance/`. The only feature left in the build order is the `launchd`-on-wake scheduler.
-
-### Major revisions
+**v2 is the daily driver.** Stage 1 complete; Stage 2 items 1–5, 7, 8 and 9 closed, item 6 outstanding on its `launchd`-on-wake scheduler. v1 is gone.
 
 | | |
 |---|---|
-| **v2** (2026-09) | The app hosts sessions instead of launching them into VS Code and Terminal. Live transcripts, durable history, cross-mode search — none of which the fire-and-forget model could do. |
-| **v2 harness pass** (2026-09-11/12) | Sessions run against the real `~/.claude` rather than private config directories, so they inherit the full toolkit. Per-mode tool cages removed. Turn integrity made visible and enforced. |
-| **v1 cutover** (2026-09-12) | v1 removed entirely — world screen, launch surfaces, four routers, config dirs, and the pywebview shell the `app` target was still pointing at. Maintenance's state moved out of `modes/` to root-level `maintenance/`. The backend is supervised: it restarts itself when it stops answering. |
+| **v2 terminal** (2026-09-13/14) | The app hosts the real interactive CLI in a PTY instead of driving `claude -p` per turn. Sessions survive a reload, split into a grid, and wear their mode. |
+| **v2** (2026-09) | The app hosts sessions instead of launching them into VS Code and Terminal. Durable history, cross-mode search. |
+| **v1 cutover** (2026-09-12) | v1 removed entirely; maintenance's state moved to root-level `maintenance/`; the backend supervises itself. |
 | **v1.5** (2026-07) | Five modes wired to real vault reads and writes; Design Lodge. |
 
 Full detail in [DOCUMENTATION.md](DOCUMENTATION.md) · [`STATUS.md`](STATUS.md) · [`CHANGELOG.md`](CHANGELOG.md).
@@ -158,9 +193,11 @@ Full detail in [DOCUMENTATION.md](DOCUMENTATION.md) · [`STATUS.md`](STATUS.md) 
 ## Documentation
 
 - **[DOCUMENTATION.md](DOCUMENTATION.md)** — the reference. Every subsystem, the session lifecycle, prompts vs config, the MCP surface, retrieval, portability, troubleshooting.
-- [`SPEC.md`](SPEC.md) — constraints and locked decisions.
 - [`STATUS.md`](STATUS.md) — what works today.
+- [`CHANGELOG.md`](CHANGELOG.md) — what changed, and why.
 - [`SETUP.md`](SETUP.md) — one-time machine checklist.
+
+The spec, design brief and migration records are the build's own planning documents and live in the private vault, not here.
 
 **Single-user by design.** No multi-tenancy, no hosted deployment, no auth beyond one bearer token. Public as a working example of the architecture.
 

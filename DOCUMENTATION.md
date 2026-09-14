@@ -504,7 +504,7 @@ make test        # pytest + tsc -b + vitest
 
 ## 24. The Terminal — the real CLI, hosted
 
-**Shipped 2026-09-13 beside the `stream-json` transcript; the transcript and the orchestrator behind it were deleted 2026-09-14.** The terminal is the conversation surface. `PTY-MIGRATION.md` has the full reasoning; this section is what exists, and §2 is the spawn.
+**Shipped 2026-09-13 beside the `stream-json` transcript; the transcript and the orchestrator behind it were deleted 2026-09-14.** The terminal is the conversation surface. The migration record (`PTY-MIGRATION.md`, in the vault's `wiki/Noctis OS/` since 2026-09-15) has the full reasoning; this section is what exists, and §2 is the spawn.
 
 **Why.** Noctis drives `claude -p` — "print response and exit" in the CLI's own
 help — once per turn, and much of the orchestrator exists to rebuild the

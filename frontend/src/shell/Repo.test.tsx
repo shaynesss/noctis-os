@@ -117,7 +117,7 @@ describe('Repo view', () => {
     expect(text({ ahead: 5 })).toContain('5 commits on this machine only. Push puts them on GitHub as you')
     expect(t).toContain('a.ts'); expect(t).toContain('b.ts')
     expect(t).toContain('● abc1234 newest, local only 1m')
-    expect(t).toContain('· def5678 older, on GitHub 2h')
+    expect(t).toContain('● def5678 older, on GitHub 2h')
   })
 
   it('says everything is on GitHub when it is', () => {

@@ -9,6 +9,19 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The plan moves to the vault; the README describes the rail (2026-09-15)
+
+- **`SPEC.md`, `PTY-MIGRATION.md` and `PRODUCT.md` leave the repo** for the
+  vault's `wiki/Noctis OS/`, beside `noctis-v2-SPEC.md`. They are the planning
+  and build record — open questions, design briefs, a migration's decision
+  log — and the public repo is for what runs: README, DOCUMENTATION,
+  CHANGELOG, STATUS, SETUP. `CLAUDE.md` points at the new home. They stay
+  in history (public since July); nothing was rewritten for this.
+- **README rewritten around the rail.** One section per tab — Brief,
+  Terminal, Repo, Stats, Inbox, Settings — saying what each does today, plus
+  the keys. The architecture, the checkable claims and the blast radius stay.
+- On GitHub is a green dot now, not a grey one.
+
 ### The push is a button, and it is yours (2026-09-15)
 
 - **"claude" reached the public Contributors graph.** Four commits carried a

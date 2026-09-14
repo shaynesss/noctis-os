@@ -560,7 +560,7 @@ function RepoGroup({ r, terminals, first, folded, onChanged }: { r: RepoInfo; te
         {commitsOpen && (
           <span className="ml-auto flex shrink-0 items-center gap-[10px] font-normal normal-case tracking-normal text-ink-faint">
             <span><span style={{ color: 'var(--color-faber)' }}>●</span> not on GitHub</span>
-            <span>· on GitHub</span>
+            <span><span style={{ color: 'var(--color-good)' }}>●</span> on GitHub</span>
             <span>face · whose session</span>
           </span>
         )}
@@ -569,8 +569,8 @@ function RepoGroup({ r, terminals, first, folded, onChanged }: { r: RepoInfo; te
         {r.commits.map((c, i) => (
           <div key={c.sha} className={`flex items-baseline gap-[10px] px-4 py-[7px] font-mono text-[11.5px] ${i ? 'border-t border-line' : ''}`}>
             <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
-                  style={{ color: c.pushed ? 'var(--color-ink-faint)' : 'var(--color-faber)' }}>
-              {c.pushed ? '·' : '●'}
+                  style={{ color: c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>
+              ●
             </span>
             {/* Whose commit: the character of the session that was live
                 here when it was made. Blank for one made by hand. */}
