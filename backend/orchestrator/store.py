@@ -507,6 +507,12 @@ class ConversationStore:
             "SELECT mode, cwd, started_at, ended_at FROM sessions"
             " WHERE cwd = ? OR cwd LIKE ? ORDER BY started_at", (root, prefix)).fetchall()
 
+    def sessions_all(self) -> list[sqlite3.Row]:
+        """Every session's mode and span, for attributing a commit to
+        whatever was live at the time when nothing ran in its directory."""
+        return self.db.execute(
+            "SELECT mode, cwd, started_at, ended_at FROM sessions ORDER BY started_at").fetchall()
+
     def recent_cwds(self, limit: int = 8) -> list[str]:
         """Working directories actually used, most recent first.
 

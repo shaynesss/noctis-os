@@ -11,12 +11,18 @@ scheduler, which is the only feature left in the build order.
 
 ### Whose commit, and a history without its database (2026-09-14)
 
-- **Each commit wears the character that made it.** No trailer in the
-  message — the no-attribution rule stands — but history knows which
-  sessions ran in a repository and when, so a commit made while a Faber
-  session was live there gets Faber's sprite; one made by hand gets none.
-  Two sessions live at once is a guess (the most recently started wins),
-  and the code says so.
+- **Each commit wears the character whose work it is.** No trailer in the
+  message — the no-attribution rule stands. A repository that is a dev
+  job's `project_path` is Faber's project, so every commit to it is
+  Faber's, whichever terminal typed it — the first version marked commits
+  from a build session launched into VS Code as General, because that
+  session carries no mode signal and the indexer files it as General. For
+  a repository no job owns (the vault), the mark is the session live in
+  that directory at the time, else any session live at the moment (the
+  vault is written from every mode's directory), most recently started
+  winning; a commit outside every span, made by hand, gets none. The
+  commits header carries a legend: red dot not on GitHub, grey on GitHub,
+  face whose session.
 - **`backend/data/` filtered out of the local history.** `git filter-repo
   --path backend/data --invert-paths` on the 210 unpushed commits: the
   root moved `49f3a0f` → `745b718`, `origin/main` is still an ancestor,

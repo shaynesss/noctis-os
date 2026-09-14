@@ -507,6 +507,15 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
             · {r.commits[0].sha} {r.commits[0].subject}
           </span>
         )}
+        {/* What the marks mean, where they are: the dot is whether GitHub
+            has the commit, the face is whose work it was. */}
+        {commitsOpen && (
+          <span className="ml-auto flex shrink-0 items-center gap-[10px] font-normal normal-case tracking-normal text-ink-faint">
+            <span><span style={{ color: 'var(--color-faber)' }}>●</span> not on GitHub</span>
+            <span>· on GitHub</span>
+            <span>face · whose session</span>
+          </span>
+        )}
       </button>
       {commitsOpen && <Card>
         {r.commits.map((c, i) => (

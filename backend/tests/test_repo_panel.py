@@ -94,6 +94,8 @@ def test_a_commit_is_marked_with_the_session_that_was_live_when_it_was_made(tmp_
     iso = lambda d: d.isoformat().replace("+00:00", "Z")  # noqa: E731
     monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
     monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    monkeypatch.setattr("jobs.find_job_for_cwd", lambda mode, cwd: None)  # nobody's project
+    monkeypatch.setattr("orchestrator.store.ConversationStore.sessions_all", lambda self: [])
     monkeypatch.setattr("orchestrator.store.ConversationStore.sessions_in", lambda self, r: [
         {"mode": "general", "cwd": str(root), "started_at": iso(now - timedelta(hours=2)), "ended_at": iso(now + timedelta(minutes=5))},
         {"mode": "faber", "cwd": str(root / "backend"), "started_at": iso(now - timedelta(hours=1)), "ended_at": None},
@@ -103,6 +105,24 @@ def test_a_commit_is_marked_with_the_session_that_was_live_when_it_was_made(tmp_
         {"mode": "faber", "cwd": str(root), "started_at": iso(now - timedelta(days=2)), "ended_at": iso(now - timedelta(days=1))},
     ])
     assert _one(client, auth_headers, root)["commits"][0]["mode"] is None, "no session was live; made by hand"
+    # Nothing ran here, but a Vesper session elsewhere was live: the vault
+    # is written from every mode's directory, so that is whose it was.
+    monkeypatch.setattr("orchestrator.store.ConversationStore.sessions_all", lambda self: [
+        {"mode": "vesper", "cwd": "/elsewhere", "started_at": iso(now - timedelta(minutes=30)), "ended_at": None},
+    ])
+    assert _one(client, auth_headers, root)["commits"][0]["mode"] == "vesper"
+
+
+def test_every_commit_to_a_dev_jobs_project_is_fabers(tmp_path, monkeypatch, client, auth_headers):
+    """The repository is the job's project_path, so the work is Faber's --
+    whichever terminal typed the command, and even when the only session
+    the store knows of was filed as General."""
+    root = _repo(tmp_path)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    monkeypatch.setattr("jobs.find_job_for_cwd", lambda mode, cwd: "noctis-os" if mode == "faber" else None)
+    monkeypatch.setattr("orchestrator.store.ConversationStore.sessions_in", lambda self, r: (_ for _ in ()).throw(AssertionError("ownership decides; the clock is not consulted")))
+    assert _one(client, auth_headers, root)["commits"][0]["mode"] == "faber"
 
 
 def test_check_rollup_is_one_word():

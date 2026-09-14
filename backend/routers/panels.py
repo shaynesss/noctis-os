@@ -552,25 +552,43 @@ def _repo_at(root: Path) -> dict:
 
 
 def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
-    """Which session a commit came from, by time.
+    """Whose work a commit is.
 
     A commit carries no session id -- and must not: the no-attribution
-    rule keeps trailers out of commit messages. What history does hold is
-    which sessions ran in this repository and when, so a commit made while
-    a Faber session was live here is marked Faber. Two sessions live at
-    once in one repository (two Fabers on a project) is a real case and an
-    ambiguous one; the most recently started wins, and that is a guess
-    stated here rather than a fact. A commit outside every session's span
-    -- made by hand in a terminal -- gets no mark, which is the honest
-    answer. A session's end is its last message; a commit lands moments
-    after the message that made it, so the span is stretched ten minutes.
+    rule keeps trailers out of commit messages. Two things stand in.
+
+    First, ownership. A repository that is a dev job's `project_path` is
+    Faber's project, and every commit to it is Faber's work -- whichever
+    session or terminal typed the command. That is the vault's own model
+    of who does what, and it answers the question the view is asked
+    ("whose is this") without guessing from the clock. It also covers the
+    case the clock gets wrong: a build session launched into VS Code
+    rather than hosted here carries no mode signal, is indexed as General,
+    and had its commits to the project marked General.
+
+    Second, for a repository no job owns (the vault), time. History holds
+    which sessions ran and when: a commit made while a session was live in
+    that directory is marked with that session's mode; failing that, with
+    any session live at the moment, since the vault is written from every
+    mode's working directory. Two live at once is a guess -- the most
+    recently started wins, said here rather than hidden. A commit outside
+    every span, made by hand, gets no mark. A session's end is its last
+    message and a commit lands moments after the message that made it, so
+    a span is stretched ten minutes.
     """
     from datetime import datetime
+    import jobs
     from orchestrator.store import ConversationStore
+
+    if jobs.find_job_for_cwd("faber", root):
+        for c in commits:
+            c["mode"] = "faber"
+        return
 
     store = ConversationStore()
     try:
         rows = store.sessions_in(str(root))
+        everywhere = store.sessions_all()
     finally:
         store.close()
 
@@ -582,16 +600,25 @@ def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
         except ValueError:
             return None
 
-    spans = []
-    for r in rows:
-        start = when(r["started_at"])
-        if start is None:
-            continue
-        end = when(r["ended_at"])
-        spans.append((start, (end + 600) if end is not None else float("inf"), r["mode"]))
+    def spans(source) -> list[tuple[float, float, str]]:
+        out = []
+        for r in source:
+            start = when(r["started_at"])
+            if start is None:
+                continue
+            end = when(r["ended_at"])
+            out.append((start, (end + 600) if end is not None else float("inf"), r["mode"]))
+        return out
+
+    here, anywhere = spans(rows), spans(everywhere)
     for c in commits:
-        hits = [(start, mode) for start, end, mode in spans if start - 60 <= c["at"] <= end]
-        c["mode"] = max(hits)[1] if hits else None
+        for candidates in (here, anywhere):
+            hits = [(start, mode) for start, end, mode in candidates if start - 60 <= c["at"] <= end]
+            if hits:
+                c["mode"] = max(hits)[1]
+                break
+        else:
+            c["mode"] = None
 
 
 # What GitHub said about a slug, for a minute. The Repo view re-reads on
