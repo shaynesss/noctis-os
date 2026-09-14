@@ -10,8 +10,10 @@
 # own name for the terminal slot, so a report can be matched to the terminal
 # it came from before the session id is known to anything but the CLI.
 #
-# Prints one short line back, because whatever this writes to stdout becomes
-# the CLI's own status line inside the terminal.
+# Prints nothing back. Whatever this writes to stdout becomes the CLI's own
+# status line inside the terminal, and Noctis draws that bar itself, from
+# this very payload, under the terminal -- a "noctis" row inside the pane
+# was the same information twice. With no output the CLI draws no row.
 #
 # Never fails loudly: a status line that errors would put its stderr in the
 # middle of a session. If the backend is down the numbers simply do not update.
@@ -27,4 +29,3 @@ printf '%s' "$PAYLOAD" | curl -s -m 2 -o /dev/null \
   -X POST "http://127.0.0.1:${PORT}/v2/sessions/statusline?mode=${MODE}&slot=${SLOT}" \
   -H "Authorization: Bearer ${TOKEN}" \
   -H "Content-Type: application/json" --data-binary @- 2>/dev/null || true
-echo "noctis"

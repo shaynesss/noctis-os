@@ -9,6 +9,17 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Two lines and a row (2026-09-14)
+
+- The tab strip is the rail's title band's height, from the same token, so
+  the two bottom rules meet as one line across the window instead of
+  stepping at the rail's edge.
+- The status-line script prints nothing back. Whatever it printed became
+  the CLI's own status row inside the pane, and Noctis draws that bar
+  itself from the same payload, under the terminal — a `noctis` row was
+  the same information twice. The CLI keeps the row only for its own
+  `/rc` indicator.
+
 ### The page keeps running while the window is hidden; tabs drag (2026-09-14)
 
 - **Hidden is not suspended.** Closing the window hides it to the tray, and

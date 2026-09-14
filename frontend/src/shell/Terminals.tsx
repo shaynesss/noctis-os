@@ -55,12 +55,14 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
   const dragging = useRef<string | null>(null)
   return (
     <div hidden={hidden} className="flex min-h-0 flex-1 flex-col">
-      {/* Same height token as the head band above it, so the two read as one
-          system rather than two bars of nearly equal size. The strip's empty
-          space drags the window: the title bar is an overlay with nothing
-          in it, so this is the top edge you would reach for. */}
+      {/* The same height as the rail's title band beside it, from the same
+          token, so the two bottom rules meet as one line across the window
+          -- a strip eight pixels shorter than the band left a step at the
+          rail's edge. The strip's empty space drags the window: the title
+          bar is an overlay with nothing in it, so this is the top edge you
+          would reach for. */}
       <div data-tauri-drag-region
-           className="flex h-[34px] shrink-0 items-center gap-[2px] border-b border-line px-[8px] font-mono text-[11px]"
+           className="flex h-[var(--head-band)] shrink-0 items-center gap-[2px] border-b border-line px-[8px] font-mono text-[11px]"
            onDragOver={(e) => { if (dragging.current) e.preventDefault() }}
            onDrop={(e) => {
              e.preventDefault()
