@@ -53,3 +53,26 @@ def test_check_rollup_is_one_word():
     assert panels._rollup([{"conclusion": "SUCCESS"}]) == "pass"
     assert panels._rollup([{"conclusion": "SUCCESS"}, {"state": "PENDING"}]) == "pending"
     assert panels._rollup([{"conclusion": "FAILURE"}, {"state": "PENDING"}]) == "fail"
+
+
+def test_a_missing_repository_is_told_apart_from_an_unreachable_github(tmp_path, monkeypatch, client, auth_headers):
+    root = _repo(tmp_path)
+    subprocess.run(["git", "remote", "add", "origin", "git@github.com:someone/gone.git"], cwd=root, check=True)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    # gh answers for the account, not for the slug.
+    monkeypatch.setattr(panels, "_gh", lambda root, *a: {"login": "someone"} if a[:2] == ("api", "user") else None)
+    r = client.get("/v2/repo", params={"cwd": str(root)}, headers=auth_headers).json()["repo"]
+    assert "no repository at someone/gone that someone can see" in r["github_reason"]
+    # gh answers for nothing: that is the network / sign-in case.
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    r = client.get("/v2/repo", params={"cwd": str(root)}, headers=auth_headers).json()["repo"]
+    assert "could not reach GitHub" in r["github_reason"]
+
+
+def test_a_detached_head_is_not_a_branch_called_head(tmp_path, monkeypatch, client, auth_headers):
+    root = _repo(tmp_path)
+    subprocess.run(["git", "checkout", "-q", "--detach"], cwd=root, check=True)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    r = client.get("/v2/repo", params={"cwd": str(root)}, headers=auth_headers).json()["repo"]
+    assert r["branch"] is None

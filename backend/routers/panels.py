@@ -485,6 +485,8 @@ def repo(cwd: str = Query(min_length=1)) -> dict:
         return {"repo": None}
     root = Path(top)
     branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    if branch == "HEAD":
+        branch = None  # detached: git's name for "no branch" is not a branch name
     upstream = _git(root, "rev-parse", "--abbrev-ref", "@{u}")
     ahead = behind = None
     if upstream:
@@ -518,7 +520,19 @@ def repo(cwd: str = Query(min_length=1)) -> dict:
     else:
         view = _gh(root, "repo", "view", slug, "--json", "defaultBranchRef,isPrivate,url")
         if not isinstance(view, dict):
-            reason = "gh could not reach GitHub (not signed in, offline, or gh is not installed)"
+            # Two different absences. `gh` answering for the account but not
+            # for this slug means the repository is not there, or not this
+            # account's to see -- a remote pointing at a repo that was never
+            # created, renamed, or made private under another login. The
+            # probe reported both as "could not reach GitHub", which sends
+            # a person to check their network when they should check the
+            # remote.
+            who = _gh(root, "api", "user", "--jq", "{login: .login}")
+            if isinstance(who, dict) and who.get("login"):
+                reason = (f"GitHub has no repository at {slug} that {who['login']} can see -- "
+                          f"check the remote (`git remote -v`) or create it (`gh repo create`)")
+            else:
+                reason = "gh could not reach GitHub (not signed in, offline, or gh is not installed)"
         else:
             prs = _gh(root, "pr", "list", "-R", slug, "--json",
                       "number,title,headRefName,isDraft,mergeable,statusCheckRollup,url,updatedAt", "--limit", "20")
