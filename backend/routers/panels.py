@@ -621,6 +621,85 @@ def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
             c["mode"] = None
 
 
+class PushRequest(BaseModel):
+    cwd: str = Field(min_length=1)
+    force: bool = False
+
+
+_ATTRIBUTION = re.compile(r"^\s*(Co-Authored-By:|Claude-Session:|.*Generated with \[Claude Code\])", re.I | re.M)
+
+
+@router.post("/repos/push")
+def repos_push(req: PushRequest) -> dict:
+    """Push a repository's branch -- the one action the Repo view performs.
+
+    A session never pushes; the deny rule in permissions.json makes that a
+    fact for hosted sessions, and the prompt tells every other session to
+    send the person here. This button is that person's hand: it runs `git
+    push` as the machine's git identity, which is theirs, through the same
+    credential helper a terminal would use.
+
+    Two refusals before anything leaves the machine. **Attribution:** every
+    message in the range about to go is read, and one `Co-Authored-By`,
+    `Claude-Session` or "Generated with Claude Code" line stops the push
+    -- the 2026-09-15 incident was four such lines that had never been
+    read before they went. **Divergence:** a rewritten history needs
+    `force`, and the view asks for that explicitly; a plain push is never
+    turned into a force here. Force is `--force-with-lease`, so a remote
+    that moved since the last fetch still refuses.
+    """
+    try:
+        resolved = _safe_home_dir(req.cwd)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    top = _git(resolved, "rev-parse", "--show-toplevel")
+    if not top:
+        raise HTTPException(status_code=400, detail="not inside a git repository")
+    root = Path(top)
+    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    if not branch or branch == "HEAD":
+        raise HTTPException(status_code=409, detail="detached HEAD: check out a branch first")
+    if not _git(root, "remote", "get-url", "origin"):
+        raise HTTPException(status_code=409, detail="no remote named origin")
+    upstream = _git(root, "rev-parse", "--abbrev-ref", "@{u}")
+
+    outgoing = f"{upstream}..HEAD" if upstream else "HEAD"
+    messages = _git(root, "log", outgoing, "--format=%B", timeout=20) or ""
+    tainted = len(_ATTRIBUTION.findall(messages))
+    if tainted:
+        raise HTTPException(status_code=409, detail=(
+            f"{tainted} attribution line{'s' if tainted != 1 else ''} (Co-Authored-By / Claude-Session) in the "
+            f"commits about to go -- strip them first (scripts/strip_claude_trailers.py); nothing was pushed"))
+
+    behind = 0
+    if upstream:
+        counts = _git(root, "rev-list", "--left-right", "--count", f"{upstream}...HEAD")
+        if counts:
+            behind = int(counts.split()[0])
+    if behind and not req.force:
+        raise HTTPException(status_code=409, detail=(
+            f"origin has {behind} commit{'s' if behind != 1 else ''} this branch does not -- a rewritten history "
+            f"needs a force push, which is a separate confirmation; nothing was pushed"))
+
+    args = ["push"]
+    if req.force:
+        args.append("--force-with-lease")
+    if not upstream:
+        args.append("-u")
+    args += ["origin", branch]
+    try:
+        out = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, timeout=120)
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="git push did not finish in two minutes")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    if out.returncode != 0:
+        raise HTTPException(status_code=502, detail=(out.stderr or out.stdout or "git push failed").strip()[-600:])
+    _GITHUB_CACHE.pop(_github_slug(_git(root, "remote", "get-url", "origin")) or "", None)
+    return {"pushed": True, "branch": branch, "force": req.force,
+            "as": _git(root, "config", "user.name") or "", "output": (out.stderr or out.stdout).strip()[-600:]}
+
+
 # What GitHub said about a slug, for a minute. The Repo view re-reads on
 # every tab change and every visit; open PRs do not change at that rate,
 # and `gh` costs a third of a second per call.

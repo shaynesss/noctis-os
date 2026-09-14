@@ -9,6 +9,27 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The push is a button, and it is yours (2026-09-15)
+
+- **"claude" reached the public Contributors graph.** Four commits carried a
+  `Co-Authored-By: Claude …` trailer — three from July already on GitHub,
+  one from 09-12 carried by a push a session made at Shayne's word. Both
+  histories rewritten locally with `scripts/strip_claude_trailers.py`
+  (`filter-repo --message-callback`); the force-pushes are Shayne's.
+- **A push button on the Repo view.** `POST /v2/repos/push` runs `git push`
+  as the machine's git identity through its own credential helper — the
+  person's hand, exactly what the "session never pushes" rule reserves.
+  Before anything leaves: every outgoing message is read, and one
+  attribution line stops the push (409, nothing sent); a branch whose origin
+  has commits it does not (a rewritten history) needs `force`, which the
+  view asks for as a second click and runs as `--force-with-lease`. The
+  stand card's sentence now says the button is yours instead of naming a
+  terminal command.
+- **The prompt says it in words.** `prompts/system.md` gains a Git section:
+  never push on any instruction — point to the Repo tab — and never add an
+  attribution line. Hosted sessions already have `git push` denied by
+  `permissions.json`; this covers every other one.
+
 ### Whose commit, and a history without its database (2026-09-14)
 
 - **Each commit wears the character whose work it is.** No trailer in the

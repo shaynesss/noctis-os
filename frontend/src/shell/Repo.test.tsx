@@ -83,10 +83,21 @@ describe('Repo view', () => {
     expect(text({ commits: y.commits })).toContain('aaa1111 y local')
   })
 
-  it('with no upstream, says how to publish the branch', () => {
+  it('with no upstream, offers to publish the branch', () => {
     const t = text({ upstream: null, ahead: null, behind: null, branch: 'job/12-thing' })
     expect(t).toContain('no upstream')
-    expect(t).toContain('git push -u origin job/12-thing')
+    expect(t).toContain('Publish puts it on origin')
+    expect(t).toContain('publish job/12-thing')
+  })
+
+  it('offers a force push only when the histories disagree, and a plain one otherwise', () => {
+    const diverged = text({ ahead: 281, behind: 280 })
+    expect(diverged).toContain('281 commits here and 280 on GitHub that disagree')
+    expect(diverged).toContain('push · force')
+    const plain = text({ ahead: 3, behind: 0 })
+    expect(plain).toContain('push 3')
+    expect(plain).not.toContain('force')
+    expect(text({})).not.toContain('push ')
   })
 
   it('counts what is not on GitHub, what is behind, and what is uncommitted -- and says what to do', () => {
@@ -100,10 +111,10 @@ describe('Repo view', () => {
     expect(t).toContain('↑ 201 not on GitHub')
     expect(t).toContain('↓ 2 behind')
     expect(t).toContain('2 uncommitted')
-    expect(t).toContain('201 commits on this machine only')
-    expect(t).toContain('a session never pushes')
-    expect(t).toContain('2 commits on GitHub that this machine does not have')
+    expect(t).toContain('201 commits here and 2 on GitHub that disagree')
+    expect(t).toContain('it asks twice')
     expect(t).toContain('2 files changed and not committed')
+    expect(text({ ahead: 5 })).toContain('5 commits on this machine only. Push puts them on GitHub as you')
     expect(t).toContain('a.ts'); expect(t).toContain('b.ts')
     expect(t).toContain('● abc1234 newest, local only 1m')
     expect(t).toContain('· def5678 older, on GitHub 2h')

@@ -125,6 +125,48 @@ def test_every_commit_to_a_dev_jobs_project_is_fabers(tmp_path, monkeypatch, cli
     assert _one(client, auth_headers, root)["commits"][0]["mode"] == "faber"
 
 
+def _with_origin(tmp_path: Path) -> Path:
+    """A repo with a bare origin it has pushed to once."""
+    root = _repo(tmp_path)
+    bare = tmp_path / "origin.git"; subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+    subprocess.run(["git", "remote", "add", "origin", str(bare)], cwd=root, check=True)
+    subprocess.run(["git", "push", "-q", "-u", "origin", "main"], cwd=root, check=True)
+    return root
+
+
+def _commit(root: Path, msg: str) -> None:
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", msg], cwd=root, check=True)
+
+
+def test_the_push_button_pushes_and_refuses_attribution_lines(tmp_path, monkeypatch, client, auth_headers):
+    """The one action the view performs, and the check that would have
+    stopped four commits reaching GitHub with a Claude co-author line."""
+    root = _with_origin(tmp_path)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    _commit(root, "fine on its own")
+    _commit(root, "tainted\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\nClaude-Session: https://x")
+    r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+    assert r.status_code == 409 and "2 attribution lines" in r.json()["detail"]
+    assert subprocess.run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() == "2", "nothing was pushed"
+    # Strip it and go.
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend", "-m", "clean now"], cwd=root, check=True)
+    r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+    assert r.status_code == 200 and r.json()["pushed"] is True and r.json()["force"] is False
+    assert subprocess.run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() == "0"
+
+
+def test_a_diverged_branch_needs_an_explicit_force(tmp_path, monkeypatch, client, auth_headers):
+    root = _with_origin(tmp_path)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    # Rewrite the pushed commit: same content, new hash -- what filter-repo leaves behind.
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend", "-m", "first, reworded"], cwd=root, check=True)
+    r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+    assert r.status_code == 409 and "force" in r.json()["detail"]
+    r = client.post("/v2/repos/push", json={"cwd": str(root), "force": True}, headers=auth_headers)
+    assert r.status_code == 200 and r.json()["force"] is True
+    assert subprocess.run(["git", "log", "-1", "--format=%s", "origin/main"], cwd=root, capture_output=True, text=True).stdout.strip() == "first, reworded"
+
+
 def test_check_rollup_is_one_word():
     assert panels._rollup([]) is None
     assert panels._rollup([{"conclusion": "SUCCESS"}]) == "pass"

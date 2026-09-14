@@ -377,7 +377,7 @@ function Section({ label, children }: { label: string; children: React.ReactNode
  * words: a session never pushes, and that rule is what keeps a crashed
  * session from half-shipping; a button here would be that power through
  * another door. */
-export function Repo({ data, terminals }: { data: RepoPayload; terminals: RepoTerminal[] }) {
+export function Repo({ data, terminals, onChanged }: { data: RepoPayload; terminals: RepoTerminal[]; onChanged?: () => void }) {
   const showingCwd = terminals.find((t) => t.showing)?.cwd
   const groups = [...data.repos].sort((a, b) =>
     Number(b.cwds.includes(showingCwd ?? '')) - Number(a.cwds.includes(showingCwd ?? '')))
@@ -391,7 +391,7 @@ export function Repo({ data, terminals }: { data: RepoPayload; terminals: RepoTe
       <div className={many ? 'grid grid-cols-2 items-start gap-x-6' : ''}>
         {groups.map((r, i) => (
           <div key={r.root} className="min-w-0">
-            <RepoGroup r={r} first={many || i === 0} folded={many}
+            <RepoGroup r={r} first={many || i === 0} folded={many} onChanged={onChanged}
                        terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
           </div>
         ))}
@@ -434,7 +434,54 @@ function Ext({ href, className, children }: { href: string; className?: string; 
   )
 }
 
-function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: RepoTerminal[]; first: boolean; folded: boolean }) {
+/* The push, as a button. A session never pushes -- permissions deny it to a
+ * hosted one and the prompt sends every other one here -- so this is the
+ * person's hand, running `git push` as the machine's git identity through
+ * the same credential helper a terminal would use. Force is a second,
+ * separate click, offered only when origin has commits this branch does
+ * not (a rewritten history); a plain push is never turned into a force. The
+ * backend also refuses any push whose commits carry an attribution line. */
+function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
+  const [state, setState] = useState<'idle' | 'confirm-force' | 'pushing' | 'done' | 'failed'>('idle')
+  const [note, setNote] = useState<string | null>(null)
+  const ahead = r.ahead ?? 0, behind = r.behind ?? 0
+  const diverged = ahead > 0 && behind > 0
+  const nothing = !r.upstream ? false : ahead === 0
+  if (nothing && state === 'idle') return null
+
+  const run = async (force: boolean) => {
+    setState('pushing'); setNote(null)
+    const out = await post<{ pushed: boolean; as: string; force: boolean }>('/v2/repos/push', { cwd: r.cwds[0] ?? r.root, force })
+    if ('error' in out) { setState('failed'); setNote(out.error); return }
+    setState('done'); setNote(`pushed${out.force ? ' (force)' : ''} as ${out.as || 'you'}`)
+    onPushed?.()
+  }
+  return (
+    <span className="ml-auto flex items-center gap-[8px] font-mono text-[11px]">
+      {note && <span className={`max-w-[360px] truncate ${state === 'failed' ? '' : 'text-ink-dim'}`}
+                     style={state === 'failed' ? { color: 'var(--color-faber)' } : undefined} title={note}>{note}</span>}
+      {state === 'confirm-force' ? (
+        <>
+          <span className="text-ink-dim">history rewritten — replace origin's {behind}?</span>
+          <button type="button" onClick={() => void run(true)}
+                  className="rounded-[3px] border px-[8px] py-[2px] text-ink hover:bg-elevated" style={{ borderColor: 'var(--color-faber)' }}>
+            force push
+          </button>
+          <button type="button" onClick={() => setState('idle')} className="rounded-[3px] border border-line px-[8px] py-[2px] text-ink-faint hover:text-ink">cancel</button>
+        </>
+      ) : state === 'done' ? null : (
+        <button type="button" disabled={state === 'pushing'}
+                onClick={() => (diverged ? setState('confirm-force') : void run(false))}
+                className="rounded-[3px] border px-[9px] py-[2px] text-ink transition-colors hover:bg-elevated disabled:opacity-40"
+                style={{ borderColor: diverged ? 'var(--color-faber)' : 'var(--color-line)' }}>
+          {state === 'pushing' ? 'pushing…' : !r.upstream ? `publish ${r.branch ?? 'branch'}` : diverged ? 'push · force' : `push ${ahead}`}
+        </button>
+      )}
+    </span>
+  )
+}
+
+function RepoGroup({ r, terminals, first, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; first: boolean; folded: boolean; onChanged?: () => void }) {
   const unpushed = r.ahead ?? 0
   const [commitsOpen, setCommitsOpen] = useState(!folded)
   const local = r.commits.filter((c) => !c.pushed).length
@@ -473,8 +520,9 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
             </Ext>
           )}
         </div>
-        <div className="border-t border-line px-4 py-[10px] text-[12px] leading-[1.55] text-ink-dim">
-          {nextStep(r)}
+        <div className="flex items-center gap-[12px] border-t border-line px-4 py-[10px] text-[12px] leading-[1.55] text-ink-dim">
+          <span className="min-w-0 flex-1">{nextStep(r)}</span>
+          <PushButton r={r} onPushed={onChanged} />
         </div>
       </Card>
 
@@ -604,11 +652,12 @@ export function GithubCard({ gh, reason, pending = false }: { gh: GithubInfo | n
 /** What to do next, from the numbers -- the sentence a person new to git
  *  needs and a person used to it can skim past. */
 function nextStep(r: RepoInfo): string {
-  if (!r.upstream) return 'This branch has no upstream. `git push -u origin ' + (r.branch ?? 'main') + '` in a terminal publishes it.'
+  if (!r.upstream) return 'This branch has no upstream. Publish puts it on origin.'
   const parts: string[] = []
   if (r.dirty.length) parts.push(`${r.dirty.length} file${r.dirty.length === 1 ? '' : 's'} changed and not committed — a session commits as it goes, so this is either in progress or forgotten.`)
-  if (r.ahead) parts.push(`${r.ahead} commit${r.ahead === 1 ? '' : 's'} on this machine only. \`git push\` in a terminal puts ${r.ahead === 1 ? 'it' : 'them'} on GitHub — a session never pushes; that is yours.`)
-  if (r.behind) parts.push(`${r.behind} commit${r.behind === 1 ? '' : 's'} on GitHub that this machine does not have — \`git pull\` before building on it.`)
+  if (r.ahead && r.behind) parts.push(`${r.ahead} commit${r.ahead === 1 ? '' : 's'} here and ${r.behind} on GitHub that disagree — a rewritten history. Only a force push replaces GitHub's; it is your hand, and it asks twice.`)
+  else if (r.ahead) parts.push(`${r.ahead} commit${r.ahead === 1 ? '' : 's'} on this machine only. Push puts ${r.ahead === 1 ? 'it' : 'them'} on GitHub as you — a session never pushes; the button is yours.`)
+  if (r.behind && !r.ahead) parts.push(`${r.behind} commit${r.behind === 1 ? '' : 's'} on GitHub that this machine does not have — \`git pull\` before building on it.`)
   if (!parts.length) parts.push('Everything here is on GitHub and nothing is uncommitted.')
   return parts.join(' ')
 }
