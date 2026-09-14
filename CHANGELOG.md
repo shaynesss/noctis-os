@@ -9,6 +9,39 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Sessions survive a reload (2026-09-14)
+
+The PTY registry lives in the Rust process and outlives the web view, so a
+reload of the page — ⌘R in development, recovery from a crashed page — now
+**reattaches** to the sessions that were running rather than killing them
+and `--resume`-ing copies that had forgotten their screens. VS Code's
+terminal does the same across a window reload. Verified: two forced full
+reloads, the same two `claude` processes and slot ids before and after,
+not one spawn.
+
+- Each session keeps a capped 2MB scrollback of what it printed; frames
+  are numbered; `pty_attach` returns the scrollback, the number of the last
+  frame in it, and whether the process has since exited. The shell holds
+  frames while it replays, then writes only the ones numbered past the
+  snapshot, then resizes so the CLI repaints if the pane changed size.
+- Slots keep their ids across a reload (the remembered arrangement stores
+  them). The mount-time reaper now kills only sessions no slot came back
+  under.
+- **Ending a session is an intent, not a side effect of unmounting.** The
+  terminal effect's cleanup used to `pty_kill`, and React StrictMode runs
+  mount → cleanup → mount on every page load — so the first attempt killed
+  the session it had come back to attach to. ⌘W (`App.close`) and `r`
+  (`restart`) kill; an unmount does not.
+- **A session must not depend on being looked at.** The effect awaited
+  `requestAnimationFrame` for its second fit, and WebKit suspends rAF while
+  the window is occluded; a reload with Noctis behind another window parked
+  every terminal on that line. Raced against a 120ms timeout now.
+- A resume of nothing is recognised by the CLI's own *No conversation
+  found* rather than by the clock alone — a boot slowed by MCP servers
+  connecting, or parked while the window was hidden, outlived the
+  five-second heuristic and reported "session ended" for a conversation
+  that simply was not on disk.
+
 ### Debugging sweep, second pass (2026-09-14)
 
 Three things found by running the whole loop for real — argv → PTY → turn →

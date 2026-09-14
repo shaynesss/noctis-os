@@ -214,7 +214,16 @@ the code said. Eleven defects, each committed with its proof:
 - The Cargo feature the glass window needed had been left out of the
   manifest (`cf4584f`).
 
-Verified after: 306 backend tests, 60 frontend, `tsc -b` clean; the four
+Then, asked for directly: **sessions survive a reload.** The one place the
+host was thinner than VS Code's terminal — it reaped after a reload where
+VS Code reattaches — is closed. Verified with two forced full reloads: the
+same two `claude` processes and slot ids before and after, not one spawn.
+The first attempt found two things worth their own bullets in the
+CHANGELOG: an unmount is not an intent to end a session (StrictMode), and
+a mount must not wait on `requestAnimationFrame` alone (WebKit suspends it
+while the window is occluded).
+
+Verified after: 306 backend tests, 61 frontend, `tsc -b` clean; the four
 scratch sweeps green — routes 102/102, indexer 14/14, resume 12/12,
 end-to-end 29/29 — and a PTY probe calling both `noctis` MCP tools. The
 action feed (`runtime/<mode>__<job>.log`) is written correctly now and

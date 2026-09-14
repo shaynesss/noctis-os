@@ -26,6 +26,16 @@
 //! Bytes travel base64-encoded rather than as a string. A read can split a
 //! multi-byte character down the middle, and xterm.js has its own UTF-8
 //! decoder that handles the seam -- decoding early here would corrupt it.
+//!
+//! Sessions outlive the web view. This registry belongs to the Tauri process,
+//! so a reload of the page -- ⌘R in development, recovery from a crashed
+//! page -- leaves every session running. The first version's shell came back
+//! with fresh ids and killed the lot; now it comes back with the same ids and
+//! *reattaches*: `pty_attach` hands over what the session has printed so far
+//! (a capped scrollback kept here, per session) and the number of the last
+//! frame that replay contains, so the shell can write the replay and then
+//! only the frames that came after it. VS Code's terminal does the same
+//! across a window reload, for the same reason.
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
@@ -51,10 +61,35 @@ const FALLBACKS: [&str; 4] = [
     "~/.claude/local/claude",
 ];
 
+/// How much raw output is kept per session for a shell that reattaches. Two
+/// megabytes covers hours of a chatty session; past it the front is dropped
+/// to `SCROLLBACK_KEEP` so the trim runs once per half-megabyte, not per
+/// frame.
+const SCROLLBACK_CAP: usize = 2 * 1024 * 1024;
+const SCROLLBACK_KEEP: usize = 3 * 512 * 1024;
+
+/// What the session has printed, and how many frames it took to print it.
+/// The two are updated under one lock, and read under it, so a snapshot's
+/// `seq` says exactly which frames the snapshot already contains.
+#[derive(Default)]
+struct Scrollback {
+    bytes: Vec<u8>,
+    seq: u64,
+}
+
+fn push_capped(bytes: &mut Vec<u8>, chunk: &[u8]) {
+    bytes.extend_from_slice(chunk);
+    if bytes.len() > SCROLLBACK_CAP {
+        let cut = bytes.len() - SCROLLBACK_KEEP;
+        bytes.drain(..cut);
+    }
+}
+
 pub struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    scrollback: Arc<Mutex<Scrollback>>,
 }
 
 #[derive(Default)]
@@ -65,6 +100,21 @@ struct Chunk {
     id: String,
     /// base64; see the module note on why this is not a string.
     b64: String,
+    /// Frame number, counting from one per session. A shell reattaching
+    /// compares it with the snapshot's to know which frames the snapshot
+    /// already holds.
+    seq: u64,
+}
+
+#[derive(Clone, Serialize)]
+pub struct Attach {
+    /// Everything the session has printed, capped; base64 like a frame.
+    b64: String,
+    /// The last frame this replay contains.
+    seq: u64,
+    /// The process ended while nothing was listening. The exit event went
+    /// to no one, so this is how the shell learns.
+    exited: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -189,6 +239,8 @@ pub fn pty_spawn(
     // `read()` cannot notice silence. So the reader only reads, and the
     // batcher waits on a channel with a deadline: data extends the frame,
     // and a frame with no data sends what it has.
+    let scrollback = Arc::new(Mutex::new(Scrollback::default()));
+    let kept = scrollback.clone();
     let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
     std::thread::spawn(move || {
         let mut buf = [0u8; 65536];
@@ -211,13 +263,22 @@ pub fn pty_spawn(
         let mut pending: Vec<u8> = Vec::new();
         let mut opened = Instant::now();
         let flush = |pending: &mut Vec<u8>| {
-            if !pending.is_empty() {
+            if pending.is_empty() {
+                return;
+            }
+            // Kept and numbered under the lock `pty_attach` snapshots under,
+            // and emitted before the lock is released: a snapshot therefore
+            // never sees a frame's bytes without its number, or a number
+            // whose frame is still on its way to the web view.
+            if let Ok(mut sb) = kept.lock() {
+                push_capped(&mut sb.bytes, pending);
+                sb.seq += 1;
                 let _ = app.emit(
                     "pty:data",
-                    Chunk { id: emit_id.clone(), b64: STANDARD.encode(&pending) },
+                    Chunk { id: emit_id.clone(), b64: STANDARD.encode(&pending), seq: sb.seq },
                 );
-                pending.clear();
             }
+            pending.clear();
         };
         loop {
             match rx.recv_timeout(FRAME) {
@@ -251,8 +312,20 @@ pub fn pty_spawn(
         .0
         .lock()
         .map_err(|_| "pty registry poisoned".to_string())?
-        .insert(id, Session { master: pair.master, writer, child });
+        .insert(id, Session { master: pair.master, writer, child, scrollback });
     Ok(())
+}
+
+/// Pick up a running session after a reload. Returns what it has printed
+/// so far and the number of the last frame in that replay; see the module
+/// note. `exited` is set when the process ended while no page was listening.
+#[tauri::command]
+pub fn pty_attach(state: State<'_, Ptys>, id: String) -> Result<Attach, String> {
+    let mut map = state.0.lock().map_err(|_| "pty registry poisoned".to_string())?;
+    let s = map.get_mut(&id).ok_or("no such session")?;
+    let exited = matches!(s.child.try_wait(), Ok(Some(_)));
+    let sb = s.scrollback.lock().map_err(|_| "scrollback poisoned".to_string())?;
+    Ok(Attach { b64: STANDARD.encode(&sb.bytes), seq: sb.seq, exited })
 }
 
 #[tauri::command]
@@ -295,4 +368,20 @@ pub fn pty_list(state: State<'_, Ptys>) -> Result<Vec<String>, String> {
         .keys()
         .cloned()
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scrollback_keeps_the_newest_bytes_once_over_the_cap() {
+        let mut bytes = Vec::new();
+        push_capped(&mut bytes, &[1u8; SCROLLBACK_CAP]);
+        assert_eq!(bytes.len(), SCROLLBACK_CAP, "at the cap, nothing is dropped");
+        push_capped(&mut bytes, &[2u8; 10]);
+        assert_eq!(bytes.len(), SCROLLBACK_KEEP, "over it, trimmed to the keep size");
+        assert_eq!(&bytes[bytes.len() - 10..], &[2u8; 10], "and the newest bytes are the ones kept");
+        assert!(bytes[..bytes.len() - 10].iter().all(|b| *b == 1));
+    }
 }

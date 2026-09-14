@@ -50,7 +50,7 @@ Built by `backend/interactive.py`, served by `GET /v2/sessions/interactive-args?
 | `--add-dir <vault>` | The engine sandboxes file access to the working directory; a Faber session in a repo could not read its own methodology without this. |
 | `--` + positional prompt | A handoff's carried summary, submitted as the session's first message. Behind the terminator, because a summary that opens with a bullet is an argument that opens with a dash, and the option parser exited on one. |
 
-**Three things the PTY host has to get right**, each found by testing rather than reasoning: size the PTY *before* spawning (at 0×0 the TUI exits instantly with no output); coalesce output into ~16ms frames *and flush on silence* (a flush that only runs on the next read strands the tail of a prompt that then blocks for input); kill the session, not the immediate child. Bytes cross Tauri's IPC base64-encoded, because a read can split a multi-byte character and xterm.js decodes UTF-8 itself. Measured 2026-09-14 with the batcher isolated under `seq` as the program: 7MB byte-exact and in order in 820ms (51 frames), and a program that prints then goes quiet gets its last frame **20ms** after its last byte rather than when it exits.
+**Four things the PTY host has to get right**, each found by testing rather than reasoning: size the PTY *before* spawning (at 0×0 the TUI exits instantly with no output); coalesce output into ~16ms frames *and flush on silence* (a flush that only runs on the next read strands the tail of a prompt that then blocks for input); kill the session, not the immediate child; keep sessions across a page reload and reattach to them (§24). Bytes cross Tauri's IPC base64-encoded, because a read can split a multi-byte character and xterm.js decodes UTF-8 itself. Measured 2026-09-14 with the batcher isolated under `seq` as the program: 7MB byte-exact and in order in 820ms (51 frames), and a program that prints then goes quiet gets its last frame **20ms** after its last byte rather than when it exits.
 
 **Finding the binary.** PATH first, then `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.claude/local`, in both `engine.py` and `pty.rs`; `NOCTIS_CLAUDE_BIN` overrides. `launchd` starts processes with a bare `PATH` containing no Homebrew.
 
@@ -517,13 +517,14 @@ nothing about modes. `backend/interactive.py` owns the mode and knows nothing
 about terminals. The shell asks `GET /v2/sessions/interactive-args` for an
 argv and hands it to `pty_spawn`.
 
-**Three things the Rust side has to get right**, each found by testing:
+**Four things the Rust side has to get right**, each found by testing:
 
 | | |
 |---|---|
 | Size the PTY **before** spawning | at 0×0 the TUI exits instantly, no error, no output |
 | Coalesce reads into ~16ms frames, **and flush on silence** | every chunk is serialised across Tauri's IPC; one event per read stalls a fast-printing session. But a flush that only runs on the *next* read strands the last frame of a prompt that then blocks for input — the trust dialog rendered to mid-sentence until a keystroke made the CLI repaint. A quiet frame sends what it holds; that needs a batcher thread separate from the blocking reader |
 | Kill the session, not the process | the immediate child is not the only thing holding the terminal |
+| Keep the session across a page reload, and let the shell **reattach** | the registry outlives the web view. Each session keeps a capped 2MB scrollback with its frames numbered; `pty_attach` returns the replay, the last frame it contains, and whether the process has since exited. The shell holds frames while replaying and writes only those numbered past the snapshot. Two things on the shell side follow: ending a session is an intent (⌘W, `r`), never an unmount's side effect — StrictMode's mount → cleanup → mount killed the session the first attempt came back to attach to; and nothing in the mount path may wait on `requestAnimationFrame` alone, which WebKit suspends while the window is occluded |
 
 Bytes cross the IPC **base64-encoded**. A read can split a multi-byte
 character, and xterm.js has its own UTF-8 decoder that holds the seam.

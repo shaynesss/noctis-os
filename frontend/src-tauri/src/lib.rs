@@ -88,6 +88,7 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_kill,
             pty::pty_list,
+            pty::pty_attach,
         ])
         .plugin(tauri_plugin_notification::init())
         // Read-image only, by the capability file. The shell checks whether

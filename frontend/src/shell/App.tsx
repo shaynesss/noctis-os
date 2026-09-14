@@ -56,7 +56,10 @@ export function App() {
   const [slots, setSlots] = useState<Slot[]>(() => {
     const remembered = recallSlots()
     if (remembered.length === 0) return [newSlot('general', HOME_CWD)]
-    return remembered.map((r) => newSlot(r.mode, r.cwd, { resumeId: r.sessionId }))
+    return remembered.map((r) => newSlot(r.mode, r.cwd, {
+      ...(r.id ? { id: r.id } : {}),
+      resumeId: r.sessionId,
+    }))
   })
   const [active, setActive] = useState<string | null>(() => slots[0]?.id ?? null)
   const slotsRef = useRef(slots)
@@ -83,6 +86,15 @@ export function App() {
   }, [])
 
   const close = useCallback((id: string) => {
+    /* Closing the slot is what ends the session -- not the terminal's
+     * unmount, which also happens on StrictMode's double mount and on a hot
+     * reload, neither of which means "stop". Leaving the process would keep
+     * a session burning the 5h window with nothing reading it, and counted
+     * live under a slot name nothing shows. */
+    void invoke('pty_kill', { id }).catch(() => {
+      // Killing a session that already exited is not a failure.
+    })
+    void del(`/v2/sessions/statusline/${encodeURIComponent(id)}`)
     setSlots((all) => {
       const rest = all.filter((s) => s.id !== id)
       if (activeRef.current === id) setActive(rest[rest.length - 1]?.id ?? null)
@@ -123,13 +135,13 @@ export function App() {
    *
    * The PTY registry lives in the Rust process, and a reload of the web
    * view -- ⌘R in development, a recovery from a crashed page -- does not
-   * touch it. The shell comes back with fresh slot ids, spawns fresh
-   * sessions for them, and every session from before is still running:
-   * 300MB each, reporting to the backend under slot names nothing shows,
-   * counted live, and eating the concurrency cap until "9 of 9 open" with
-   * three terminals on screen. Anything registered that this mount did not
-   * bring back is one of those. Killed and closed out of the live count
-   * here, once, before the four-second poll can count it. */
+   * touch it. Slots keep their ids across a reload precisely so their
+   * terminals can reattach to the sessions still running under them (see
+   * Terminal.tsx). Anything registered under an id no slot came back with
+   * is a session nothing will ever show again: 300MB, reporting to the
+   * backend under a name nothing displays, counted live, eating the cap.
+   * Killed and closed out of the live count here, once, before the
+   * four-second poll can count it. */
   const slotsAtMount = useRef(slots)
   useEffect(() => {
     const keep = new Set(slotsAtMount.current.map((s) => s.id))
@@ -151,6 +163,7 @@ export function App() {
    * known. */
   useEffect(() => {
     rememberSlots(slots.map((s) => ({
+      id: s.id,
       mode: s.mode,
       cwd: s.cwd,
       /* Only an id that resumes to something. A terminal opened and never

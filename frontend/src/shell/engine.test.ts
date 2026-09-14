@@ -184,11 +184,18 @@ describe('remembering which terminals were open', () => {
   })
   afterEach(() => vi.unstubAllGlobals())
 
-  it('round-trips mode, directory and session id', () => {
-    rememberSlots([{ mode: 'faber', cwd: '/r', sessionId: 'abc' }, { mode: 'general', cwd: '/v' }])
+  it('round-trips mode, directory, session id and the slot id', () => {
+    // The slot id is what a reload reattaches by: the PTY registry outlives
+    // the page and is keyed by it.
+    rememberSlots([{ id: 'term-faber-1a2b', mode: 'faber', cwd: '/r', sessionId: 'abc' }, { mode: 'general', cwd: '/v' }])
     expect(recallSlots()).toEqual([
-      { mode: 'faber', cwd: '/r', sessionId: 'abc' }, { mode: 'general', cwd: '/v' },
+      { id: 'term-faber-1a2b', mode: 'faber', cwd: '/r', sessionId: 'abc' }, { mode: 'general', cwd: '/v' },
     ])
+  })
+
+  it('drops a record whose slot id is not a string', () => {
+    localStorage.setItem('noctis.open-slots', JSON.stringify([{ id: 7, mode: 'faber', cwd: '/r' }]))
+    expect(recallSlots()).toEqual([])
   })
 
   it('drops entries that cannot be reopened', () => {

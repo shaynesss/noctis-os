@@ -147,6 +147,11 @@ export interface RememberedSlot {
   mode: Mode
   cwd: string
   sessionId?: string
+  /** The slot's own id. The PTY registry outlives the page and is keyed by
+   *  this, so a slot that comes back under the same id can reattach to the
+   *  session it had rather than resume a copy. Absent in older records,
+   *  which come back with a fresh id and resume. */
+  id?: string
 }
 
 const OPEN_SLOTS_KEY = 'noctis.open-slots'
@@ -169,7 +174,8 @@ export function recallSlots(): RememberedSlot[] {
       (t): t is RememberedSlot =>
         typeof t === 'object' && t !== null
         && typeof (t as RememberedSlot).mode === 'string'
-        && typeof (t as RememberedSlot).cwd === 'string',
+        && typeof (t as RememberedSlot).cwd === 'string'
+        && ((t as RememberedSlot).id === undefined || typeof (t as RememberedSlot).id === 'string'),
     )
   } catch {
     return []

@@ -88,6 +88,19 @@ export function Terminal({
    * prop cannot change from in here. Cleared on a fast death; see below. */
   const resumeRef = useRef<string | undefined>(resumeId)
   const spawnedAt = useRef(0)
+  /* Ending the session is an intent, not a side effect of unmounting (see
+   * the cleanup below). A restart is one: the old process -- ended, or a
+   * resume of nothing -- is killed, and only then does the next generation
+   * mount, so it finds nothing in the registry and spawns rather than
+   * attaching to the corpse. */
+  const restart = () => {
+    void invoke('pty_kill', { id }).catch(() => {
+      // Killing a session that already exited is not a failure.
+    }).finally(() => {
+      setDead(false)
+      setGeneration((g) => g + 1)
+    })
+  }
 
   useEffect(() => {
     const el = host.current
@@ -188,10 +201,19 @@ export function Terminal({
        * second fit lands after layout has settled, and the size the engine is
        * told about below is the one from that.
        *
-       * `requestAnimationFrame` rather than a timeout: the thing being waited
-       * for is a layout pass, which is exactly what rAF is scheduled behind. */
+       * `requestAnimationFrame` because the thing being waited for is a
+       * layout pass, which is exactly what rAF is scheduled behind -- raced
+       * against a short timeout, because WebKit suspends rAF entirely while
+       * the window is occluded. A reload with Noctis behind another window
+       * parked every terminal on this line: mounted, never spawned, never
+       * reattached, until someone looked. A session must not depend on
+       * being looked at; the resize observer corrects any fit the timeout
+       * path measured early. */
       safely('fit', () => fit.fit())
-      await new Promise(requestAnimationFrame)
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+        setTimeout(resolve, 120)
+      })
       if (!live) return
       safely('fit', () => fit.fit())
       // Unmounted while the renderer was attaching — StrictMode does exactly
@@ -206,7 +228,7 @@ export function Terminal({
        * `r` included. */
       term_.onData((d) => {
         if (dead.current) {
-          if (d === 'r' || d === 'R') { setDead(false); setGeneration((g) => g + 1) }
+          if (d === 'r' || d === 'R') restart()
           return
         }
         void invoke('pty_write', { id, data: d })
@@ -217,65 +239,80 @@ export function Terminal({
         setDead(true)
       }
 
-      const fetched = await getResult<{ binary: string; args: string[]; env?: Record<string, string> }>(
-        `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`
-        + (resumeRef.current ? `&resume_id=${encodeURIComponent(resumeRef.current)}` : '')
-        + (prompt ? `&prompt=${encodeURIComponent(prompt)}` : ''))
+      /* Attach or spawn.
+       *
+       * The PTY registry lives in the Rust process and outlives this web
+       * view. After a reload the session this slot belonged to is usually
+       * still running -- the registry kept it, the slot kept its id -- and
+       * the right thing is to pick it up where it was, not to kill it and
+       * `--resume` a copy that has forgotten its screen. VS Code's terminal
+       * does the same across a window reload; it is why an integrated
+       * terminal survives one. */
+      const running = await invoke<string[]>('pty_list').catch(() => [] as string[])
       if (!live) return
-      if (!fetched.ok) {
-        // Two different failures that the first version reported as one.
-        // A backend that is down is not a backend that said no.
-        if (fetched.kind === 'offline') {
-          stillborn('\r\n  the backend did not answer, so this session has no',
-                    '  methodology to start with. `make doctor` says whether it is up.')
-        } else {
-          stillborn(`\r\n  the backend refused this session (HTTP ${fetched.status}).`,
-                    `  ${fetched.status === 400 ? `is ${cwd} a directory that exists?` : 'its log says why.'}`)
-        }
-        return
-      }
-      const args = fetched.data
+      const attaching = running.includes(id)
 
-      if (!live) return
-      const unData = await listen<{ id: string; b64: string }>('pty:data', (e) => {
-        if (e.payload.id !== id) return
+      const decode = (b64: string) => {
         /* Bytes, not text. A read can split a multi-byte character down the
          * middle; xterm has its own UTF-8 decoder that holds the seam, and
          * decoding here would corrupt it. */
+        const bin = atob(b64)
+        const bytes = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+        return bytes
+      }
+      /* While attaching, frames are held rather than written. The replay is
+       * a snapshot of everything the session has printed, numbered by the
+       * last frame it contains and taken under the lock that numbers the
+       * frames -- so a held frame numbered past the snapshot is one the
+       * replay lacks and is written after it; one numbered within it is
+       * already there. The listener goes up before the snapshot is taken,
+       * so nothing falls between the two. */
+      let held: Array<{ seq: number; bytes: Uint8Array }> | null = attaching ? [] : null
+      /* A resume of nothing, by the CLI's own words. The exit handler used
+       * to infer it from timing alone -- a resume that dies within five
+       * seconds -- and a boot slowed by MCP servers connecting, or parked
+       * while the window was hidden, took longer than that and reported a
+       * plain "session ended" for a conversation that simply was not on
+       * disk. The message is unambiguous; the clock is kept as a fallback.
+       * A short tail of decoded text is enough: the phrase is under a
+       * hundred characters and a frame boundary can fall inside it. */
+      let tail = ''
+      let resumedNothing = false
+      const utf8 = new TextDecoder()
+      const watch = (bytes: Uint8Array) => {
+        tail = (tail + utf8.decode(bytes, { stream: true })).slice(-400)
+        if (tail.includes('No conversation found')) resumedNothing = true
+      }
+      const unData = await listen<{ id: string; b64: string; seq: number }>('pty:data', (e) => {
+        if (e.payload.id !== id) return
         // A frame can be in flight from the batcher after the listener is
         // unregistered; writing it into a disposed terminal is the same
         // unhandled throw as the resize case, from the other direction.
         if (!live) return
-        const bin = atob(e.payload.b64)
-        const bytes = new Uint8Array(bin.length)
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+        const bytes = decode(e.payload.b64)
+        watch(bytes)
+        if (held) { held.push({ seq: e.payload.seq, bytes }); return }
         safely('write', () => term_.write(bytes))
       })
-      const unExit = await listen<{ id: string }>('pty:exit', (e) => {
-        if (e.payload.id !== id) return
-        /* A resume that dies within seconds is a resume of nothing -- the
-         * transcript was deleted, or never written. The CLI prints "No
-         * conversation found" and exits, and the person is left with a dead
-         * pane for an id they never chose. Try once more as a fresh session
-         * instead; the mode and directory are what they wanted. */
-        if (resumeRef.current && Date.now() - spawnedAt.current < 5000) {
-          resumeRef.current = undefined
-          term_.writeln('\r\n\x1b[2m  nothing to resume — starting fresh\x1b[0m')
-          setGeneration((g) => g + 1)
-          return
-        }
-        /* A dead pane needs a way out of itself.
-         *
-         * A session ends for ordinary reasons -- answering "No, exit" at the
-         * trust prompt, typing `exit`, `/quit` -- and the first version left
-         * nothing behind but the words "session ended". The terminal was
-         * still there, still focused, and every keystroke went nowhere. The
-         * only recovery was clicking to another rail item and back, which is
-         * not a thing anyone should have to discover.
-         *
-         * Deliberately a keypress rather than a button: focus is already in
-         * the terminal, so the cheapest possible next action is the one your
-         * hands are on. */
+      /* A dead pane needs a way out of itself.
+       *
+       * A session ends for ordinary reasons -- answering "No, exit" at the
+       * trust prompt, typing `exit`, `/quit` -- and the first version left
+       * nothing behind but the words "session ended". The terminal was
+       * still there, still focused, and every keystroke went nowhere. The
+       * only recovery was clicking to another rail item and back, which is
+       * not a thing anyone should have to discover.
+       *
+       * Deliberately a keypress rather than a button: focus is already in
+       * the terminal, so the cheapest possible next action is the one your
+       * hands are on. */
+      const freshInstead = () => {
+        resumeRef.current = undefined
+        term_.writeln('\r\n\x1b[2m  nothing to resume — starting fresh\x1b[0m')
+        restart()
+      }
+      const ended = () => {
         term_.writeln('\r\n\x1b[2m  session ended — press \x1b[0mr\x1b[2m to start a new one\x1b[0m')
         setDead(true)
         /* Into history, now rather than on the next Stats visit. The recorder
@@ -288,6 +325,19 @@ export function Terminal({
          * died without saying so; this one just said so. */
         void del(`/v2/sessions/statusline/${encodeURIComponent(id)}`)
         onExit?.()
+      }
+      const unExit = await listen<{ id: string }>('pty:exit', (e) => {
+        if (e.payload.id !== id) return
+        /* A resume that dies within seconds is a resume of nothing -- the
+         * transcript was deleted, or never written. The CLI prints "No
+         * conversation found" and exits, and the person is left with a dead
+         * pane for an id they never chose. Try once more as a fresh session
+         * instead; the mode and directory are what they wanted. */
+        if (resumeRef.current && (resumedNothing || Date.now() - spawnedAt.current < 5000)) {
+          freshInstead()
+          return
+        }
+        ended()
       })
       cleanups.push(unData, unExit)
       // The listeners are registered; if the tab went away while they were
@@ -295,15 +345,69 @@ export function Terminal({
       // will read.
       if (!live) return
 
-      spawnedAt.current = Date.now()
-      try {
-        await invoke('pty_spawn', {
-          id, cwd, args: args.args, binary: args.binary, env: args.env ?? null,
-          rows: term_.rows, cols: term_.cols,
-        })
-      } catch (e) {
-        stillborn(`\r\n  could not start the engine: ${String(e)}`)
-        return
+      if (attaching) {
+        let snap: { b64: string; seq: number; exited: boolean }
+        try {
+          snap = await invoke('pty_attach', { id })
+        } catch (e) {
+          // Listed a moment ago and gone now: it ended during the reload and
+          // was reaped in between. Nothing to pick up.
+          stillborn(`\r\n  the session is gone: ${String(e)}`)
+          return
+        }
+        if (!live) return
+        const replay = decode(snap.b64)
+        // The replay is the whole history; a resume that failed before the
+        // page came back says so in it.
+        if (utf8.decode(replay).includes('No conversation found')) resumedNothing = true
+        safely('replay', () => term_.write(replay))
+        const pending = held ?? []
+        held = null
+        for (const h of pending) {
+          if (h.seq > snap.seq) safely('write', () => term_.write(h.bytes))
+        }
+        if (snap.exited) {
+          /* Ended while nobody was looking. A resume of nothing is still a
+           * resume of nothing -- the mount that spawned it was parked
+           * before it could see the exit, so this is where it is seen. */
+          if (resumeRef.current && resumedNothing) freshInstead()
+          else ended()
+        } else {
+          /* The pane may not be the size it was when the session last
+           * painted. If it is, this changes nothing; if it is not, this is
+           * the SIGWINCH that makes the CLI repaint to the new size. */
+          void invoke('pty_resize', { id, rows: term_.rows, cols: term_.cols })
+        }
+      } else {
+        const fetched = await getResult<{ binary: string; args: string[]; env?: Record<string, string> }>(
+          `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`
+          + (resumeRef.current ? `&resume_id=${encodeURIComponent(resumeRef.current)}` : '')
+          + (prompt ? `&prompt=${encodeURIComponent(prompt)}` : ''))
+        if (!live) return
+        if (!fetched.ok) {
+          // Two different failures that the first version reported as one.
+          // A backend that is down is not a backend that said no.
+          if (fetched.kind === 'offline') {
+            stillborn('\r\n  the backend did not answer, so this session has no',
+                      '  methodology to start with. `make doctor` says whether it is up.')
+          } else {
+            stillborn(`\r\n  the backend refused this session (HTTP ${fetched.status}).`,
+                      `  ${fetched.status === 400 ? `is ${cwd} a directory that exists?` : 'its log says why.'}`)
+          }
+          return
+        }
+        const args = fetched.data
+
+        spawnedAt.current = Date.now()
+        try {
+          await invoke('pty_spawn', {
+            id, cwd, args: args.args, binary: args.binary, env: args.env ?? null,
+            rows: term_.rows, cols: term_.cols,
+          })
+        } catch (e) {
+          stillborn(`\r\n  could not start the engine: ${String(e)}`)
+          return
+        }
       }
 
       const ro = new ResizeObserver(() => {
@@ -329,12 +433,16 @@ export function Terminal({
       // terminal that is about to go.
       live = false
       cleanups.forEach((f) => safely('listener', f))
-      /* The process goes with the tab. Leaving it would keep a session
-       * burning the 5h window with nothing reading it — the same reason the
-       * SSE reader releases its lock on abort. */
-      void invoke('pty_kill', { id }).catch(() => {
-        // Killing a session that already exited is not a failure.
-      })
+      /* The process does *not* go with this effect. It used to -- "the
+       * process goes with the tab" -- and that was right for as long as the
+       * only way to leave this effect was closing the tab. Reattaching made
+       * it wrong: StrictMode runs mount, cleanup, mount on every page load
+       * in development, so the first thing a reload did was kill the
+       * session it had come back to attach to. Ending a session is now an
+       * intent, expressed where it is meant: `App.close` for ⌘W, `restart`
+       * below for `r`. An unmount that is neither -- StrictMode, a hot
+       * reload of this file -- leaves the process running for the next
+       * mount to pick up, which is exactly what it will do. */
       /* Renderer before terminal. `term.dispose()` disposes its addons as
        * part of coming apart, and the WebGL addon cannot survive being
        * reached for after its terminal's core store has gone — which is the
