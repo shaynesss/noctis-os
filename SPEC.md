@@ -409,7 +409,38 @@ way.
 Full impact review, capability by capability: `PTY-MIGRATION.md`. Not decided,
 and deliberately not started — the spike code is throwaway.
 
-6. **Should a session outlive its window?** VS Code's model: the pty host owns long-running work, so a window reload reattaches rather than losing it. Noctis binds a session's lifetime to the HTTP request, so closing a tab kills the turn. Detaching would fix that and creates eight problems worth naming before it is built — unwatched budget burn, no stop control once the window is gone, orphans counting invisibly against the cap, who owns the stream on reattach, an unbounded or lossy replay buffer, nothing ending an abandoned session, **unwatched writes with no reachable permission dialog**, and the fact that sessions are subprocesses of uvicorn so it would not survive a backend restart anyway.
+6. ~~**Should a session outlive its window?**~~ **Closed 2026-09-14: yes, and done** (`6ec10dc`, `617ffd5`). The PTY registry belongs to the Rust process; slots keep their ids; a reload reattaches with a replay of what the session printed; and the web view no longer suspends while the window is hidden. The question as it stood: VS Code's model: the pty host owns long-running work, so a window reload reattaches rather than losing it. Noctis binds a session's lifetime to the HTTP request, so closing a tab kills the turn. Detaching would fix that and creates eight problems worth naming before it is built — unwatched budget burn, no stop control once the window is gone, orphans counting invisibly against the cap, who owns the stream on reattach, an unbounded or lossy replay buffer, nothing ending an abandoned session, **unwatched writes with no reachable permission dialog**, and the fact that sessions are subprocesses of uvicorn so it would not survive a backend restart anyway.
+
+8. **Could a second CLI be a guest?** *Opened 2026-09-14, after Shayne asked
+whether Codex or Gemini's CLI could run in Noctis "while having the interface
+orchestrating statuses."* First, what Noctis does with Claude today, stated
+without flattery: it does **not** orchestrate the CLI's work. It *hosts* the
+process (a PTY the shell owns), *injects* identity into its argv
+(`--append-system-prompt`, `--agents`, `--mcp-config`, `--settings`, `--add-dir`,
+the env for the hooks), and *reads its edges* — the `statusLine` payload
+(windows, context, model), the transcript it writes under `~/.claude/projects/`
+(history, stats, search), and the hooks it fires (the action feed). The CLI
+runs the loop; Noctis is the room it runs in and the instruments on the wall.
+
+The PTY host is CLI-agnostic — `pty_spawn` takes a binary and an argv, and
+`codex` or `gemini` would paint into the same pane tomorrow. What would *not*
+come with them is every instrument: no `statusLine` means a blank bar (no
+5h/7d, no context, no model); a different transcript format and location means
+no history until an indexer reads it (Codex keeps `~/.codex/sessions/`, Gemini
+its own); no PostToolUse hook means no action feed; and identity travels in
+flags the other CLI does not have (`--append-system-prompt`, `--agents`), so
+the mode overlay would arrive by the MCP `prompts/list` route the Harness
+Portability decision already built for exactly this, or by a project file the
+guest reads (`AGENTS.md`, `GEMINI.md`). `Harness Portability.md` deferred the
+multi-harness adapter as YAGNI when the coupling was three files including a
+stream parser; the PTY made the surface smaller — one argv builder and three
+edge readers — so the adapter is cheaper than it was, and the first guest
+would define its shape. **Unresolved, and not to be hand-waved:** the wiki's
+"Model routing: Claude-family only in v1" rests on the Confusion Protocol
+depending on a model that surfaces ambiguity rather than resolving it; a
+second CLI is a second model, and that argument has to be re-made per model,
+not per CLI. Build it when there is a guest worth hosting; the answer to "can
+it" is yes, the answer to "what does it cost" is the four instruments above.
 
 ---
 
