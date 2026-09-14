@@ -352,13 +352,16 @@ export const SPRITE: Record<Mode, { idle: string; working: string } | null> = {
  * and in the Repo view's terminal chips, so a terminal is recognisable by
  * the same picture in both places. */
 export function ModeMark({ mode, size = 14, dim = false }: { mode: Mode; size?: number; dim?: boolean }) {
-  const src = mode === 'general' ? '/favicon.svg' : SPRITE[mode]?.idle
+  if (mode === 'general') {
+    return <Logo size={size - 2} className="shrink-0" style={{ color: dim ? 'var(--color-ink-faint)' : 'var(--color-ink-dim)' }} />
+  }
+  const src = SPRITE[mode]?.idle
   if (!src) {
     return <span className="rounded-[2px]" style={{ width: 7, height: 7, background: MODE_ACCENT[mode] }} />
   }
   return (
     <img src={src} alt="" width={size} height={size} className="shrink-0 object-contain"
-         style={{ imageRendering: mode === 'general' ? 'auto' : 'pixelated', opacity: dim ? 0.6 : 1 }} />
+         style={{ imageRendering: 'pixelated', opacity: dim ? 0.6 : 1 }} />
   )
 }
 

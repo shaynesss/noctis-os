@@ -9,6 +9,36 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Split screen, and the views seen again (2026-09-14)
+
+- **Terminals side by side.** Slots that share a group are shown together,
+  each in its own column fitting its own box, the focused one marked by a
+  rule in the mode's accent along its top. `⌘⇧-number` splits the showing
+  terminal with that tab (or unsplits it); each tab also has a `⊞`/`⊟` on
+  hover. The strip brackets a split's tabs together so it is visible from
+  the tab bar which terminals share the screen. Joining moves the tab next
+  to its group so the bracket is one run; a group left with one member is
+  no group. The arrangement, groups included, survives a reload.
+- **Repo view, more than one repository:** the groups sit side by side, and
+  each column's commit list is folded to `Commits · 20 · 7 not on GitHub`
+  until opened, so the page reads as repositories first. Alone, a
+  repository still gets the full page with its commits open.
+- **A first uncommitted path lost its first letter.** `_git` strips its
+  output, so a leading ` M path` line lost its space and a column-based
+  parse cut the path to `ath`. Parsed by status code now, with a test that
+  puts a modified file first.
+- **Inbox packages.** One card per item: the sender's sprite, the title,
+  a tag in the mode's colour, then what it is and what accepting does, then
+  a provenance band with the decision on the right — accept outlined in the
+  mode's colour. The diff is a diff: removed lines red, added lines green,
+  each on its own tinted ground, headers faint, no strikethrough.
+- The General mark is the Noctis star (the `Logo` the rail wears), not the
+  Vite favicon that had stood in for it.
+- A terminal is disposed one macrotask late, not one frame: xterm's
+  `Viewport` queues a zero-delay `syncScrollArea` it never cancels, and a
+  frame fired before it with three terminals opening — the errors came
+  back and the seeded three-terminal repro proved the timer is the wait.
+
 ### A session says what it is, starts where its work is, and wears its face (2026-09-14)
 
 - **No session opens empty.** A fresh terminal used to sit at the CLI's bare

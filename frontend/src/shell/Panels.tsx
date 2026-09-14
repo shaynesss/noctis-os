@@ -11,7 +11,7 @@ import { Unreachable } from './Async'
 import { post, put } from './engine'
 import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
-import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
+import { MODE_ACCENT, MODE_LABEL, VAULT_MODE, type Mode } from './domain'
 import { ModeMark } from './Chrome'
 
 export interface BriefPayload {
@@ -152,6 +152,37 @@ export function Brief({ data }: { data: BriefPayload }) {
   )
 }
 
+/* A unified diff the conventional way: removed lines red, added lines
+ * green, each on its own tinted ground; file headers and hunk marks faint.
+ * Strikethrough on the old lines made a long removed paragraph unreadable,
+ * and reading the old text is half of judging the change. */
+export function Diff({ text }: { text: string }) {
+  const kind = (l: string): 'add' | 'del' | 'meta' | 'ctx' =>
+    l.startsWith('+++') || l.startsWith('---') || l.startsWith('@@') ? 'meta'
+    : l.startsWith('+') ? 'add'
+    : l.startsWith('-') ? 'del'
+    : 'ctx'
+  const style: Record<ReturnType<typeof kind>, React.CSSProperties> = {
+    add: { color: 'var(--color-good)', background: 'color-mix(in srgb, var(--color-good) 9%, transparent)' },
+    del: { color: 'var(--color-faber)', background: 'color-mix(in srgb, var(--color-faber) 9%, transparent)' },
+    meta: { color: 'var(--color-ink-faint)' },
+    ctx: { color: 'var(--color-ink-dim)' },
+  }
+  return (
+    <pre className="m-0 overflow-x-auto rounded-[3px] border border-line bg-ground font-mono text-[11.5px] leading-[1.6]">
+      {text.split('\n').map((l, k) => {
+        const t = kind(l)
+        return (
+          <div key={k} className="flex whitespace-pre-wrap px-[10px]" style={style[t]}>
+            <span className="w-[14px] shrink-0 select-none">{t === 'add' ? '+' : t === 'del' ? '−' : ' '}</span>
+            <span className="min-w-0 flex-1">{t === 'add' || t === 'del' ? l.slice(1) : l}</span>
+          </div>
+        )
+      })}
+    </pre>
+  )
+}
+
 const KIND_LABEL: Record<string, string> = {
   proposal: 'proposal',
   'flagged-job': 'flagged',
@@ -203,15 +234,22 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
         Inbox · {data.counts.proposals} proposal{data.counts.proposals === 1 ? '' : 's'} ·{' '}
         {data.counts.flagged} flagged
       </Heading>
-      <Card>
-        {items.map((item, i) => {
-          const accent = MODE_ACCENT[item.mode as Mode] ?? 'var(--color-ink-dim)'
+      {/* One card per item rather than rows in one card: an item is a
+          decision with its own argument under it, and a stack of those reads
+          as a queue of packages, which is what it is. */}
+      <div className="flex flex-col gap-[10px]">
+        {items.map((item) => {
+          const mode: Mode = VAULT_MODE[item.mode] ?? 'general'
+          const accent = MODE_ACCENT[mode]
           const isOpen = open.has(item.id)
           return (
-            <div key={item.id} className={`px-4 py-[12px] ${i ? 'border-t border-line' : ''}`}>
-              <div className="mb-[5px] flex items-center gap-[9px]">
-                <span className="h-[7px] w-[7px] shrink-0 rounded-[1px]" style={{ background: accent }} />
-                <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{item.title}</span>
+            <Card key={item.id}>
+              {/* The sender's face, the title, what kind of thing it is. */}
+              <div className="flex items-center gap-[10px] px-4 pt-[13px]">
+                <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[3px] bg-elevated">
+                  <ModeMark mode={mode} size={16} />
+                </span>
+                <span className="min-w-0 flex-1 text-[13.5px] font-medium leading-[1.4] text-ink">{item.title}</span>
                 {/* An unreadable job is its own state, not a flagged one:
                     the file could not be parsed, so nothing about it is
                     known -- including whether it needs attention. */}
@@ -220,79 +258,81 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
                   style={
                     item.kind === 'unreadable'
                       ? { borderColor: 'var(--color-faber)', color: 'var(--color-faber)' }
-                      : { borderColor: 'var(--color-line)', color: 'var(--color-ink-faint)' }
+                      : { borderColor: accent, color: accent }
                   }
                 >
                   {KIND_LABEL[item.kind] ?? item.kind}
                 </span>
               </div>
 
-              {/* Two lines, in the order a decision needs them: what it is,
-                  then what saying yes does. The consequence comes from the
-                  diff itself, so it cannot be oversold. */}
-              <div className="pl-[16px] text-[12px] leading-[1.55] text-ink-dim">{item.detail}</div>
+              {/* Two paragraphs, in the order a decision needs them: what it
+                  is, then what saying yes does. The consequence comes from
+                  the diff itself, so it cannot be oversold. */}
+              <div className="px-4 pl-[48px] pt-[8px] text-[12.5px] leading-[1.6] text-ink-dim">{item.detail}</div>
               {item.effect && (
-                <div className="mt-[4px] pl-[16px] text-[12px] leading-[1.55] text-ink">
-                  <span className="text-ink-faint">→ </span>{item.effect}
+                <div className="px-4 pl-[48px] pt-[6px] text-[12.5px] leading-[1.6] text-ink">
+                  <span style={{ color: accent }}>→ </span>{item.effect}
                 </div>
               )}
 
-              <div className="mt-[6px] flex items-center gap-[10px] pl-[16px] font-mono text-[10.5px] text-ink-faint">
-                <span>
-                  {MODE_LABEL[item.mode as Mode] ?? item.mode}
-                  {item.at ? ` · ${item.at.slice(0, 10)}` : ''}
-                  {item.confidence ? ` · ${item.confidence} confidence` : ''}
-                  {item.target ? ` · ${item.target}` : ''}
+              {/* Provenance on the left, the decision on the right, on their
+                  own band so neither crowds the other. */}
+              <div className="mt-[10px] flex items-center gap-[10px] border-t border-line px-4 py-[8px] font-mono text-[10.5px] text-ink-faint">
+                <span className="flex min-w-0 items-center gap-[8px]">
+                  <span style={{ color: accent }}>{MODE_LABEL[mode]}</span>
+                  {item.at && <span>{item.at.slice(0, 10)}</span>}
+                  {item.confidence && <span>{item.confidence} confidence</span>}
+                  {item.target && <span className="truncate text-ink-dim">{item.target}</span>}
                 </span>
                 {item.kind === 'proposal' && (
-                  <span className="ml-auto flex items-center gap-[4px]">
+                  <span className="ml-auto flex shrink-0 items-center gap-[5px]">
                     {item.full && (
                       <button type="button" onClick={() => toggle(item.id)}
-                              className="rounded-[3px] border border-line px-[7px] py-[2px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink">
+                              className="rounded-[3px] border border-line px-[8px] py-[3px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink">
                         {isOpen ? 'close' : 'read'}
                       </button>
                     )}
-                    {(['accept', 'reject'] as const).map((decision) => (
-                      <button
-                        key={decision}
-                        type="button"
-                        disabled={busy === item.id}
-                        onClick={() => void decide(item.id, decision)}
-                        className="rounded-[3px] border border-line px-[7px] py-[2px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink disabled:opacity-40"
-                      >
-                        {decision === 'accept' && item.changes_files ? 'accept · apply' : decision}
-                      </button>
-                    ))}
+                    <button
+                      type="button"
+                      disabled={busy === item.id}
+                      onClick={() => void decide(item.id, 'reject')}
+                      className="rounded-[3px] border border-line px-[8px] py-[3px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink disabled:opacity-40"
+                    >
+                      reject
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy === item.id}
+                      onClick={() => void decide(item.id, 'accept')}
+                      className="rounded-[3px] border px-[9px] py-[3px] text-ink transition-colors hover:bg-elevated disabled:opacity-40"
+                      style={{ borderColor: accent }}
+                    >
+                      {item.changes_files ? 'accept · apply' : 'accept'}
+                    </button>
                   </span>
                 )}
               </div>
 
               {failed[item.id] && (
-                <div className="mt-[6px] pl-[16px] font-mono text-[11px]" style={{ color: 'var(--color-faber)' }}>
+                <div className="border-t border-line px-4 py-[8px] font-mono text-[11px]" style={{ color: 'var(--color-faber)' }}>
                   {failed[item.id]}
                 </div>
               )}
 
               {isOpen && item.full && (
-                <div className="mt-[10px] ml-[16px] flex flex-col gap-[10px] border-l border-line pl-[12px] text-[12px] leading-[1.6] text-ink-dim">
+                <div className="flex flex-col gap-[14px] border-t border-line px-4 py-[14px] text-[12.5px] leading-[1.65] text-ink-dim">
                   <Section label="rationale"><Markdown src={item.full.rationale} /></Section>
                   {item.full.diff && (
-                    <Section label="diff">
-                      <pre className="overflow-x-auto whitespace-pre-wrap rounded-[3px] bg-elevated px-[10px] py-[8px] font-mono text-[11px] leading-[1.5]">
-                        {item.full.diff.split('\n').map((l, k) => (
-                          <div key={k} className={l.startsWith('+') ? 'text-ink' : l.startsWith('-') ? 'text-ink-faint line-through' : 'text-ink-faint'}>{l}</div>
-                        ))}
-                      </pre>
-                    </Section>
+                    <Section label="diff"><Diff text={item.full.diff} /></Section>
                   )}
                   {item.full.evidence && <Section label="evidence"><Markdown src={item.full.evidence} /></Section>}
                   {item.full.confidence && <Section label="confidence"><Markdown src={item.full.confidence} /></Section>}
                 </div>
               )}
-            </div>
+            </Card>
           )
         })}
-      </Card>
+      </div>
     </>
   )
 }
@@ -329,12 +369,20 @@ export function Repo({ data, terminals }: { data: RepoPayload; terminals: RepoTe
   const groups = [...data.repos].sort((a, b) =>
     Number(b.cwds.includes(showingCwd ?? '')) - Number(a.cwds.includes(showingCwd ?? '')))
   const outside = terminals.filter((t) => data.outside.includes(t.cwd))
+  /* More than one repository: side by side, each column its own, with the
+   * commit lists folded so the columns read as repositories first and
+   * histories second. One repository: the full page, commits open. */
+  const many = groups.length > 1
   return (
     <>
-      {groups.map((r, i) => (
-        <RepoGroup key={r.root} r={r} first={i === 0}
-                   terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
-      ))}
+      <div className={many ? 'grid grid-cols-2 items-start gap-x-6' : ''}>
+        {groups.map((r, i) => (
+          <div key={r.root} className="min-w-0">
+            <RepoGroup r={r} first={many || i === 0} folded={many}
+                       terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
+          </div>
+        ))}
+      </div>
       {outside.length > 0 && (
         <>
           <Heading className={groups.length ? 'mt-7' : ''}>Not in a repository</Heading>
@@ -364,9 +412,11 @@ function TerminalChip({ t }: { t: RepoTerminal }) {
   )
 }
 
-function RepoGroup({ r, terminals, first }: { r: RepoInfo; terminals: RepoTerminal[]; first: boolean }) {
+function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: RepoTerminal[]; first: boolean; folded: boolean }) {
   const gh = r.github
   const unpushed = r.ahead ?? 0
+  const [commitsOpen, setCommitsOpen] = useState(!folded)
+  const local = r.commits.filter((c) => !c.pushed).length
   return (
     <>
       <Heading className={first ? '' : 'mt-9'}>
@@ -415,8 +465,18 @@ function RepoGroup({ r, terminals, first }: { r: RepoInfo; terminals: RepoTermin
         </>
       )}
 
-      <Heading className="mt-7">Commits</Heading>
-      <Card>
+      {/* The heading is the fold. Folded, it still says how many and how
+          many are local, so the column answers the question without being
+          opened. */}
+      <button type="button" onClick={() => setCommitsOpen((o) => !o)}
+              className="mt-7 mb-[14px] flex w-full items-center gap-[8px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint hover:text-ink">
+        <span className="inline-block w-[10px] text-center">{commitsOpen ? '▾' : '▸'}</span>
+        <span>Commits</span>
+        <span className="font-normal normal-case tracking-normal text-ink-faint">
+          · {r.commits.length}{local ? ` · ${local} not on GitHub` : ''}
+        </span>
+      </button>
+      {commitsOpen && <Card>
         {r.commits.map((c, i) => (
           <div key={c.sha} className={`flex items-baseline gap-[10px] px-4 py-[7px] font-mono text-[11.5px] ${i ? 'border-t border-line' : ''}`}>
             <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
@@ -429,7 +489,7 @@ function RepoGroup({ r, terminals, first }: { r: RepoInfo; terminals: RepoTermin
           </div>
         ))}
         {r.commits.length === 0 && <div className="px-4 py-[9px] text-[12px] text-ink-faint">no commits yet</div>}
-      </Card>
+      </Card>}
 
       <Heading className="mt-7">GitHub</Heading>
       <Card>

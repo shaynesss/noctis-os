@@ -60,6 +60,25 @@ describe('Repo view', () => {
     expect(t.slice(outsideAt)).toContain('general · 4')
   })
 
+  it('folds the commit lists when there is more than one repository, and still says how many', () => {
+    const y: RepoInfo = {
+      ...base, root: '/Users/me/Developer/y', name: 'y', cwds: ['/Users/me/Developer/y'],
+      commits: [
+        { sha: 'aaa1111', subject: 'y local', at: Math.floor(Date.now() / 1000) - 60, pushed: false },
+        { sha: 'bbb2222', subject: 'y pushed', at: Math.floor(Date.now() / 1000) - 60, pushed: true },
+      ],
+    }
+    const terminals: RepoTerminal[] = [
+      { id: 'a', mode: 'faber', cwd: '/Users/me/Developer/x', index: 1, showing: true },
+      { id: 'b', mode: 'faber', cwd: '/Users/me/Developer/y', index: 2, showing: false },
+    ]
+    const t = strip(renderToStaticMarkup(<Repo data={{ repos: [base, y], outside: [] }} terminals={terminals} />))
+    expect(t).toContain('Commits · 2 · 1 not on GitHub')
+    expect(t).not.toContain('aaa1111'), 'folded: the list is not rendered'
+    // Alone, the list is open.
+    expect(text({ commits: y.commits })).toContain('aaa1111 y local')
+  })
+
   it('with no upstream, says how to publish the branch', () => {
     const t = text({ upstream: null, ahead: null, behind: null, branch: 'job/12-thing' })
     expect(t).toContain('no upstream')

@@ -265,7 +265,7 @@ Default location `backend/data/`, overridable with `NOCTIS_DATA_DIR`.
 
 React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `main.tsx` imports it and nothing else.
 
-**Rail:** Brief · Terminal · Repo · Stats · Inbox · Settings. **Repo** is the repositories the open terminals are in, one group per repository, the showing terminal's first — `GET /v2/repos?cwd=…&cwd=…`, one `cwd` per terminal, grouped by `git rev-parse --show-toplevel` so two Faber sessions on one project are one group naming both terminals (`faber · 1`, `faber · 3`, the strip's own labels) and a session on another project is a second; directories in no repository come back under `outside`. Per group: branch, upstream, ahead/behind, dirty files, the last twenty commits with the unpushed ones marked, and, through `gh` when signed in and the remote is on GitHub, open pull requests with a one-word check state and open issues; GitHub failing leaves the local half intact with a reason. Read-only: it never pushes, and says in words when a push is what is missing.
+**Rail:** Brief · Terminal · Repo · Stats · Inbox · Settings. **Repo** is the repositories the open terminals are in, one group per repository, the showing terminal's first — `GET /v2/repos?cwd=…&cwd=…`, one `cwd` per terminal, grouped by `git rev-parse --show-toplevel` so two Faber sessions on one project are one group naming both terminals (`faber · 1`, `faber · 3`, the strip's own labels) and a session on another project is a second; directories in no repository come back under `outside`. With more than one repository the groups sit side by side and each column's commit list is folded to a count until opened; alone, a repository gets the full page with its commits open. Per group: branch, upstream, ahead/behind, dirty files, the last twenty commits with the unpushed ones marked, and, through `gh` when signed in and the remote is on GitHub, open pull requests with a one-word check state and open issues; GitHub failing leaves the local half intact with a reason. Read-only: it never pushes, and says in words when a push is what is missing.
 
 **Transcript blocks** are how a *history* transcript renders (read-only, from the store); a live session is the CLI's own TUI in a terminal. The block kinds:
 
@@ -607,6 +607,15 @@ version showed lifetime ordinals from a counter that StrictMode double-ran.
 Each tab carries its mode's mark — the character's sprite from
 `assets/characters/`, the Noctis star for General — and the Repo view names
 terminals with the same mark, so a terminal is one picture in both places.
+
+**Split screen.** Slots sharing a `group` are shown side by side as equal
+columns, each terminal fitting its own box, the focused one under a rule in
+the mode's accent. `⌘⇧-number` splits the showing terminal with that tab or
+unsplits it; each tab has `⊞`/`⊟` on hover. The strip brackets a split's tabs
+as one run — joining moves the tab beside its group — so the tab bar says
+which terminals share the screen. Selecting a grouped tab shows the group
+with that one focused; selecting an ungrouped tab shows it alone. A group of
+one is cleared. Groups are part of the remembered arrangement.
 
 **No session opens empty.** A fresh terminal (not a resume) is spawned with an
 opening prompt asking it to say which mode it is, what the session is for and

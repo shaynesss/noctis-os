@@ -515,7 +515,11 @@ def _repo_at(root: Path) -> dict:
             b, a = counts.split()
             ahead, behind = int(a), int(b)
     porcelain = _git(root, "status", "--porcelain") or ""
-    dirty = [l[3:] for l in porcelain.splitlines() if l.strip()]
+    # By status code, not by column: `_git` strips its output, and a first
+    # line of " M path" loses its leading space, so a fixed `l[3:]` cut the
+    # first character off the first path -- the view read "rontend/…".
+    dirty = [m.group(1) for l in porcelain.splitlines()
+             if (m := re.match(r"^\s*[A-Z?!]{1,2}\s+(.+)$", l))]
     remote_url = _git(root, "remote", "get-url", "origin")
     slug = _github_slug(remote_url)
 

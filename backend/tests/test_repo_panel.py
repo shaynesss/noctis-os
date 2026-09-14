@@ -71,6 +71,19 @@ def test_terminals_group_by_repository_and_keep_their_order(tmp_path, monkeypatc
     assert body["outside"] == [str(notes)]
 
 
+def test_a_modified_file_first_in_the_status_keeps_its_first_character(tmp_path, monkeypatch, client, auth_headers):
+    """` M path` is the first porcelain line; the helper strips the output,
+    and a column-based parse cut the path to `ath`."""
+    root = _repo(tmp_path)
+    subprocess.run(["git", "add", "a.txt"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "add a"], cwd=root, check=True)
+    (root / "a.txt").write_text("changed")
+    (root / "b.txt").write_text("new")
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    assert _one(client, auth_headers, root)["dirty"] == ["a.txt", "b.txt"]
+
+
 def test_check_rollup_is_one_word():
     assert panels._rollup([]) is None
     assert panels._rollup([{"conclusion": "SUCCESS"}]) == "pass"

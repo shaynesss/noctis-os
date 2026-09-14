@@ -46,6 +46,13 @@ interface TermReport {
  * root; the launcher decides per mode after that. */
 const HOME_CWD = '~/Developer/second-brain'
 
+/** A group of one is no group: clear any group left with a single member. */
+export function ungroupSingles(slots: Slot[]): Slot[] {
+  const counts = new Map<string, number>()
+  for (const s of slots) if (s.group) counts.set(s.group, (counts.get(s.group) ?? 0) + 1)
+  return slots.map((s) => (s.group && (counts.get(s.group) ?? 0) < 2 ? { ...s, group: undefined } : s))
+}
+
 export function App() {
   const [view, setView] = useState('terminal')
 
@@ -58,6 +65,7 @@ export function App() {
     if (remembered.length === 0) return [newSlot('general', HOME_CWD)]
     return remembered.map((r) => newSlot(r.mode, r.cwd, {
       ...(r.id ? { id: r.id } : {}),
+      ...(r.group ? { group: r.group } : {}),
       resumeId: r.sessionId,
     }))
   })
@@ -75,6 +83,28 @@ export function App() {
   // is what every ⌘-shortcut effect below hangs on.
   const slotCount = useRef(0)
   const maxSlotsRef = useRef(9)
+
+  /* Split: toggle a terminal into or out of the showing terminal's group.
+   * Joining moves the tab next to the group so the strip's bracket is one
+   * run; leaving clears the group if that leaves it with one member. */
+  const split = useCallback((id: string) => {
+    setSlots((all) => {
+      const anchor = all.find((s) => s.id === activeRef.current) ?? all[0]
+      const other = all.find((s) => s.id === id)
+      if (!anchor || !other || anchor.id === other.id) return all
+      if (anchor.group && anchor.group === other.group) {
+        return ungroupSingles(all.map((s) => (s.id === id ? { ...s, group: undefined } : s)))
+      }
+      const group = anchor.group ?? `g-${anchor.id}`
+      const rest = all
+        .filter((s) => s.id !== id)
+        .map((s) => (s.id === anchor.id ? { ...s, group } : s))
+      const after = rest.reduce((last, s, i) => (s.group === group ? i : last), -1)
+      const joined = { ...other, group }
+      return ungroupSingles([...rest.slice(0, after + 1), joined, ...rest.slice(after + 1)])
+    })
+    setView('terminal')
+  }, [])
 
   const open = useCallback((slot: Slot) => {
     // The ceiling, kept here too: the launcher and the history view say why
@@ -96,7 +126,7 @@ export function App() {
     })
     void del(`/v2/sessions/statusline/${encodeURIComponent(id)}`)
     setSlots((all) => {
-      const rest = all.filter((s) => s.id !== id)
+      const rest = ungroupSingles(all.filter((s) => s.id !== id))
       if (activeRef.current === id) setActive(rest[rest.length - 1]?.id ?? null)
       return rest
     })
@@ -184,6 +214,7 @@ export function App() {
       id: s.id,
       mode: s.mode,
       cwd: s.cwd,
+      ...(s.group ? { group: s.group } : {}),
       /* Only an id that resumes to something. A terminal opened and never
          spoken to has an id and no transcript; remembering it brought the
          slot back to "No conversation found" instead of a fresh session. */
@@ -264,7 +295,15 @@ export function App() {
         } })
         return
       }
-      if (e.shiftKey) return
+      if (e.shiftKey) {
+        // ⌘⇧-number: split the showing terminal with that one, or unsplit.
+        const digit = Number(e.code.replace('Digit', ''))
+        if (Number.isInteger(digit) && digit >= 1 && digit <= 9) {
+          const target = slotsRef.current[digit - 1]
+          if (target) { e.preventDefault(); split(target.id) }
+        }
+        return
+      }
       const k = e.key.toLowerCase()
       if (k === 'k') { e.preventDefault(); setPalette(true); return }
       if (k === 't') { e.preventDefault(); setLauncher({}); return }
@@ -281,7 +320,7 @@ export function App() {
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [close])
+  }, [close, split])
 
   /* Branch of the showing terminal's directory. Omitted from the bar when
    * the directory is not a repository, which plenty of useful ones are not. */
@@ -343,6 +382,7 @@ export function App() {
               const at = before ? rest.findIndex((s) => s.id === before) : -1
               return at < 0 ? [...rest, moving] : [...rest.slice(0, at), moving, ...rest.slice(at)]
             })}
+            onSplit={split}
           />
         </div>
       </div>
@@ -451,8 +491,8 @@ function Pane({ view, limits, terminals, onInboxDecided }: {
   const cwds = terminals.map((t) => `cwd=${encodeURIComponent(t.cwd)}`).join('&')
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
-        {view === 'brief' && <Fetched<BriefPayload> path="/v2/brief" what="the brief" render={(d) => <Brief data={d} />} />}
+      <div className={`mx-auto px-8 pb-8 pt-7 ${view === 'repo' ? 'max-w-[1240px]' : 'max-w-[840px]'}`}>
+        {view === 'brief' &&<Fetched<BriefPayload> path="/v2/brief" what="the brief" render={(d) => <Brief data={d} />} />}
         {view === 'repo' && <Fetched<RepoPayload> key={cwds} path={`/v2/repos?${cwds}`} what="the repositories" render={(d) => <Repo data={d} terminals={terminals} />} />}
         {view === 'inbox' && <Fetched<InboxPayload> path="/v2/inbox" what="the inbox" render={(d) => <Inbox data={d} onDecided={onInboxDecided} />} />}
         {view === 'settings' && <Settings />}

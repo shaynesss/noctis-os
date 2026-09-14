@@ -23,6 +23,17 @@ export const MODE_ACCENT: Record<Mode, string> = {
   maintenance: 'var(--color-maint)',
 }
 
+/* The vault names modes by their folder -- dev, learn, research -- and the
+ * shell by their character. An inbox item arrives with the vault's name;
+ * this is how it gets its face. */
+export const VAULT_MODE: Record<string, Mode> = {
+  dev: 'faber', faber: 'faber',
+  learn: 'noctua', noctua: 'noctua',
+  research: 'vesper', vesper: 'vesper',
+  maintenance: 'maintenance', settings: 'maintenance',
+  general: 'general',
+}
+
 export const MODE_LABEL: Record<Mode, string> = {
   general: 'General',
   faber: 'Faber',
@@ -152,6 +163,8 @@ export interface RememberedSlot {
    *  session it had rather than resume a copy. Absent in older records,
    *  which come back with a fresh id and resume. */
   id?: string
+  /** Slots sharing a group are shown side by side. */
+  group?: string
 }
 
 const OPEN_SLOTS_KEY = 'noctis.open-slots'
