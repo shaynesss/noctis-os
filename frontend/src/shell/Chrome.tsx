@@ -270,35 +270,27 @@ export function BottomBar({
   open?: Mode[]
 }) {
   return (
-    <div className="flex shrink-0 border-t border-line bg-surface">
+    /* One band, one rule. This used to be two rows on the main side -- a
+       composer row and, under a second rule, the status row -- with the
+       rail-width cell spanning both, so the cell's top edge sat a row above
+       the status row's and the composer's row stayed as an empty band after
+       the composer went with the orchestrator. The strip at the top is the
+       rail's title band's height; this is the status band's, and the cell,
+       the readings and the characters share it. */
+    <div className="flex h-[var(--status-band)] shrink-0 items-center border-t border-line bg-surface">
       {/* Rail-width cell, always present. It was previously only rendered in
           the narrow layout, so the permission hint vanished on a wide window
           -- the same "hidden rather than moved" mistake as before. */}
-      <div className="flex w-[160px] shrink-0 items-center gap-[7px] border-r border-line px-[12px] font-mono text-[11px] text-ink-faint">
+      <div className="flex h-full w-[160px] shrink-0 items-center gap-[7px] border-r border-line px-[12px] font-mono text-[11px] text-ink-faint">
         <Kbd>⌘T</Kbd> new · <Kbd>⌘K</Kbd> search
       </div>
-
-      {/* Everything else lives inside the main pane's width, not the
-          window's. Centring the composer across the whole window put it out
-          of line with the transcript above, which is centred in the pane. */}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 px-[14px] py-[10px]">
-          <div className="hidden min-w-0 justify-self-start overflow-hidden min-[1620px]:flex">
-            <StatusBar limits={limits} state={state} />
-          </div>
-          {children}
-          <div className="hidden justify-self-end min-[1620px]:flex">
-            <CharacterStrip working={working} open={open} live={state.live} />
-          </div>
-        </div>
-
-        {/* Same components, second position -- rendered twice rather than
-            moved with JS, since only one is ever displayed. */}
-        <div className="flex h-[var(--status-band)] items-center gap-4 border-t border-line px-[14px] min-[1620px]:hidden">
+      <div className="flex min-w-0 flex-1 items-center gap-4 px-[14px]">
+        <div className="flex min-w-0 overflow-hidden">
           <StatusBar limits={limits} state={state} />
-          <div className="ml-auto">
-            <CharacterStrip working={working} open={open} live={state.live} />
-          </div>
+        </div>
+        {children}
+        <div className="ml-auto flex shrink-0">
+          <CharacterStrip working={working} open={open} live={state.live} />
         </div>
       </div>
     </div>
