@@ -536,6 +536,7 @@ def _repo_at(root: Path) -> dict:
             continue
         full, short, subject, ts = parts
         commits.append({"sha": short, "subject": subject, "at": int(ts), "pushed": full not in unpushed})
+    _mark_commit_modes(root, commits)
 
     # The GitHub half is not read here. It is three network calls per
     # repository, and with two repositories open the view sat on "Loading…"
@@ -548,6 +549,49 @@ def _repo_at(root: Path) -> dict:
         "ahead": ahead, "behind": behind, "dirty": dirty, "commits": commits,
         "remote": remote_url, "slug": slug, "github_reason": reason,
     }
+
+
+def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
+    """Which session a commit came from, by time.
+
+    A commit carries no session id -- and must not: the no-attribution
+    rule keeps trailers out of commit messages. What history does hold is
+    which sessions ran in this repository and when, so a commit made while
+    a Faber session was live here is marked Faber. Two sessions live at
+    once in one repository (two Fabers on a project) is a real case and an
+    ambiguous one; the most recently started wins, and that is a guess
+    stated here rather than a fact. A commit outside every session's span
+    -- made by hand in a terminal -- gets no mark, which is the honest
+    answer. A session's end is its last message; a commit lands moments
+    after the message that made it, so the span is stretched ten minutes.
+    """
+    from datetime import datetime
+    from orchestrator.store import ConversationStore
+
+    store = ConversationStore()
+    try:
+        rows = store.sessions_in(str(root))
+    finally:
+        store.close()
+
+    def when(s: str | None) -> float | None:
+        if not s:
+            return None
+        try:
+            return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+
+    spans = []
+    for r in rows:
+        start = when(r["started_at"])
+        if start is None:
+            continue
+        end = when(r["ended_at"])
+        spans.append((start, (end + 600) if end is not None else float("inf"), r["mode"]))
+    for c in commits:
+        hits = [(start, mode) for start, end, mode in spans if start - 60 <= c["at"] <= end]
+        c["mode"] = max(hits)[1] if hits else None
 
 
 # What GitHub said about a slug, for a minute. The Repo view re-reads on

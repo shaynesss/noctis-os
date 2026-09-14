@@ -484,9 +484,12 @@ wait") overstated it. What remains is categorical: a database the app writes
 should not be in a public repo's history at all, and the same file would
 have carried real conversations a week later. All the commits are local, so
 dropping `backend/data/` is a `git filter-repo --path backend/data
---invert-paths` (not installed; `brew install git-filter-repo`) on a clean
-tree, touching nothing on GitHub. Worth doing before the push; not a blocker
-on the content.
+--invert-paths` on a clean tree, touching nothing on GitHub. **Done
+2026-09-14, late, at Shayne's word:** root `49f3a0f` → `745b718`, 210 commits
+still ahead of `origin/main` with `origin/main` an ancestor, zero commits
+touching `backend/data/`, and a sweep of every commit for the two API
+tokens, any `.env`, and bearer literals found nothing. A bundle of the
+pre-filter history was kept outside the repo for the session.
 
 ---
 

@@ -84,6 +84,27 @@ def test_a_modified_file_first_in_the_status_keeps_its_first_character(tmp_path,
     assert _one(client, auth_headers, root)["dirty"] == ["a.txt", "b.txt"]
 
 
+def test_a_commit_is_marked_with_the_session_that_was_live_when_it_was_made(tmp_path, monkeypatch, client, auth_headers):
+    """No trailer in the message; the mark comes from which session ran in
+    this repository at the time. Two live at once: the most recently started
+    wins. None live: no mark."""
+    from datetime import datetime, timedelta, timezone
+    root = _repo(tmp_path)
+    now = datetime.now(timezone.utc)
+    iso = lambda d: d.isoformat().replace("+00:00", "Z")  # noqa: E731
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    monkeypatch.setattr("orchestrator.store.ConversationStore.sessions_in", lambda self, r: [
+        {"mode": "general", "cwd": str(root), "started_at": iso(now - timedelta(hours=2)), "ended_at": iso(now + timedelta(minutes=5))},
+        {"mode": "faber", "cwd": str(root / "backend"), "started_at": iso(now - timedelta(hours=1)), "ended_at": None},
+    ])
+    assert _one(client, auth_headers, root)["commits"][0]["mode"] == "faber", "the later-started of two live sessions"
+    monkeypatch.setattr("orchestrator.store.ConversationStore.sessions_in", lambda self, r: [
+        {"mode": "faber", "cwd": str(root), "started_at": iso(now - timedelta(days=2)), "ended_at": iso(now - timedelta(days=1))},
+    ])
+    assert _one(client, auth_headers, root)["commits"][0]["mode"] is None, "no session was live; made by hand"
+
+
 def test_check_rollup_is_one_word():
     assert panels._rollup([]) is None
     assert panels._rollup([{"conclusion": "SUCCESS"}]) == "pass"

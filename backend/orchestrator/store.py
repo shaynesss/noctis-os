@@ -498,6 +498,15 @@ class ConversationStore:
             "       COUNT(*) AS turns,"
             "       MIN(created_at) AS since FROM usage").fetchone()
 
+    def sessions_in(self, root: str) -> list[sqlite3.Row]:
+        """Sessions that ran in a repository -- at its root or anywhere
+        inside it -- with their mode and when they ran. What the Repo view
+        uses to say which character a commit came from."""
+        prefix = root.rstrip("/") + "/%"
+        return self.db.execute(
+            "SELECT mode, cwd, started_at, ended_at FROM sessions"
+            " WHERE cwd = ? OR cwd LIKE ? ORDER BY started_at", (root, prefix)).fetchall()
+
     def recent_cwds(self, limit: int = 8) -> list[str]:
         """Working directories actually used, most recent first.
 

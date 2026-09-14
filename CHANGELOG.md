@@ -9,6 +9,24 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Whose commit, and a history without its database (2026-09-14)
+
+- **Each commit wears the character that made it.** No trailer in the
+  message — the no-attribution rule stands — but history knows which
+  sessions ran in a repository and when, so a commit made while a Faber
+  session was live there gets Faber's sprite; one made by hand gets none.
+  Two sessions live at once is a guess (the most recently started wins),
+  and the code says so.
+- **`backend/data/` filtered out of the local history.** `git filter-repo
+  --path backend/data --invert-paths` on the 210 unpushed commits: the
+  root moved `49f3a0f` → `745b718`, `origin/main` is still an ancestor,
+  nothing on GitHub changed, and a sweep of every commit found no API
+  token, no `.env`, no bearer literal. Hashes cited in today's earlier
+  changelog entries are the pre-filter ones; `.git/filter-repo/commit-map`
+  has the mapping.
+- The vault link "failing" was a browser profile not signed in to GitHub
+  looking at a private repository; the public one opens.
+
 ### A group moves as one, links open, and the Repo view answers at once (2026-09-14)
 
 - **A split drags as a module.** The bracket around a group's tabs is what

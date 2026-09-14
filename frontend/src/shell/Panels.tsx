@@ -57,7 +57,9 @@ export interface RepoInfo {
   ahead: number | null
   behind: number | null
   dirty: string[]
-  commits: { sha: string; subject: string; at: number; pushed: boolean }[]
+  /** `mode` is the session that was live here when the commit was made --
+   *  a guess by time, and null for a commit made by hand. */
+  commits: { sha: string; subject: string; at: number; pushed: boolean; mode?: string | null }[]
   remote: string | null
   /** `owner/name` when the remote is on GitHub; the GitHub half is read
    *  separately by slug, so the local half never waits on the network. */
@@ -512,6 +514,11 @@ function RepoGroup({ r, terminals, first, folded }: { r: RepoInfo; terminals: Re
             <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
                   style={{ color: c.pushed ? 'var(--color-ink-faint)' : 'var(--color-faber)' }}>
               {c.pushed ? '·' : '●'}
+            </span>
+            {/* Whose commit: the character of the session that was live
+                here when it was made. Blank for one made by hand. */}
+            <span className="grid w-[14px] shrink-0 place-items-center self-center">
+              {c.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
             </span>
             <span className="shrink-0 text-ink-faint">{c.sha}</span>
             <span className="min-w-0 flex-1 truncate text-ink">{c.subject}</span>
