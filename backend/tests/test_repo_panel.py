@@ -167,6 +167,37 @@ def test_a_diverged_branch_needs_an_explicit_force(tmp_path, monkeypatch, client
     assert subprocess.run(["git", "log", "-1", "--format=%s", "origin/main"], cwd=root, capture_output=True, text=True).stdout.strip() == "first, reworded"
 
 
+def test_a_projects_notes_are_read_from_the_vault_under_the_project(tmp_path, monkeypatch, client, auth_headers):
+    """A build has two commit paths: code in the project, the record in the
+    vault. The vault side -- the job's notes folder and job folder -- rides
+    under the project as `notes`, with only the commits and dirty files that
+    touch those paths. A repository no job owns carries none."""
+    project = _repo(tmp_path, "proj")
+    vault = _repo(tmp_path, "vault")
+    (vault / "wiki" / "Proj").mkdir(parents=True); (vault / "wiki" / "Proj" / "SPEC.md").write_text("spec")
+    (vault / "modes" / "dev" / "jobs" / "proj").mkdir(parents=True); (vault / "modes" / "dev" / "jobs" / "proj" / "context.md").write_text("ctx")
+    (vault / "log.md").write_text("elsewhere")
+    subprocess.run(["git", "add", "-A"], cwd=vault, check=True)
+    _commit(vault, "spec and context and log")
+    (vault / "log.md").write_text("changed elsewhere")
+    subprocess.run(["git", "add", "-A"], cwd=vault, check=True); _commit(vault, "only the log")
+    (vault / "wiki" / "Proj" / "SPEC.md").write_text("spec, edited and not committed")
+    (vault / "log.md").write_text("dirty elsewhere")
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    monkeypatch.setattr(panels.vault_io, "get_vault_path", lambda: vault)
+    monkeypatch.setattr("jobs.find_job_for_cwd", lambda mode, cwd: "proj" if Path(cwd).resolve() == project.resolve() else None)
+    monkeypatch.setattr("jobs.job_notes_paths", lambda mode, slug: ["wiki/Proj", "modes/dev/jobs/proj"])
+    r = _one(client, auth_headers, project)
+    n = r["notes"]
+    assert n["name"] == "vault" and n["paths"] == ["wiki/Proj", "modes/dev/jobs/proj"]
+    assert [c["subject"] for c in n["commits"]] == ["spec and context and log"], "the log-only commit does not touch the notes"
+    assert n["dirty"] == ["wiki/Proj/SPEC.md"], "the dirty log is not the project's business"
+    assert n["cwds"] == []
+    # The vault itself, read as a repository, carries no notes of its own.
+    assert _one(client, auth_headers, vault)["notes"] is None
+
+
 def test_check_rollup_is_one_word():
     assert panels._rollup([]) is None
     assert panels._rollup([{"conclusion": "SUCCESS"}]) == "pass"

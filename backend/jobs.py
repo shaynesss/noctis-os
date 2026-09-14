@@ -121,6 +121,25 @@ def find_job_for_cwd(mode: str, cwd: str | Path) -> str | None:
     return None
 
 
+def job_notes_paths(mode: str, slug: str) -> list[str]:
+    """Where a job's planning record lives in the vault: its notes folder
+    (`notes_path` in the context frontmatter, `wiki/<name>` by default) and
+    its own job folder. The project repo holds what runs and what a
+    contributor needs; the spec, briefs and migration records are the
+    build's own record and live here -- which is why the Repo view shows
+    this side's commits under the project too.
+    """
+    base = jobs_dir(mode)
+    if not base:
+        return []
+    try:
+        meta, _ = vault_io.read_frontmatter(f"{base}/{slug}/context.md")
+    except (FileNotFoundError, ValueError):
+        return [f"{base}/{slug}"]
+    notes = str(meta.get("notes_path") or f"wiki/{meta.get('name') or slug}").strip("/")
+    return [notes, f"{base}/{slug}"]
+
+
 def job_brief(mode: str, cwd: str | Path) -> str | None:
     """Orientation for the job at `cwd`, or None if there isn't one.
 

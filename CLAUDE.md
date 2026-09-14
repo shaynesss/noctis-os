@@ -6,6 +6,10 @@ Faber's process lives in `second-brain/modes/dev/dev.md` (moved from `build-spin
 
 Full spec, with reasoning: `second-brain/wiki/Noctis OS/SPEC.md` — **in the vault, not this repo, since 2026-09-15.** The spec, `PTY-MIGRATION.md` and `PRODUCT.md` are the planning and build record; they moved to the private vault because the public repo is for what runs, and `README.md` / `DOCUMENTATION.md` / `CHANGELOG.md` / `STATUS.md` / `SETUP.md` say everything a reader of the code needs. If anything here and the spec disagree, the spec wins. **If a decision gets made about this project anywhere other than in a file both of these read, it doesn't count — write it here or in the spec immediately, not after the fact.** As of 2026-07-20, this includes checking the *wiki* too — several locked decisions sat in the vault for a day without ever reaching the spec. Both directions need checking, not just chat-vs-file.
 
+## Two commit paths, one rule for what goes where
+
+This file stays in the repo because Claude Code loads it from the working directory — a copy in the vault would never be read. So it is the **contributor document**: the repo's docs (`README`, `DOCUMENTATION`, `CHANGELOG`, `STATUS`, `SETUP`, this file) must carry **every decision a contributor needs** — the deploy target, the push rule, the no-attribution rule, the stack — and nothing that is only the build's own reasoning. The build's reasoning (spec, briefs, migration records, open questions) lives in the vault at the job's `notes_path` (`wiki/Noctis OS/`), and a Faber session reads and writes it there. The Repo tab shows that side's commits under the project as **Notes**, so both halves of one piece of work are one view.
+
 ## Stack
 
 FastAPI (stateless, no ORM, no migrations) + React/Vite. Vault (`second-brain/`) is the sole database.

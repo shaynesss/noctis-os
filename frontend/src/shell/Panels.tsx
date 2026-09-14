@@ -68,6 +68,9 @@ export interface RepoInfo {
   github_reason: string | null
   /** The open terminals' directories that resolve to this repository. */
   cwds: string[]
+  /** For a dev job's project: the vault side -- the job's notes folder and
+   *  job folder, read as their own repository state. */
+  notes?: (RepoInfo & { paths: string[] }) | null
 }
 
 export interface GithubInfo {
@@ -585,8 +588,63 @@ function RepoGroup({ r, terminals, first, folded, onChanged }: { r: RepoInfo; te
         {r.commits.length === 0 && <div className="px-4 py-[9px] text-[12px] text-ink-faint">no commits yet</div>}
       </Card>}
 
+      {r.notes && <NotesGroup n={r.notes} folded={folded} onChanged={onChanged} />}
+
       <Heading className="mt-7">GitHub</Heading>
       {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
+    </>
+  )
+}
+
+/* The vault side of a project, under the project. A build has two commit
+ * paths on purpose -- code here, the record there -- and the record's half
+ * was invisible from the project's group. Same rows, same marks, its own
+ * push: pushing the vault pushes the whole vault, and the count says so. */
+function NotesGroup({ n, folded, onChanged }: { n: RepoInfo & { paths: string[] }; folded: boolean; onChanged?: () => void }) {
+  const [open, setOpen] = useState(!folded)
+  const local = n.commits.filter((c) => !c.pushed).length
+  return (
+    <>
+      <button type="button" onClick={() => setOpen((o) => !o)}
+              className="mt-7 mb-[14px] flex w-full items-center gap-[8px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint hover:text-ink">
+        <span className="inline-block w-[10px] text-center">{open ? '▾' : '▸'}</span>
+        <span>Notes</span>
+        <span className="font-normal normal-case tracking-normal text-ink-faint">
+          · {n.name} · {n.paths[0]} · {n.commits.length}{local ? ` · ${local} not on GitHub` : ''}
+        </span>
+        {!open && n.commits[0] && (
+          <span className="min-w-0 flex-1 truncate font-normal normal-case tracking-normal text-ink-dim">
+            · {n.commits[0].sha} {n.commits[0].subject}
+          </span>
+        )}
+      </button>
+      {open && (
+        <Card>
+          <div className="flex items-center gap-[12px] px-4 py-[9px] text-[12px] text-ink-dim">
+            <span className="min-w-0 flex-1">
+              {n.dirty.length ? `${n.dirty.length} note${n.dirty.length === 1 ? '' : 's'} changed and not committed. ` : ''}
+              {n.ahead ? `The vault has ${n.ahead} commit${n.ahead === 1 ? '' : 's'} not on GitHub; pushing it pushes all of them.` : 'The vault is on GitHub.'}
+            </span>
+            <PushButton r={n} onPushed={onChanged} />
+          </div>
+          {n.dirty.map((f) => (
+            <div key={f} className="border-t border-line px-4 py-[6px] font-mono text-[11.5px] text-ink-dim">{f}</div>
+          ))}
+          {n.commits.map((c) => (
+            <div key={c.sha} className="flex items-baseline gap-[10px] border-t border-line px-4 py-[7px] font-mono text-[11.5px]">
+              <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
+                    style={{ color: c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>●</span>
+              <span className="grid w-[14px] shrink-0 place-items-center self-center">
+                {c.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
+              </span>
+              <span className="shrink-0 text-ink-faint">{c.sha}</span>
+              <span className="min-w-0 flex-1 truncate text-ink">{c.subject}</span>
+              <span className="shrink-0 text-ink-faint">{ago(c.at)}</span>
+            </div>
+          ))}
+          {n.commits.length === 0 && <div className="border-t border-line px-4 py-[9px] text-[12px] text-ink-faint">no commits touch {n.paths.join(' or ')} yet</div>}
+        </Card>
+      )}
     </>
   )
 }

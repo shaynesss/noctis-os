@@ -9,6 +9,23 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Both halves of one piece of work, in one view (2026-09-15)
+
+- **Notes under the project.** A build has two commit paths on purpose —
+  code in the project repo, the record in the vault — and the second was
+  invisible from the project's Repo group. Each dev job now names its notes
+  folder (`notes_path` in the job context, `wiki/<Project>/` by default),
+  and the Repo view shows the vault's commits and uncommitted files that
+  touch that folder or the job folder as a **Notes** section under the
+  project, with the same marks and its own push button (pushing the vault
+  pushes the whole vault; the count says so).
+- **`CLAUDE.md` is the contributor document**, and says so: it stays in the
+  repo because Claude Code loads it from the working directory, and it and
+  the repo's other docs must carry every decision a contributor needs —
+  deploy target, push rule, no-attribution rule, stack — and nothing that is
+  only the build's own reasoning. A `dev.md` proposal in the maintenance
+  inbox makes this every project's rule.
+
 ### The plan moves to the vault; the README describes the rail (2026-09-15)
 
 - **`SPEC.md`, `PTY-MIGRATION.md` and `PRODUCT.md` leave the repo** for the

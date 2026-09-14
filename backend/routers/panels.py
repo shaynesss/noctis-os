@@ -503,7 +503,10 @@ def repos(cwd: list[str] = Query(min_length=1)) -> dict:
     }
 
 
-def _repo_at(root: Path) -> dict:
+def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
+    """A repository's local state. With `paths`, the commits and dirty files
+    are those touching them -- how the vault is read as one project's notes
+    rather than as the whole vault."""
     branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
     if branch == "HEAD":
         branch = None  # detached: git's name for "no branch" is not a branch name
@@ -520,6 +523,8 @@ def _repo_at(root: Path) -> dict:
     # first character off the first path -- the view read "rontend/…".
     dirty = [m.group(1) for l in porcelain.splitlines()
              if (m := re.match(r"^\s*[A-Z?!]{1,2}\s+(.+)$", l))]
+    if paths:
+        dirty = [d for d in dirty if any(d == p or d.startswith(p.rstrip("/") + "/") for p in paths)]
     remote_url = _git(root, "remote", "get-url", "origin")
     slug = _github_slug(remote_url)
 
@@ -528,7 +533,7 @@ def _repo_at(root: Path) -> dict:
     unpushed: set[str] = set()
     if upstream:
         unpushed = set((_git(root, "rev-list", f"{upstream}..HEAD") or "").split())
-    log = _git(root, "log", "-n", "20", "--format=%H%x1f%h%x1f%s%x1f%ct") or ""
+    log = _git(root, "log", "-n", "20", "--format=%H%x1f%h%x1f%s%x1f%ct", *(["--", *paths] if paths else [])) or ""
     commits = []
     for line in log.splitlines():
         parts = line.split("\x1f")
@@ -544,11 +549,45 @@ def _repo_at(root: Path) -> dict:
     # local half returns at once; the shell asks /repos/github per slug and
     # fills that card in when it arrives.
     reason = None if slug else ("the remote is not on GitHub" if remote_url else "no remote named origin")
-    return {
+    out = {
         "root": str(root), "name": root.name, "branch": branch, "upstream": upstream,
         "ahead": ahead, "behind": behind, "dirty": dirty, "commits": commits,
         "remote": remote_url, "slug": slug, "github_reason": reason,
     }
+    if paths is None:
+        out["notes"] = _project_notes(root)
+    return out
+
+
+def _project_notes(root: Path) -> dict | None:
+    """The vault side of a project: commits and uncommitted files under the
+    job's notes folder and job folder, read from the vault's repository.
+
+    A build has two commit paths on purpose -- code in the project, the
+    record in the vault -- and the second was invisible from the project's
+    group. Shown under it, with its own push, so both halves of one piece
+    of work are one view. None for a repository no dev job owns, and for
+    the vault itself.
+    """
+    import jobs
+    slug = jobs.find_job_for_cwd("faber", root)
+    if not slug:
+        return None
+    try:
+        vault = Path(str(vault_io.get_vault_path())).resolve()
+    except Exception:  # noqa: BLE001 -- no vault configured is "no notes", not an error
+        return None
+    if vault == root.resolve() or not _git(vault, "rev-parse", "--show-toplevel"):
+        return None
+    paths = jobs.job_notes_paths("faber", slug)
+    notes = _repo_at(vault, paths=paths)
+    # The job's record is the job's work, by the same ownership rule as the
+    # project's commits -- whichever terminal wrote it.
+    for c in notes["commits"]:
+        c["mode"] = "faber"
+    notes["paths"] = paths
+    notes["cwds"] = []
+    return notes
 
 
 def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
