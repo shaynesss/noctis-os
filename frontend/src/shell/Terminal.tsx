@@ -71,10 +71,16 @@ const theme = (accent: string) => ({
  * showing one fitted to is the right size for the hidden ones. */
 let lastFit: { rows: number; cols: number } | null = null
 
-/** Fit if the box has a size; otherwise borrow the last real one. */
-function fitOrBorrow(term: Xterm, fit: FitAddon): void {
-  const dims = fit.proposeDimensions()
-  if (dims && dims.cols > 0 && dims.rows > 0) {
+/** Fit if the box is laid out; otherwise borrow the last real size.
+ *
+ * Decided by the host element, not by FitAddon's proposal: inside a
+ * `display: none` subtree the addon does not report "no size", it computes
+ * one from styles that read `auto` and proposes something tiny -- the
+ * hidden terminal was found running at 5×20, the Rust side's floor, with
+ * the first version of this check waiting for a proposal that never came.
+ * An element with no layout has no client width; that is the test. */
+function fitOrBorrow(el: HTMLElement, term: Xterm, fit: FitAddon): void {
+  if (el.clientWidth > 0 && el.clientHeight > 0) {
     fit.fit()
     lastFit = { rows: term.rows, cols: term.cols }
   } else if (lastFit) {
@@ -235,13 +241,13 @@ export function Terminal({
        * reattached, until someone looked. A session must not depend on
        * being looked at; the resize observer corrects any fit the timeout
        * path measured early. */
-      safely('fit', () => fitOrBorrow(term_, fit))
+      safely('fit', () => fitOrBorrow(el, term_, fit))
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => resolve())
         setTimeout(resolve, 120)
       })
       if (!live) return
-      safely('fit', () => fitOrBorrow(term_, fit))
+      safely('fit', () => fitOrBorrow(el, term_, fit))
       // Unmounted while the renderer was attaching — StrictMode does exactly
       // this. Stop before touching a terminal the cleanup has already taken.
       if (!live) return
@@ -445,7 +451,7 @@ export function Terminal({
          * threw -- as an unhandled error, since an observer callback has no
          * caller to catch it. */
         if (!live) return
-        safely('fit on resize', () => fitOrBorrow(term_, fit))
+        safely('fit on resize', () => fitOrBorrow(el, term_, fit))
         void invoke('pty_resize', { id, rows: term_.rows, cols: term_.cols })
       })
       ro.observe(el)

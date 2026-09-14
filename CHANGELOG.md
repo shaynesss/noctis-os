@@ -24,7 +24,13 @@ scheduler, which is the only feature left in the build order.
   banner, laid out once, came up truncated (*Opus 5 with high ef…*) in a
   pane four times as wide. Every terminal shares one pane, so a hidden
   one now borrows the size the showing one fitted to (120×36 before any
-  has), and the observer corrects it the moment it shows.
+  has), and the observer corrects it the moment it shows. Hidden-ness is
+  decided by the host element's own layout, not by FitAddon's proposal —
+  inside `display: none` the addon proposes something tiny rather than
+  nothing, and the first version of the check waited for a nothing that
+  never came (found live: the hidden session at 5×20, the Rust floor).
+  Proven by reading the PTY size off the tty: 38×169 for both panes after
+  a reload, where the hidden one had been 5×20.
 - **Tabs reorder by dragging**, the way a browser's do. Labels and ⌘1–9 are
   positional, so the order on screen is the order under the keys. The
   strip's empty space also drags the window — the title bar is an overlay
