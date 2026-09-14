@@ -44,13 +44,13 @@ Hook-driven action-feed logs (high-churn, ephemeral) are **not** vault content �
 - **No mode ever rewrites its own or another mode's live methodology file** — lessons accumulate freely, methodology only changes through Custos's staged, evidence-backed diffs.
 - **Deterministic-where-possible:** date math, staleness checks, health checks, git commits are backend code, never left to session judgment.
 
-## Build order (locked)
+## Build order (locked, and complete but for one piece)
 
-git for the vault (done) → mode folders (methodology + lessons + state + agents) → backend → frontend tracker → telemetry → nightshift.
+git for the vault → mode folders (methodology + lessons + state + agents) → backend → frontend → telemetry → nightshift. All built; v2 is the daily driver. The one unbuilt piece is the `launchd`-on-wake scheduler for the brief. A session that reads this should not conclude the frontend is still to be scaffolded — a Faber probe did exactly that on 2026-09-15 from the previous wording.
 
-## Design tooling (Phase 2, once frontend is scaffolded)
+## Design tooling
 
-Tailwind wiring + path alias. `/impeccable init`, register as **Product** (not Brand). No shadcn step.
+Tailwind 4 is wired with the `@` alias; Impeccable is registered as **Product** and its design hook runs on every frontend edit. No shadcn — not declared, not banned.
 
 ## Launch surfaces
 
