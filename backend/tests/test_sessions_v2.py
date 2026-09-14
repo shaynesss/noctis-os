@@ -906,16 +906,28 @@ def test_vault_modes_start_at_the_vault_root_not_their_own_folder(client, monkey
         assert not dirs[mode].endswith(("learn", "research", "maintenance"))
 
 
-def test_faber_starts_in_a_repo_rather_than_the_vault(client, monkeypatch):
-    """A build session belongs in a project, and which project is a thing
-    only history knows."""
+def test_faber_starts_in_the_projects_directory_and_general_at_the_vault(client, monkeypatch):
+    """Which project a build session is for is the session's to establish --
+    a continuation names one, a new build has none yet -- so Faber starts
+    one level up, in the projects directory, not in whichever repo was used
+    last. General is the front door and starts at the vault, not in the
+    last repo Faber happened to be in."""
     from routers import panels
 
     monkeypatch.setattr(panels.vault_io, "get_vault_path", lambda: Path("/vault"))
     monkeypatch.setattr("orchestrator.store.ConversationStore.recent_cwds",
                         lambda self, limit=8: ["/vault", "/repo/project"])
+    monkeypatch.setenv("PROJECTS_DIR", "/repo")
     dirs = client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]
-    assert dirs["faber"] == "/repo/project"
+    assert dirs["faber"] == "/repo"
+    assert dirs["general"] == "/vault"
+
+    # Without a declared projects directory (and no ~/Developer), the parent
+    # of the last project used is the best available answer.
+    monkeypatch.delenv("PROJECTS_DIR")
+    monkeypatch.setattr(panels.Path, "home", classmethod(lambda cls: Path("/nowhere")))
+    dirs = client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]
+    assert dirs["faber"] == "/repo"
 
 
 def test_mode_dirs_requires_auth(client):

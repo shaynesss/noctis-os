@@ -604,6 +604,19 @@ The Chat composer is not rendered under a terminal — it sends to General, and
 beneath a terminal with its own prompt it read as a second place to type.
 Terminal labels are positional (1, 2, 3 for whatever is open), and tabs reorder by dragging — the order on screen is the order under ⌘1–9; the strip's empty space drags the window. The first
 version showed lifetime ordinals from a counter that StrictMode double-ran.
+Each tab carries its mode's mark — the character's sprite from
+`assets/characters/`, the Noctis star for General — and the Repo view names
+terminals with the same mark, so a terminal is one picture in both places.
+
+**No session opens empty.** A fresh terminal (not a resume) is spawned with an
+opening prompt asking it to say which mode it is, what the session is for and
+where it is: a bare prompt looks the same whether the methodology loaded or
+not. **Where a mode starts** (`GET /v2/mode-dirs`): General and the vault-native
+modes at the vault; Faber in the projects directory (`PROJECTS_DIR`, else
+`~/Developer`, else the parent of the last project used) — which project a
+build session is for is the session's to establish, so the launcher does not
+pre-decide it with the last repo used. The directory follows the mode in the
+launcher until you type one.
 
 **Styling is the shell's.** xterm.js ships no look of its own: the theme is
 generated from `tokens.css`, so ground, ink and the character accents are the

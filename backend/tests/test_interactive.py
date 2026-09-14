@@ -86,4 +86,16 @@ def test_a_prompt_that_starts_with_a_dash_is_still_a_prompt():
     before the terminal painted. The terminator makes it text."""
     args = interactive.spawn_args("general", "/tmp", prompt="- first point\n- second")["args"]
     assert args[-2:] == ["--", "- first point\n- second"]
-    assert "--" not in interactive.spawn_args("general", "/tmp")["args"], "no prompt, no terminator"
+
+
+def test_a_fresh_session_opens_by_saying_what_it_is_and_a_resume_does_not():
+    """A terminal at a bare prompt looks like nothing loaded, and the first
+    thing anyone types into it is "what are you". A fresh session gets that
+    question as its opening prompt; a resumed one has a conversation to come
+    back to and must not be interrupted with an introduction."""
+    fresh = interactive.spawn_args("general", "/tmp")["args"]
+    assert fresh[-2:] == ["--", interactive.OPENING_PROMPT]
+    resumed = interactive.spawn_args("general", "/tmp", resume_id="abc")["args"]
+    assert "--" not in resumed and interactive.OPENING_PROMPT not in resumed
+    given = interactive.spawn_args("general", "/tmp", prompt="hello")["args"]
+    assert given[-2:] == ["--", "hello"]

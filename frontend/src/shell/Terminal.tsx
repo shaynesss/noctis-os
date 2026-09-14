@@ -141,6 +141,32 @@ export function Terminal({
     let term: Xterm | undefined
     let webgl: WebglAddon | undefined
     const cleanups: Array<() => void> = []
+    /* Whether xterm has had its first frame. Opening a terminal schedules
+     * `Viewport.syncScrollArea` on a frame `dispose()` does not cancel, and
+     * it reads the render service, whose `dimensions` throws once the
+     * service is disposed. StrictMode's mount / cleanup / mount disposed
+     * the terminal in the same tick it was opened, so that frame ran
+     * against a corpse: one unhandled `_renderer.value.dimensions` error
+     * per terminal on every launch, reproduced headlessly with Playwright
+     * and gone with this. A terminal is disposed only once that first
+     * frame has landed; a cleanup that arrives earlier leaves the disposal
+     * to the mount path, which reaches the same point a frame later. */
+    let settled = false
+    /* Renderer before terminal. `term.dispose()` disposes its addons as
+     * part of coming apart, and the WebGL addon cannot survive being
+     * reached for after its terminal's core store has gone — which is the
+     * exact throw that took the app down. Disposing it first, explicitly,
+     * means the terminal has nothing left to unwind into. */
+    const teardown = () => {
+      if (webgl) {
+        safely('webgl dispose', () => webgl!.dispose())
+        webgl = undefined
+      }
+      if (term) {
+        safely('dispose', () => term!.dispose())
+        term = undefined
+      }
+    }
 
     /* Teardown may not throw, and getting this wrong took the whole app down
      * on the first click.
@@ -246,11 +272,11 @@ export function Terminal({
         requestAnimationFrame(() => resolve())
         setTimeout(resolve, 120)
       })
-      if (!live) return
-      safely('fit', () => fitOrBorrow(el, term_, fit))
+      settled = true
       // Unmounted while the renderer was attaching — StrictMode does exactly
-      // this. Stop before touching a terminal the cleanup has already taken.
-      if (!live) return
+      // this. The cleanup left the disposal to here, past xterm's first frame.
+      if (!live) { teardown(); return }
+      safely('fit', () => fitOrBorrow(el, term_, fit))
 
       /* Keys go to the process -- or, once there is no process, to the
        * restart control. Registered before anything that can fail, so a
@@ -475,19 +501,7 @@ export function Terminal({
        * below for `r`. An unmount that is neither -- StrictMode, a hot
        * reload of this file -- leaves the process running for the next
        * mount to pick up, which is exactly what it will do. */
-      /* Renderer before terminal. `term.dispose()` disposes its addons as
-       * part of coming apart, and the WebGL addon cannot survive being
-       * reached for after its terminal's core store has gone — which is the
-       * exact throw that took the app down. Disposing it first, explicitly,
-       * means the terminal has nothing left to unwind into. */
-      if (webgl) {
-        safely('webgl dispose', () => webgl!.dispose())
-        webgl = undefined
-      }
-      if (term) {
-        safely('dispose', () => term!.dispose())
-        term = undefined
-      }
+      if (settled) teardown()
     }
     // Deliberately narrow: re-running on any prop change would kill and
     // respawn a live session, losing the conversation. `generation` is the

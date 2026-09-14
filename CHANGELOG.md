@@ -9,6 +9,39 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### A session says what it is, starts where its work is, and wears its face (2026-09-14)
+
+- **No session opens empty.** A fresh terminal used to sit at the CLI's bare
+  prompt, which looks the same whether the methodology loaded or not, and the
+  first thing typed into it was "what are you". `interactive.py` now gives a
+  fresh session — not a resume, which has its own history — an opening
+  prompt asking it to say which mode it is, what the session is for, and
+  where it is. The launcher's hint says so instead of "opens empty".
+- **Where a mode starts.** General starts at the vault, not in whichever repo
+  Faber was last in. Faber starts in the *projects* directory (`PROJECTS_DIR`,
+  else `~/Developer`, else the parent of the last project used): which project
+  a build session is for is the session's to establish — a continuation names
+  one, a new build has none yet — so defaulting to the last repo pre-decided it.
+- **The launcher's `⌘1–5` said five for four modes.** The hint counts the
+  choices it offers.
+- **Sprites instead of dots.** The tab strip and the Repo view's terminal chips
+  show the mode's character — Faber's, Noctua's, Vesper's pixel sprites from
+  `assets/characters/`, the Noctis star for General — where a coloured square
+  stood. One `ModeMark`, so a terminal is the same picture in both places.
+- **Two `_renderer.value.dimensions` errors on every launch, gone.** Opening
+  an xterm schedules frames it does not cancel on `dispose()`, and each reads
+  the render service, which throws once disposed. StrictMode's mount / cleanup
+  / mount disposed each terminal in the tick it was opened, so those frames
+  ran against a corpse. A terminal is now disposed only after its first frame
+  has landed; an earlier cleanup leaves the disposal to the mount path.
+- The prompt file's header and `render.py`'s docstring still described a
+  `CLAUDE_CONFIG_DIR` render that no longer exists; both now say what happens
+  — `~/.claude/CLAUDE.md` is a symlink to `second-brain/prompts/system.md`,
+  the overlay rides in the argv, and Settings → Prompts edits the vault file
+  in place.
+- Playwright added as a frontend devDependency: `dev.md` names the screenshot
+  loop as the UI approval gate, and until now nothing could drive the page.
+
 ### Repo: the repository, seen from Noctis (2026-09-14)
 
 A rail item for the repository the showing terminal is in. Local truth

@@ -93,8 +93,9 @@ export function Launcher({
    * empty — no message, no reason, just an unresponsive button, which reads
    * as the app being unable to start a session at all. And the requirement
    * was never real: a new tab can open and wait for you to type, which is
-   * exactly what the General tab does. With no prompt the session simply is
-   * not spawned yet; the first message starts it. */
+   * exactly what the General tab does. With no prompt the backend supplies
+   * one: the session opens by saying which mode it is and where it is, so
+   * no terminal ever sits at a bare prompt looking like nothing loaded. */
   const launch = () => {
     if (full) return
     onLaunch({
@@ -123,7 +124,7 @@ export function Launcher({
     }
     // Cmd+digit picks a mode. The composer's Cmd+1/2/3 is suspended while
     // this is open, so the same keys mean "choose" rather than "switch tab".
-    if (e.metaKey && /^[1-5]$/.test(e.key)) {
+    if (e.metaKey && /^[1-9]$/.test(e.key)) {
       const target = choices[Number(e.key) - 1]
       if (target) {
         e.preventDefault()
@@ -266,7 +267,7 @@ export function Launcher({
 
         <div className="flex items-center gap-[10px] border-t border-line px-[14px] py-[10px]">
           <span className={`font-mono text-[10.5px] ${full ? 'text-ink' : 'text-ink-faint'}`}>
-          {full ?? `⌘↵ to start · ⌘1–5 to pick${prompt.trim() ? '' : ' · opens empty, type when ready'}`}
+          {full ?? `⌘↵ to start · ⌘1–${choices.length} to pick${prompt.trim() ? '' : ' · opens by saying what it is'}`}
         </span>
           <button
             type="button"

@@ -14,7 +14,8 @@
  */
 import { useRef } from 'react'
 import { Terminal } from './Terminal'
-import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
+import { MODE_LABEL, type Mode } from './domain'
+import { ModeMark } from './Chrome'
 
 export interface Slot {
   id: string
@@ -89,7 +90,7 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
               }`}
             >
               <button type="button" onClick={() => onSelect(s.id)} className="flex items-center gap-[7px]">
-                <span className="h-[7px] w-[7px] rounded-[2px]" style={{ background: MODE_ACCENT[s.mode] }} />
+                <ModeMark mode={s.mode} dim={!on} />
                 <span>{MODE_LABEL[s.mode].toLowerCase()} · {i + 1}</span>
               </button>
               <button

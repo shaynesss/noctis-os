@@ -12,6 +12,7 @@ says the generator has not run, because the invented one gets believed.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -733,8 +734,16 @@ def mode_dirs() -> dict:
     Noctua session confined to `modes/learn/` could not read `wiki/`, which
     is most of what there is to learn from.
 
-    Faber and General get the last directory actually used, because a build
-    session belongs in a repo and which repo is a thing only history knows.
+    General is the front door and starts at the vault too: it used to get
+    the last directory used, which was whichever repo Faber had just been
+    in, so a question about nothing in particular opened inside noctis-os.
+
+    Faber starts in the projects directory, not in a project. Which project
+    is the session's to establish -- a continuation names one, a new build
+    has none yet and Setup renames its scratch directory -- so defaulting
+    to the last repo used pre-decided that for it. The projects directory
+    is `PROJECTS_DIR` when set, `~/Developer` when that exists, else the
+    parent of the last project used, else home.
     """
     from orchestrator.store import ConversationStore
 
@@ -745,11 +754,17 @@ def mode_dirs() -> dict:
     finally:
         store.close()
 
-    last = recent[0] if recent else str(Path.home())
+    home = Path.home()
+    projects = os.environ.get("PROJECTS_DIR")
+    if not projects and (home / "Developer").is_dir():
+        projects = str(home / "Developer")
+    if not projects:
+        last_project = next((d for d in recent if d != vault), None)
+        projects = str(Path(last_project).parent) if last_project else str(home)
     return {
         "dirs": {
-            "general": last,
-            "faber": next((d for d in recent if d != vault), last),
+            "general": vault,
+            "faber": projects,
             "noctua": vault,
             "vesper": vault,
             "maintenance": vault,

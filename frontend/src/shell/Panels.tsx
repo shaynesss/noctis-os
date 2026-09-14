@@ -12,6 +12,7 @@ import { post, put } from './engine'
 import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
 import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
+import { ModeMark } from './Chrome'
 
 export interface BriefPayload {
   brief: Doc
@@ -357,7 +358,7 @@ export function Repo({ data, terminals }: { data: RepoPayload; terminals: RepoTe
 function TerminalChip({ t }: { t: RepoTerminal }) {
   return (
     <span className={`flex shrink-0 items-center gap-[6px] font-mono text-[11px] ${t.showing ? 'text-ink' : 'text-ink-dim'}`}>
-      <span className="h-[7px] w-[7px] rounded-[2px]" style={{ background: MODE_ACCENT[t.mode] }} />
+      <ModeMark mode={t.mode} dim={!t.showing} />
       {MODE_LABEL[t.mode].toLowerCase()} · {t.index}
     </span>
   )

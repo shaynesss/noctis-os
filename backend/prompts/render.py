@@ -3,9 +3,11 @@
 
 Composes `second-brain/prompts/system.md` plus a mode's overlay — and the
 active job's context, when the session's working directory matches one —
-into that mode's `CLAUDE_CONFIG_DIR/CLAUDE.md`. `routers/sessions_v2.py`
-calls `render()` on every launch; the CLI reads the result as the session's
-project memory.
+into one text. There is no `CLAUDE_CONFIG_DIR` and no rendered file any
+more: `interactive.py` passes the composed text in the argv
+(`--append-system-prompt`), and `system.md` itself is what `~/.claude/CLAUDE.md`
+links to. `render()`'s file output survives for the regression suite and the
+Prompts panel's check.
 
 This docstring asserted that caller for a long time while the only one was
 the Prompts panel's Save button, and the generated banner said the same.

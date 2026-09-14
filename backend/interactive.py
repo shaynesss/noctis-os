@@ -70,6 +70,13 @@ def statusline_settings(mode: str = "general", port: int | None = None,
     return policy
 
 
+OPENING_PROMPT = (
+    "Open the session: in a few lines, say which mode you are, what this "
+    "session is for, and which directory you are in. If a job or project is "
+    "evident from here, name it and its state. Then wait for direction."
+)
+
+
 def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
                slot: str | None = None, prompt: str | None = None) -> dict:
     """Everything the shell needs to open one interactive session.
@@ -124,8 +131,16 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
     # the CLI's option parser read one as `error: unknown option` and exited
     # before the terminal had painted. The terminator ends option parsing;
     # everything after it is the prompt, whatever it starts with.
+    #
+    # Never empty. A session that opens to a bare prompt is indistinguishable
+    # from one that failed to load its methodology, and the first thing a
+    # person does with it is ask what it is. So a fresh session -- not a
+    # resume, which has its own history to come back to -- opens by saying
+    # what it is, from the methodology it was actually given.
     if prompt and prompt.strip():
         args += ["--", prompt]
+    elif not resume_id:
+        args += ["--", OPENING_PROMPT]
 
     # The environment beside the argv. The telemetry hooks attribute an
     # action to a mode and a job by reading these; a PTY child otherwise

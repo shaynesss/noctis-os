@@ -335,7 +335,7 @@ function Seg({ children, last, className = '' }: { children: React.ReactNode; la
  * unambiguous signal, because a drowsy owl is a charming way to say "idle"
  * and a poor way to be *sure*.
  */
-const SPRITE: Record<Mode, { idle: string; working: string } | null> = {
+export const SPRITE: Record<Mode, { idle: string; working: string } | null> = {
   general: null,          // the front door has no character; it is you
   faber: { idle: '/assets/characters/faber.png',
            working: '/assets/characters/expressions/faber-building.png' },
@@ -344,6 +344,22 @@ const SPRITE: Record<Mode, { idle: string; working: string } | null> = {
   vesper: { idle: '/assets/characters/expressions/vesper-drowsy.png',
             working: '/assets/characters/expressions/vesper-alert.png' },
   maintenance: null,      // its character was retired with the persona
+}
+
+/* A mode's mark where a tab or a chip needs one: the character's sprite,
+ * or for General -- which has no character, it is you -- the Noctis star.
+ * Maintenance has neither and keeps its dot. The same mark in the tab strip
+ * and in the Repo view's terminal chips, so a terminal is recognisable by
+ * the same picture in both places. */
+export function ModeMark({ mode, size = 14, dim = false }: { mode: Mode; size?: number; dim?: boolean }) {
+  const src = mode === 'general' ? '/favicon.svg' : SPRITE[mode]?.idle
+  if (!src) {
+    return <span className="rounded-[2px]" style={{ width: 7, height: 7, background: MODE_ACCENT[mode] }} />
+  }
+  return (
+    <img src={src} alt="" width={size} height={size} className="shrink-0 object-contain"
+         style={{ imageRendering: mode === 'general' ? 'auto' : 'pixelated', opacity: dim ? 0.6 : 1 }} />
+  )
 }
 
 function CharacterStrip({
