@@ -524,6 +524,7 @@ argv and hands it to `pty_spawn`.
 | Size the PTY **before** spawning | at 0×0 the TUI exits instantly, no error, no output |
 | Coalesce reads into ~16ms frames, **and flush on silence** | every chunk is serialised across Tauri's IPC; one event per read stalls a fast-printing session. But a flush that only runs on the *next* read strands the last frame of a prompt that then blocks for input — the trust dialog rendered to mid-sentence until a keystroke made the CLI repaint. A quiet frame sends what it holds; that needs a batcher thread separate from the blocking reader |
 | Kill the session, not the process | the immediate child is not the only thing holding the terminal |
+| Keep the page running while the window is hidden | closing hides to the tray, and WebKit suspends a web view that is not in a window — the status bar froze, the arrangement stopped being remembered. `backgroundThrottling: disabled` in the window config (`WKInactiveSchedulingPolicy::None`); the sessions never stopped either way |
 | Keep the session across a page reload, and let the shell **reattach** | the registry outlives the web view. Each session keeps a capped 2MB scrollback with its frames numbered; `pty_attach` returns the replay, the last frame it contains, and whether the process has since exited. The shell holds frames while replaying and writes only those numbered past the snapshot. Two things on the shell side follow: ending a session is an intent (⌘W, `r`), never an unmount's side effect — StrictMode's mount → cleanup → mount killed the session the first attempt came back to attach to; and nothing in the mount path may wait on `requestAnimationFrame` alone, which WebKit suspends while the window is occluded |
 
 Bytes cross the IPC **base64-encoded**. A read can split a multi-byte
@@ -601,7 +602,7 @@ just because the bar polled.
 
 The Chat composer is not rendered under a terminal — it sends to General, and
 beneath a terminal with its own prompt it read as a second place to type.
-Terminal labels are positional (1, 2, 3 for whatever is open); the first
+Terminal labels are positional (1, 2, 3 for whatever is open), and tabs reorder by dragging — the order on screen is the order under ⌘1–9; the strip's empty space drags the window. The first
 version showed lifetime ordinals from a counter that StrictMode double-ran.
 
 **Styling is the shell's.** xterm.js ships no look of its own: the theme is

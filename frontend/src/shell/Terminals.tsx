@@ -12,6 +12,7 @@
  * Terminal sees the size come back and refits, so nothing here knows about
  * xterm at all.
  */
+import { useRef } from 'react'
 import { Terminal } from './Terminal'
 import { MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
@@ -34,7 +35,7 @@ export interface Slot {
 export const newSlot = (mode: Mode, cwd: string, extra: Partial<Slot> = {}): Slot =>
   ({ id: `term-${mode}-${crypto.randomUUID().slice(0, 8)}`, mode, cwd, ...extra })
 
-export function Terminals({ slots, active, accent, hidden, onSelect, onClose, onAdd }: {
+export function Terminals({ slots, active, accent, hidden, onSelect, onClose, onAdd, onReorder }: {
   slots: Slot[]
   active: string | null
   accent: string
@@ -42,19 +43,46 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onAdd: () => void
+  /** Drop `id` into the position `before` holds (or at the end). */
+  onReorder: (id: string, before: string | null) => void
 }) {
   const shown = slots.find((s) => s.id === active) ?? slots[0]
+  /* Tabs move by dragging, the way a browser's do. Labels are positional
+   * and so are ⌘1–9, so the order on screen is the order under the keys;
+   * moving a tab is how you put the one you reach for most under ⌘1. The
+   * id travels on the drag itself rather than in state -- there is nothing
+   * to clean up if the drop lands outside. */
+  const dragging = useRef<string | null>(null)
   return (
     <div hidden={hidden} className="flex min-h-0 flex-1 flex-col">
       {/* Same height token as the head band above it, so the two read as one
-          system rather than two bars of nearly equal size. */}
-      <div className="flex h-[34px] shrink-0 items-center gap-[2px] border-b border-line px-[8px] font-mono text-[11px]">
+          system rather than two bars of nearly equal size. The strip's empty
+          space drags the window: the title bar is an overlay with nothing
+          in it, so this is the top edge you would reach for. */}
+      <div data-tauri-drag-region
+           className="flex h-[34px] shrink-0 items-center gap-[2px] border-b border-line px-[8px] font-mono text-[11px]"
+           onDragOver={(e) => { if (dragging.current) e.preventDefault() }}
+           onDrop={(e) => {
+             e.preventDefault()
+             if (dragging.current) onReorder(dragging.current, null)
+             dragging.current = null
+           }}>
         {slots.map((s, i) => {
           const on = s.id === shown?.id
           return (
             <div
               key={s.id}
-              className={`group flex h-[26px] items-center gap-[7px] rounded-[4px] px-[9px] ${
+              draggable
+              onDragStart={(e) => { dragging.current = s.id; e.dataTransfer.effectAllowed = 'move' }}
+              onDragEnd={() => { dragging.current = null }}
+              onDragOver={(e) => { if (dragging.current && dragging.current !== s.id) e.preventDefault() }}
+              onDrop={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                if (dragging.current && dragging.current !== s.id) onReorder(dragging.current, s.id)
+                dragging.current = null
+              }}
+              className={`group flex h-[26px] cursor-default items-center gap-[7px] rounded-[4px] px-[9px] ${
                 on ? 'bg-elevated text-ink' : 'text-ink-dim hover:text-ink'
               }`}
             >

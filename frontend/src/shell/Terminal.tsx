@@ -61,6 +61,32 @@ const theme = (accent: string) => ({
   scrollbarSliderActiveBackground: token('--color-ink-faint', '#6a6a6a'),
 })
 
+/* The last size any terminal here fitted to. A slot that is not showing --
+ * the second of two remembered terminals at a reload, or all of them while
+ * Stats is up -- sits in a `display: none` box that measures nothing, so
+ * FitAddon leaves xterm at its 80×24 default and the session is spawned at
+ * that. The CLI's boot banner is laid out once, to the width it was born
+ * with; it came up truncated ("Opus 5 with high ef…") in a pane four times
+ * as wide. Every terminal in the strip shares one pane, so the size the
+ * showing one fitted to is the right size for the hidden ones. */
+let lastFit: { rows: number; cols: number } | null = null
+
+/** Fit if the box has a size; otherwise borrow the last real one. */
+function fitOrBorrow(term: Xterm, fit: FitAddon): void {
+  const dims = fit.proposeDimensions()
+  if (dims && dims.cols > 0 && dims.rows > 0) {
+    fit.fit()
+    lastFit = { rows: term.rows, cols: term.cols }
+  } else if (lastFit) {
+    term.resize(lastFit.cols, lastFit.rows)
+  } else {
+    // Nothing has fitted yet: a first terminal opened while hidden. Wider
+    // than xterm's default, because 80 columns is narrower than any pane
+    // Noctis draws, and the observer corrects it the moment it shows.
+    term.resize(120, 36)
+  }
+}
+
 export function Terminal({
   id, mode, cwd, accent, resumeId, prompt, onExit,
 }: {
@@ -209,13 +235,13 @@ export function Terminal({
        * reattached, until someone looked. A session must not depend on
        * being looked at; the resize observer corrects any fit the timeout
        * path measured early. */
-      safely('fit', () => fit.fit())
+      safely('fit', () => fitOrBorrow(term_, fit))
       await new Promise<void>((resolve) => {
         requestAnimationFrame(() => resolve())
         setTimeout(resolve, 120)
       })
       if (!live) return
-      safely('fit', () => fit.fit())
+      safely('fit', () => fitOrBorrow(term_, fit))
       // Unmounted while the renderer was attaching — StrictMode does exactly
       // this. Stop before touching a terminal the cleanup has already taken.
       if (!live) return
@@ -419,7 +445,7 @@ export function Terminal({
          * threw -- as an unhandled error, since an observer callback has no
          * caller to catch it. */
         if (!live) return
-        safely('fit on resize', () => fit.fit())
+        safely('fit on resize', () => fitOrBorrow(term_, fit))
         void invoke('pty_resize', { id, rows: term_.rows, cols: term_.cols })
       })
       ro.observe(el)

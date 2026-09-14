@@ -27,8 +27,11 @@
         "skipTaskbar": false,
         "transparent": true,
         "windowEffects": {
-          "effects": ["hudWindow"]
-        }
+          "effects": [
+            "hudWindow"
+          ]
+        },
+        "backgroundThrottling": "disabled"
       }
     ],
     "security": {

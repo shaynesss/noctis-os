@@ -9,6 +9,27 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The page keeps running while the window is hidden; tabs drag (2026-09-14)
+
+- **Hidden is not suspended.** Closing the window hides it to the tray, and
+  WebKit's default for a web view not in a window is to suspend it: the
+  status bar stopped, the arrangement stopped being remembered, a terminal
+  that ended was not indexed until the window came back. The window is
+  now configured with `backgroundThrottling: disabled`
+  (`WKInactiveSchedulingPolicy::None` underneath), so the shell runs the
+  same hidden as shown. The sessions never stopped either way.
+- **A hidden pane spawns at a real size.** A slot that is not showing sits
+  in a `display: none` box that measures nothing, so xterm stayed at its
+  80×24 default and the session was born that wide — the CLI's boot
+  banner, laid out once, came up truncated (*Opus 5 with high ef…*) in a
+  pane four times as wide. Every terminal shares one pane, so a hidden
+  one now borrows the size the showing one fitted to (120×36 before any
+  has), and the observer corrects it the moment it shows.
+- **Tabs reorder by dragging**, the way a browser's do. Labels and ⌘1–9 are
+  positional, so the order on screen is the order under the keys. The
+  strip's empty space also drags the window — the title bar is an overlay
+  with nothing in it, so this is the top edge you reach for.
+
 ### Sessions survive a reload (2026-09-14)
 
 The PTY registry lives in the Rust process and outlives the web view, so a

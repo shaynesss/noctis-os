@@ -128,6 +128,8 @@ Five session configurations. They differ by **methodology and model, never by ca
 
 **What the CLI reports, the shell reads.** `statusLine` runs every five seconds inside the session and POSTs its payload to `/v2/sessions/statusline` — the 5h/7d windows, context occupancy, model, effort, the session id and its transcript path. That is the status bar's source, and it survives a reload.
 
+**The page outlives the window's visibility.** Closing hides to the tray, and the web view is configured not to throttle or suspend while hidden (`backgroundThrottling: disabled`): the shell keeps polling, remembering and indexing whether or not anyone is looking, which is what an always-there app means.
+
 **Sessions outlive the page.** The PTY registry belongs to the Rust process, so a reload of the web view leaves every session running, and the shell comes back to them: slots keep their ids, each session keeps a capped scrollback of what it printed with its frames numbered, and `pty_attach` hands a returning terminal the replay plus the number of the last frame it contains, so only later frames are written after it. Ending a session is an intent — ⌘W, or `r` on a dead pane — never a side effect of a component unmounting, because React unmounts for reasons that are not that. The same shape as VS Code's terminal across a window reload.
 
 **History is read, not recorded.** The CLI writes a complete transcript per session to `~/.claude/projects/**/*.jsonl`, incrementally; `orchestrator/jsonl.py` indexes those into the same SQLite tables search and Stats read. It counts every session on the machine, not only the ones Noctis hosted.

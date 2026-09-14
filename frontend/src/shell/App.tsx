@@ -309,6 +309,13 @@ export function App() {
             onSelect={(id) => { setActive(id); setView('terminal') }}
             onClose={close}
             onAdd={() => setLauncher({})}
+            onReorder={(id, before) => setSlots((all) => {
+              const moving = all.find((s) => s.id === id)
+              if (!moving) return all
+              const rest = all.filter((s) => s.id !== id)
+              const at = before ? rest.findIndex((s) => s.id === before) : -1
+              return at < 0 ? [...rest, moving] : [...rest.slice(0, at), moving, ...rest.slice(at)]
+            })}
           />
         </div>
       </div>
