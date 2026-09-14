@@ -33,7 +33,10 @@ scheduler, which is the only feature left in the build order.
   that ended was not indexed until the window came back. The window is
   now configured with `backgroundThrottling: disabled`
   (`WKInactiveSchedulingPolicy::None` underneath), so the shell runs the
-  same hidden as shown. The sessions never stopped either way.
+  same hidden as shown. The sessions never stopped either way. Verified
+  from the backend log with the window hidden for minutes: across 400
+  consecutive page polls, never more than four CLI reports between two of
+  them — no gap — where a hidden window had produced no polls at all.
 - **A hidden pane spawns at a real size.** A slot that is not showing sits
   in a `display: none` box that measures nothing, so xterm stayed at its
   80×24 default and the session was born that wide — the CLI's boot
