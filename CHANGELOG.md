@@ -22,6 +22,15 @@ offering the button. Opened against the real repos: `noctis-os` 201 commits
 ahead of a public remote, `second-brain` 17 ahead, no PRs, no issues. The
 workflow those numbers argue for is SPEC open question 9.
 
+Same day, grouped: the view follows the arrangement rather than the one
+terminal that is showing. `GET /v2/repos` takes every open terminal's
+directory and groups them by repository root, so two Faber sessions on one
+project are one group naming both terminals the way the tab strip does
+(`faber · 1`, `faber · 3`) and a session on another project is a second
+group below; the showing terminal's repository comes first, and a terminal
+in no repository is listed at the end in words. A terminal that has `cd`'d
+is grouped by where it is now, from the CLI's own status-line report.
+
 ### The inbox decides, and says what deciding does (2026-09-14)
 
 Found live with two real proposals waiting: titles were slugs, summaries

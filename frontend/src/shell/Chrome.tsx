@@ -8,7 +8,7 @@ const RAIL = [
   { id: 'brief', label: 'Brief', d: 'M4 5h16M4 12h16M4 19h10' },
   // The conversation surface: the real CLI, hosted in a pseudo-terminal.
   { id: 'terminal', label: 'Terminal', d: 'M4 4h16v16H4zM7 9l3 3-3 3M13 15h4' },
-  // The repository the showing terminal is in: local truth, GitHub beside it.
+  // The repositories the open terminals are in, grouped: local truth, GitHub beside it.
   { id: 'repo', label: 'Repo', d: 'M6 3v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9' },
   { id: 'stats', label: 'Stats', d: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
   { id: 'inbox', label: 'Inbox', d: 'M4 13h5l1 3h4l1-3h5M4 13l2-8h12l2 8v6H4z' },

@@ -456,19 +456,27 @@ def _github_slug(remote_url: str | None) -> str | None:
     return f"{m.group(1)}/{m.group(2)}" if m else None
 
 
-@router.get("/repo")
-def repo(cwd: str = Query(min_length=1)) -> dict:
-    """What a working directory's repository looks like right now, local and
-    on GitHub, in one read.
+@router.get("/repos")
+def repos(cwd: list[str] = Query(min_length=1)) -> dict:
+    """What the repositories under the open terminals look like right now,
+    local and on GitHub, in one read.
 
-    The visualiser's data. Local first and always: root, branch, upstream,
-    how far ahead and behind, what is dirty, the recent commits with the
-    ones GitHub has not seen marked. Then GitHub through `gh`, when the
-    remote is there and `gh` is signed in: open pull requests with their
-    checks and the default branch, open issues. GitHub failing -- offline,
-    no token, a remote elsewhere -- leaves `github` null with a reason and
-    the local half intact, because the local half is what you are looking
-    at and the network half is what you are being told about.
+    One `cwd` per open terminal. Terminals are grouped by the repository
+    they are in -- two Faber sessions on one project are one repository
+    with two terminals, and a third session on another project is a second
+    repository -- so the view follows the arrangement rather than the one
+    terminal that happens to be showing. A directory in no repository is
+    returned under `outside`, in words, not as an error: plenty of useful
+    working directories are not repositories.
+
+    Per repository, local first and always: root, branch, upstream, how far
+    ahead and behind, what is dirty, the recent commits with the ones GitHub
+    has not seen marked. Then GitHub through `gh`, when the remote is there
+    and `gh` is signed in: open pull requests with their checks and the
+    default branch, open issues. GitHub failing -- offline, no token, a
+    remote elsewhere -- leaves `github` null with a reason and the local
+    half intact, because the local half is what you are looking at and the
+    network half is what you are being told about.
 
     Read-only by construction. Nothing here pushes, and the one thing this
     view asks a person to do -- push -- it asks in words, because the rule
@@ -476,14 +484,25 @@ def repo(cwd: str = Query(min_length=1)) -> dict:
     half-shipping, and a button here would be that power through another
     door.
     """
-    try:
-        resolved = _safe_home_dir(cwd)
-    except ValueError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
-    top = _git(resolved, "rev-parse", "--show-toplevel")
-    if not top:
-        return {"repo": None}
-    root = Path(top)
+    groups: dict[Path, list[str]] = {}
+    outside: list[str] = []
+    for raw in cwd:
+        try:
+            resolved = _safe_home_dir(raw)
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        top = _git(resolved, "rev-parse", "--show-toplevel")
+        if not top:
+            outside.append(raw)
+            continue
+        groups.setdefault(Path(top), []).append(raw)
+    return {
+        "repos": [{**_repo_at(root), "cwds": cwds} for root, cwds in groups.items()],
+        "outside": outside,
+    }
+
+
+def _repo_at(root: Path) -> dict:
     branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
     if branch == "HEAD":
         branch = None  # detached: git's name for "no branch" is not a branch name
@@ -557,11 +576,9 @@ def repo(cwd: str = Query(min_length=1)) -> dict:
             }
 
     return {
-        "repo": {
-            "root": str(root), "name": root.name, "branch": branch, "upstream": upstream,
-            "ahead": ahead, "behind": behind, "dirty": dirty, "commits": commits,
-            "remote": remote_url, "github": github, "github_reason": reason,
-        },
+        "root": str(root), "name": root.name, "branch": branch, "upstream": upstream,
+        "ahead": ahead, "behind": behind, "dirty": dirty, "commits": commits,
+        "remote": remote_url, "github": github, "github_reason": reason,
     }
 
 

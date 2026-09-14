@@ -47,27 +47,44 @@ export interface InboxPayload {
   counts: { proposals: number; flagged: number }
 }
 
-export interface RepoPayload {
-  repo: null | {
-    root: string
-    name: string
-    branch: string | null
-    upstream: string | null
-    ahead: number | null
-    behind: number | null
-    dirty: string[]
-    commits: { sha: string; subject: string; at: number; pushed: boolean }[]
-    remote: string | null
-    github: null | {
-      slug: string
-      url: string | null
-      private: boolean
-      default_branch: string | null
-      pull_requests: { number: number; title: string; branch: string | null; draft: boolean; mergeable: string | null; url: string | null; checks: 'pass' | 'fail' | 'pending' | null }[]
-      issues: { number: number; title: string; url: string | null; labels: string[] }[]
-    }
-    github_reason: string | null
+export interface RepoInfo {
+  root: string
+  name: string
+  branch: string | null
+  upstream: string | null
+  ahead: number | null
+  behind: number | null
+  dirty: string[]
+  commits: { sha: string; subject: string; at: number; pushed: boolean }[]
+  remote: string | null
+  github: null | {
+    slug: string
+    url: string | null
+    private: boolean
+    default_branch: string | null
+    pull_requests: { number: number; title: string; branch: string | null; draft: boolean; mergeable: string | null; url: string | null; checks: 'pass' | 'fail' | 'pending' | null }[]
+    issues: { number: number; title: string; url: string | null; labels: string[] }[]
   }
+  github_reason: string | null
+  /** The open terminals' directories that resolve to this repository. */
+  cwds: string[]
+}
+
+export interface RepoPayload {
+  repos: RepoInfo[]
+  /** Terminal directories that are not inside any repository. */
+  outside: string[]
+}
+
+/** An open terminal as the Repo view names it: the tab strip's positional
+ *  label, and the directory it is in right now. */
+export interface RepoTerminal {
+  id: string
+  mode: Mode
+  cwd: string
+  /** 1-based position in the strip, the number under ⌘. */
+  index: number
+  showing: boolean
 }
 
 export interface BillingPayload {
@@ -288,7 +305,14 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   )
 }
 
-/* The repository the showing terminal is in.
+/* The repositories the open terminals are in, one group per repository.
+ *
+ * The view follows the arrangement, not the one terminal that is showing:
+ * two Faber sessions on one project are one repository with two terminals
+ * named under it, and a Vesper session on another project is a second group
+ * below. The showing terminal's repository comes first, so what you were
+ * just looking at is what you land on. A terminal in no repository is
+ * listed at the end, in words.
  *
  * Read-only on purpose. The local half is what you are looking at -- the
  * branch, what is not on GitHub yet, what is dirty, the last twenty commits
@@ -299,32 +323,64 @@ function Section({ label, children }: { label: string; children: React.ReactNode
  * words: a session never pushes, and that rule is what keeps a crashed
  * session from half-shipping; a button here would be that power through
  * another door. */
-export function Repo({ data, cwd }: { data: RepoPayload; cwd: string }) {
-  const r = data.repo
-  if (!r) {
-    return (
-      <>
-        <Heading>Repo</Heading>
-        <Card>
-          <div className="px-4 py-[13px] text-[12.5px] text-ink-dim">
-            <span className="font-mono">{cwd}</span> is not inside a git repository. <span className="text-ink-faint">git init</span> in a terminal starts one.
-          </div>
-        </Card>
-      </>
-    )
-  }
+export function Repo({ data, terminals }: { data: RepoPayload; terminals: RepoTerminal[] }) {
+  const showingCwd = terminals.find((t) => t.showing)?.cwd
+  const groups = [...data.repos].sort((a, b) =>
+    Number(b.cwds.includes(showingCwd ?? '')) - Number(a.cwds.includes(showingCwd ?? '')))
+  const outside = terminals.filter((t) => data.outside.includes(t.cwd))
+  return (
+    <>
+      {groups.map((r, i) => (
+        <RepoGroup key={r.root} r={r} first={i === 0}
+                   terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
+      ))}
+      {outside.length > 0 && (
+        <>
+          <Heading className={groups.length ? 'mt-7' : ''}>Not in a repository</Heading>
+          <Card>
+            {outside.map((t, i) => (
+              <div key={t.id} className={`flex items-center gap-[10px] px-4 py-[9px] text-[12.5px] text-ink-dim ${i ? 'border-t border-line' : ''}`}>
+                <TerminalChip t={t} />
+                <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{t.cwd}</span>
+                <span className="shrink-0 text-ink-faint">git init in that terminal starts one</span>
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
+    </>
+  )
+}
+
+/** A terminal the way the tab strip names it: the mode's colour and its
+ *  position, which is the number under ⌘. */
+function TerminalChip({ t }: { t: RepoTerminal }) {
+  return (
+    <span className={`flex shrink-0 items-center gap-[6px] font-mono text-[11px] ${t.showing ? 'text-ink' : 'text-ink-dim'}`}>
+      <span className="h-[7px] w-[7px] rounded-[2px]" style={{ background: MODE_ACCENT[t.mode] }} />
+      {MODE_LABEL[t.mode].toLowerCase()} · {t.index}
+    </span>
+  )
+}
+
+function RepoGroup({ r, terminals, first }: { r: RepoInfo; terminals: RepoTerminal[]; first: boolean }) {
   const gh = r.github
   const unpushed = r.ahead ?? 0
   return (
     <>
-      <Heading>
+      <Heading className={first ? '' : 'mt-9'}>
         Repo · {r.name}{r.branch ? ` · ${r.branch}` : ''}
       </Heading>
 
       {/* Where it stands, in one line: the numbers that decide what to do
-          next, then the sentence that says what that is. */}
+          next, then the sentence that says what that is. Above it, which
+          terminals are in this repository -- the reason it is on the page. */}
       <Card>
-        <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] px-4 py-[11px] font-mono text-[11.5px]">
+        <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] px-4 py-[9px]">
+          {terminals.map((t) => <TerminalChip key={t.id} t={t} />)}
+          <span className="ml-auto min-w-0 truncate font-mono text-[11px] text-ink-faint">{r.root}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[11px] font-mono text-[11.5px]">
           <span className="text-ink">{r.branch ?? 'detached'}</span>
           {r.upstream ? (
             <>
@@ -420,7 +476,7 @@ export function Repo({ data, cwd }: { data: RepoPayload; cwd: string }) {
 
 /** What to do next, from the numbers -- the sentence a person new to git
  *  needs and a person used to it can skim past. */
-function nextStep(r: NonNullable<RepoPayload['repo']>): string {
+function nextStep(r: RepoInfo): string {
   if (!r.upstream) return 'This branch has no upstream. `git push -u origin ' + (r.branch ?? 'main') + '` in a terminal publishes it.'
   const parts: string[] = []
   if (r.dirty.length) parts.push(`${r.dirty.length} file${r.dirty.length === 1 ? '' : 's'} changed and not committed — a session commits as it goes, so this is either in progress or forgotten.`)

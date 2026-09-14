@@ -1,37 +1,74 @@
 /* Every state the Repo view can be in, rendered to markup and read back.
  * No browser: the view is a function of its payload, and the payload's
- * shapes are enumerable -- not a repo, no upstream, ahead, behind, dirty,
- * GitHub absent with a reason, GitHub present with PRs in each check state
- * and issues with labels, and both lists empty. */
+ * shapes are enumerable -- no repositories, no upstream, ahead, behind,
+ * dirty, GitHub absent with a reason, GitHub present with PRs in each check
+ * state and issues with labels, both lists empty, and terminals grouped
+ * across two repositories with one outside any. */
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { Repo, type RepoPayload } from './Panels'
+import { Repo, type RepoInfo, type RepoTerminal } from './Panels'
 
-const base: NonNullable<RepoPayload['repo']> = {
+const base: RepoInfo = {
   root: '/Users/me/Developer/x', name: 'x', branch: 'main', upstream: 'origin/main',
   ahead: 0, behind: 0, dirty: [], commits: [], remote: 'git@github.com:me/x.git',
-  github: null, github_reason: null,
+  github: null, github_reason: null, cwds: ['/Users/me/Developer/x'],
 }
-const text = (repo: RepoPayload['repo'], cwd = '/Users/me/Developer/x') =>
-  renderToStaticMarkup(<Repo data={{ repo }} cwd={cwd} />).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+const one: RepoTerminal[] = [{ id: 't1', mode: 'faber', cwd: '/Users/me/Developer/x', index: 1, showing: true }]
+const strip = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+const text = (repo: Partial<RepoInfo>, terminals: RepoTerminal[] = one) =>
+  strip(renderToStaticMarkup(<Repo data={{ repos: [{ ...base, ...repo }], outside: [] }} terminals={terminals} />))
 
 describe('Repo view', () => {
-  it('says when the directory is not a repository, and how to start one', () => {
-    const t = text(null, '/Users/me/notes')
+  it('says when a terminal is not in a repository, and how to start one', () => {
+    const t = strip(renderToStaticMarkup(
+      <Repo data={{ repos: [], outside: ['/Users/me/notes'] }}
+            terminals={[{ id: 't1', mode: 'general', cwd: '/Users/me/notes', index: 1, showing: true }]} />))
+    expect(t).toContain('Not in a repository')
+    expect(t).toContain('general · 1')
     expect(t).toContain('/Users/me/notes')
-    expect(t).toContain('not inside a git repository')
     expect(t).toContain('git init')
   })
 
+  it('names the terminals in a repository the way the tab strip does', () => {
+    const t = text({}, [
+      { id: 'a', mode: 'faber', cwd: '/Users/me/Developer/x', index: 1, showing: false },
+      { id: 'b', mode: 'faber', cwd: '/Users/me/Developer/x', index: 3, showing: true },
+    ])
+    expect(t).toContain('Repo · x · main')
+    expect(t).toContain('faber · 1')
+    expect(t).toContain('faber · 3')
+    expect(t).toContain('/Users/me/Developer/x')
+  })
+
+  it('groups terminals by repository, the showing one first, the rest under their own headings', () => {
+    const y: RepoInfo = { ...base, root: '/Users/me/Developer/y', name: 'y', cwds: ['/Users/me/Developer/y', '/Users/me/Developer/y/backend'] }
+    const terminals: RepoTerminal[] = [
+      { id: 'a', mode: 'faber', cwd: '/Users/me/Developer/x', index: 1, showing: false },
+      { id: 'b', mode: 'faber', cwd: '/Users/me/Developer/y', index: 2, showing: false },
+      { id: 'c', mode: 'vesper', cwd: '/Users/me/Developer/y/backend', index: 3, showing: true },
+      { id: 'd', mode: 'general', cwd: '/Users/me/notes', index: 4, showing: false },
+    ]
+    const t = strip(renderToStaticMarkup(
+      <Repo data={{ repos: [base, y], outside: ['/Users/me/notes'] }} terminals={terminals} />))
+    const yAt = t.indexOf('Repo · y · main'), xAt = t.indexOf('Repo · x · main'), outsideAt = t.indexOf('Not in a repository')
+    expect(yAt).toBeGreaterThan(-1); expect(xAt).toBeGreaterThan(-1); expect(outsideAt).toBeGreaterThan(-1)
+    expect(yAt).toBeLessThan(xAt)
+    expect(xAt).toBeLessThan(outsideAt)
+    const yBlock = t.slice(yAt, xAt), xBlock = t.slice(xAt, outsideAt)
+    expect(yBlock).toContain('faber · 2'); expect(yBlock).toContain('vesper · 3'); expect(yBlock).not.toContain('faber · 1')
+    expect(xBlock).toContain('faber · 1'); expect(xBlock).not.toContain('vesper · 3')
+    expect(t.slice(outsideAt)).toContain('general · 4')
+  })
+
   it('with no upstream, says how to publish the branch', () => {
-    const t = text({ ...base, upstream: null, ahead: null, behind: null, branch: 'job/12-thing' })
+    const t = text({ upstream: null, ahead: null, behind: null, branch: 'job/12-thing' })
     expect(t).toContain('no upstream')
     expect(t).toContain('git push -u origin job/12-thing')
   })
 
   it('counts what is not on GitHub, what is behind, and what is uncommitted -- and says what to do', () => {
     const t = text({
-      ...base, ahead: 201, behind: 2, dirty: ['a.ts', 'b.ts'],
+      ahead: 201, behind: 2, dirty: ['a.ts', 'b.ts'],
       commits: [
         { sha: 'abc1234', subject: 'newest, local only', at: Math.floor(Date.now() / 1000) - 90, pushed: false },
         { sha: 'def5678', subject: 'older, on GitHub', at: Math.floor(Date.now() / 1000) - 7200, pushed: true },
@@ -50,18 +87,17 @@ describe('Repo view', () => {
   })
 
   it('says everything is on GitHub when it is', () => {
-    expect(text(base)).toContain('Everything here is on GitHub and nothing is uncommitted')
+    expect(text({})).toContain('Everything here is on GitHub and nothing is uncommitted')
   })
 
   it('keeps the local half when GitHub is not available, and says why', () => {
-    const t = text({ ...base, github_reason: 'gh could not reach GitHub (not signed in, offline, or gh is not installed)' })
+    const t = text({ github_reason: 'gh could not reach GitHub (not signed in, offline, or gh is not installed)' })
     expect(t).toContain('Not available: gh could not reach GitHub')
     expect(t).toContain('Commits')
   })
 
   it('shows pull requests in every check state, drafts, conflicts, and issues with labels', () => {
     const t = text({
-      ...base,
       github: {
         slug: 'me/x', url: 'https://github.com/me/x', private: false, default_branch: 'main',
         pull_requests: [
@@ -85,7 +121,7 @@ describe('Repo view', () => {
   })
 
   it('explains what an empty PR list and an empty issue list are for', () => {
-    const t = text({ ...base, github: { slug: 'me/x', url: null, private: true, default_branch: 'main', pull_requests: [], issues: [] } })
+    const t = text({ github: { slug: 'me/x', url: null, private: true, default_branch: 'main', pull_requests: [], issues: [] } })
     expect(t).toContain('me/x · private')
     expect(t).toContain('a branch pushed with a PR is how work gets reviewed before it reaches main')
     expect(t).toContain('an issue per piece of work is the backlog')
