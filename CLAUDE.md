@@ -37,7 +37,7 @@ Hook-driven action-feed logs (high-churn, ephemeral) are **not** vault content �
 
 - **No secrets in vault writes**, ever.
 - **Backend auth is mandatory** — bearer-token + Origin checking on every route.
-- **`assets/characters/`** and **`assets/world/`** are sole sources of truth — never duplicated into `frontend/src`.
+- **`assets/characters/`** is the sole source of truth for the sprites — never duplicated into `frontend/src`; the app reaches it through the `public/assets` symlink.
 - **Model routing: Claude-family only in v1.** See `wiki/Agent Harnesses.md` for why availability ≠ safety.
 - **`log.md`/`index.md` go through a single serialized writer.** Per-mode lessons/state/job files don't need this — one writer-type each.
 - **Sessions run in parallel across modes, not within one job.**
@@ -56,4 +56,4 @@ Tailwind 4 is wired with the `@` alias; Impeccable is registered as **Product** 
 
 **v2 hosts sessions; it does not launch them elsewhere.** A session is the real interactive `claude` in a pseudo-terminal the shell owns (`src-tauri/src/pty.rs`), rendered by xterm.js in the app's own palette. A mode's identity travels in the argv (`--append-system-prompt`, `--agents`, `--settings`, `--add-dir`) — **no `CLAUDE_CONFIG_DIR` anywhere**, so every session inherits the real `~/.claude` and the plugins, skills, subagents, MCP servers and permissions installed there. `backend/interactive.py` builds that argv; it knows nothing about terminals, and the Rust side knows nothing about modes.
 
-The `-p` orchestrator that streamed `stream-json` into an in-app transcript (2026-09-11 → 09-13) is deleted, as are v1's launch surfaces before it. `one_shot` in `engine.py` is the one `-p` left — a script, for recap and the brief. Full detail: `DOCUMENTATION.md` §2 and §24 here; the spec's EDD and `PTY-MIGRATION.md` in the vault's `wiki/Noctis OS/`.
+The `-p` orchestrator that streamed `stream-json` into an in-app transcript (2026-09-11 → 09-13) is deleted, as are v1's launch surfaces before it. `one_shot` in `engine.py` is the one `-p` left — a script, for recap and the brief. Full detail: `DOCUMENTATION.md` §2 and §22 here; the spec's EDD and `PTY-MIGRATION.md` in the vault's `wiki/Noctis OS/`.

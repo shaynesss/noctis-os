@@ -9,7 +9,7 @@
  * events, a composer that sent turns, a permission dialog, a per-turn effort
  * chip. All of that rebuilt the CLI's interactive loop on top of its
  * scripting mode, and the CLI does its own loop better in a terminal.
- * `PTY-MIGRATION.md` is the record; `DOCUMENTATION.md` §24 is the shape.
+ * `PTY-MIGRATION.md` is the record; `DOCUMENTATION.md` §22 is the shape.
  */
 import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState } from 'react'

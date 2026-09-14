@@ -6,7 +6,7 @@ The reference. Every subsystem, what it does, and why it behaves the way it does
 |---|---|
 | What Noctis is, and how to run it | [`README.md`](README.md) |
 | **How each part works** | this file |
-| What the architecture *is*, as a spec | [`SPEC.md`](SPEC.md) |
+| What the architecture *is*, as a spec | `second-brain/wiki/Noctis OS/SPEC.md` (the vault; the build's own record) |
 | **Why** a decision was made — evidence, risks, what failed | `second-brain/wiki/Noctis OS/noctis-v2-SPEC.md` |
 | What works today | [`STATUS.md`](STATUS.md) |
 | What changed when | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -21,7 +21,7 @@ Two halves that age differently.
 
 **The body** — whatever runs sessions. Today: a Tauri shell hosting the Claude Code CLI in a pseudo-terminal, and a FastAPI backend behind it.
 
-The body is replaceable and built to be. The brain is meant to outlive it. Everything below is organised around that split — §2–§7 are the body, §8–§11 the brain, §12–§19 the surfaces and cross-cutting concerns, and §20–§23 are for operating it.
+The body is replaceable and built to be. The brain is meant to outlive it. Everything below is organised around that split — §2–§5 are the body, §6–§9 the brain, §10–§17 the surfaces and cross-cutting concerns, and §18–§21 are for operating it.
 
 ---
 
@@ -50,27 +50,16 @@ Built by `backend/interactive.py`, served by `GET /v2/sessions/interactive-args?
 | `--add-dir <vault>` | The engine sandboxes file access to the working directory; a Faber session in a repo could not read its own methodology without this. |
 | `--` + positional prompt | A handoff's carried summary, submitted as the session's first message. Behind the terminator, because a summary that opens with a bullet is an argument that opens with a dash, and the option parser exited on one. |
 
-**Four things the PTY host has to get right**, each found by testing rather than reasoning: size the PTY *before* spawning (at 0×0 the TUI exits instantly with no output); coalesce output into ~16ms frames *and flush on silence* (a flush that only runs on the next read strands the tail of a prompt that then blocks for input); kill the session, not the immediate child; keep sessions across a page reload and reattach to them (§24). Bytes cross Tauri's IPC base64-encoded, because a read can split a multi-byte character and xterm.js decodes UTF-8 itself. Measured 2026-09-14 with the batcher isolated under `seq` as the program: 7MB byte-exact and in order in 820ms (51 frames), and a program that prints then goes quiet gets its last frame **20ms** after its last byte rather than when it exits.
+**Four things the PTY host has to get right**, each found by testing rather than reasoning: size the PTY *before* spawning (at 0×0 the TUI exits instantly with no output); coalesce output into ~16ms frames *and flush on silence* (a flush that only runs on the next read strands the tail of a prompt that then blocks for input); kill the session, not the immediate child; keep sessions across a page reload and reattach to them (§22). Bytes cross Tauri's IPC base64-encoded, because a read can split a multi-byte character and xterm.js decodes UTF-8 itself. Measured 2026-09-14 with the batcher isolated under `seq` as the program: 7MB byte-exact and in order in 820ms (51 frames), and a program that prints then goes quiet gets its last frame **20ms** after its last byte rather than when it exits.
 
 **Finding the binary.** PATH first, then `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.claude/local`, in both `engine.py` and `pty.rs`; `NOCTIS_CLAUDE_BIN` overrides. `launchd` starts processes with a bare `PATH` containing no Homebrew.
 
-**`one_shot` is the one place `-p` remains** (`engine.py`): the recap and the brief's prose call it, on the cheap tier, with every tool refused and `--output-format json`. A scripting mode used for a script — and a script leaves nothing behind: `--no-session-persistence`, so no transcript lands under `~/.claude/projects/` for the indexer to file as a conversation (twenty-seven recaps had been filed as `general` sessions before this was noticed), and `--setting-sources user`, so the repo's own `.claude/settings.local.json` hooks — baked `--mode dev` — do not fire a `dev` SessionEnd for every recap. `--bare` would do both and more, but it refuses OAuth, so it cannot run on the subscription.
+**`one_shot` is the one place `-p` remains** (`engine.py`): the brief's prose calls it, on the cheap tier, with every tool refused and `--output-format json`. A scripting mode used for a script — and a script leaves nothing behind: `--no-session-persistence`, so no transcript lands under `~/.claude/projects/` for the indexer to file as a conversation (twenty-seven recaps had been filed as `general` sessions before this was noticed), and `--setting-sources user`, so the repo's own `.claude/settings.local.json` hooks — baked `--mode dev` — do not fire a `dev` SessionEnd for every recap. `--bare` would do both and more, but it refuses OAuth, so it cannot run on the subscription.
 
 ---
 
-## 3. The event stream — removed
 
-There is no event stream. From 2026-09-11 to 09-13 the backend parsed `claude -p --output-format stream-json` into an `Event` union and streamed it to the shell over SSE; the CLI now renders itself in a terminal, and what the shell needs from it arrives through `statusLine` (§2) and the transcript on disk (§11). The parser, the wire contract and the reducer are deleted. `PTY-MIGRATION.md` §3–§4 is the record of why.
-
----
-
-## 4. Turn lifecycle — removed
-
-The CLI owns its own turn loop in a terminal. The closing pass, the silent/unclosed/truncated states and the `TurnEnd` bookkeeping existed to patch what `-p` could not do — `Stop` does not fire under `--print` — and went with it.
-
----
-
-## 5. System prompt vs system config
+## 3. System prompt vs system config
 
 These are different things and conflating them caused most of this project's worst bugs.
 
@@ -88,7 +77,7 @@ These are different things and conflating them caused most of this project's wor
 | `projects/*/memory/` | accumulated memory |
 | `projects/*/` | conversation history |
 
-**Prompt is instruction; config is capability.** Telling a session to run `/impeccable` when the config root has no plugins is handing someone a recipe for a kitchen they do not have — which is exactly what happened: `dev.md` mandates seven tools and a Noctis-launched Faber session could reach none of them, for months, silently. §17 is the fix.
+**Prompt is instruction; config is capability.** Telling a session to run `/impeccable` when the config root has no plugins is handing someone a recipe for a kitchen they do not have — which is exactly what happened: `dev.md` mandates seven tools and a Noctis-launched Faber session could reach none of them, for months, silently. §15 is the fix.
 
 **`CLAUDE.md` straddles both** — it lives in the config root and becomes part of the prompt. That is where this went wrong: to give each mode a different `CLAUDE.md` (a text problem) the code redirected the entire config root (a capability decision), and paid the whole surface to solve it.
 
@@ -104,7 +93,7 @@ These are different things and conflating them caused most of this project's wor
 
 ---
 
-## 6. Modes
+## 4. Modes
 
 Five session configurations. They differ by **methodology and model, never by capability**.
 
@@ -138,7 +127,7 @@ The budget matters because an orchestrated workload re-sends its context every t
 
 ---
 
-## 7. Permissions
+## 5. Permissions
 
 **Every mode gets the same tool surface.** `orchestrator/permissions.json` pre-approves `Read Grep Glob WebSearch WebFetch Edit Write Bash NotebookEdit TodoWrite Task` and Noctis's own retrieval tools for every mode. Anything outside the list the CLI asks about in its own terminal — which is where a person is looking — the way it does anywhere. **`git push` is denied outright.**
 
@@ -150,7 +139,7 @@ The budget matters because an orchestrated workload re-sends its context every t
 
 ---
 
-## 8. The Noctis MCP server
+## 6. The Noctis MCP server
 
 `backend/mcp/server.py`. Stdio JSON-RPC, dependency-free — `python3 server.py` and nothing to install. **This is the half that travels.**
 
@@ -196,7 +185,7 @@ Same block everywhere; only the file differs:
 
 ---
 
-## 9. Retrieval
+## 7. Retrieval
 
 BM25 over SQLite FTS5. No added dependencies — FTS5 and `bm25()` are in system Python.
 
@@ -220,7 +209,7 @@ A hosted embeddings API over vault content is ruled out: nothing vault-touching 
 
 ---
 
-## 10. The vault
+## 8. The vault
 
 Sole source of truth for **knowledge**. Markdown with YAML frontmatter.
 
@@ -246,7 +235,7 @@ second-brain/
 
 ---
 
-## 11. History and storage
+## 9. History and storage
 
 **History is read from the CLI's own transcripts.** Claude Code writes `~/.claude/projects/<slugged-cwd>/<session-id>.jsonl` incrementally for every session it runs — a SIGKILL mid-generation keeps its partial output — and `orchestrator/jsonl.py` indexes those into the `sessions`/`messages`/`usage` tables the history routes, search and Stats read. `POST /v2/sessions/index` files anything new and re-reads anything that has grown — a row remembers how many bytes of its transcript it was read from (`indexed_bytes`), so a session filed while still running catches up on the next pass, in place, keeping its id; the shell calls it when a terminal session ends, Stats on each visit. The mode a session was launched in comes from its status-line report, since the transcript records only the CLI's permission mode. It counts every session on this machine, not only the ones Noctis hosted.
 
@@ -261,7 +250,7 @@ Default location `backend/data/`, overridable with `NOCTIS_DATA_DIR`.
 
 ---
 
-## 12. The interface
+## 10. The interface
 
 React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `main.tsx` imports it and nothing else.
 
@@ -274,9 +263,6 @@ React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `ma
 | `user` / `text` | the conversation |
 | `thinking` | a token count and duration, not prose |
 | `tool` | a disclosure row, matched to its result **by id** — results interleave with text and can arrive out of order |
-| `error` | in the transcript, not a toast: a failed turn is exactly the thing you scroll back to find |
-| `silent` | the turn-integrity states from §7 |
-| `handoff` | provenance, so a tab you return to says where it came from |
 
 **Shortcuts:** `⌘K` search · `⌘T` mode entry · `⌘⇧H` handoff · `⇧⇥` cycle effort · `⌘V` paste image.
 
@@ -290,7 +276,7 @@ React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `ma
 
 ---
 
-## 13. Telemetry and hooks
+## 11. Telemetry and hooks
 
 Two, both non-blocking, both given the mode via `NOCTIS_MODE`. **A terminal session gets it from `interactive-args`**, which returns an `env` map beside the argv (`NOCTIS_MODE`, and `NOCTIS_JOB_ID` when a job owns the working directory) and `pty_spawn` applies to the child — a PTY child otherwise inherits the shell process's environment, and a vesper session was found logging under whatever mode the shell happened to carry. The env wins over the `--mode` baked into a project's own `.claude/settings.local.json` hooks; those baked values are only a fallback for sessions nothing launched.
 
@@ -307,7 +293,7 @@ Runtime logs live in `backend/runtime/` — high-churn, ephemeral, gitignored. *
 
 ---
 
-## 14. Maintenance and the scheduler
+## 12. Maintenance and the scheduler
 
 **`launchd`, fires on wake.** Morning brief · vault auto-commit and push (secret-scan first) · maintenance. Exits if already run today.
 
@@ -321,7 +307,7 @@ Runtime logs live in `backend/runtime/` — high-churn, ephemeral, gitignored. *
 
 ---
 
-## 15. Design Lodge
+## 13. Design Lodge
 
 A vault-native catalog of design assets — components, layouts, palettes, typography, icons, motion. Cross-project, seeded from what has already shipped, checked before Faber reaches for anything new during Plan or Build.
 
@@ -329,7 +315,7 @@ A **quick-capture inbox** takes a link plus a note; the next dev session sorts i
 
 ---
 
-## 16. Running it: two paths
+## 14. Running it: two paths
 
 | | `make dev` | `make browser` |
 |---|---|---|
@@ -366,11 +352,11 @@ the window.
 
 **What it does not buy.** Sessions are subprocesses of uvicorn, so a backend
 restart still kills a turn in flight. Supervision shortens downtime; it does
-not prevent loss. See §18.
+not prevent loss. See §16.
 
 ---
 
-## 17. What v1 left behind
+## 15. What v1 left behind
 
 Removed at the 2026-09-12 cutover: `desktop/app.py` (the pywebview shell,
 which `make app` still pointed at for five days after Tauri shipped),
@@ -386,7 +372,7 @@ router), `assets/characters/`, and the vault itself. `assets/world/` retired
 with the pixel scene; the sprites keep sole-source-of-truth status, because
 with the world gone they are the only carrier of Noctis's visual identity.
 
-## 18. Capability contract
+## 16. Capability contract
 
 `backend/capabilities.py`. Each mode declares what its methodology assumes it can reach; the harness reports what it has; the gap is printed.
 
@@ -402,7 +388,7 @@ Requirements live in code, not the vault: they are claims about *infrastructure*
 
 ---
 
-## 19. Portability
+## 17. Portability
 
 **"Workflow agnostic" means a move states what it costs, not that everything survives it.**
 
@@ -424,7 +410,7 @@ Tier 3 is confined to `engine.py` and `interactive.py` (argv), `jsonl.py` (trans
 
 ---
 
-## 20. Configuration
+## 18. Configuration
 
 Two variables are required. Everything else has a working default.
 
@@ -440,7 +426,7 @@ Two variables are required. Everything else has a working default.
 | `NOCTIS_DATA_DIR` | no | `backend/data/` | SQLite history and the search index. |
 | `NOCTIS_HISTORY_DB` | no | derived | Explicit DB path for the MCP server, which runs as its own process. |
 | `NOCTIS_BACKEND` | no | `http://127.0.0.1:8000` | Where the MCP server reaches the backend. |
-| `NOCTIS_RECAP_MODEL` | no | `claude-haiku-4-5` | Model for the one-line recap on a restored conversation. |
+| `NOCTIS_RECAP_MODEL` | no | `claude-haiku-4-5` | Model for `one_shot` — the brief's prose. |
 | `NIGHTSHIFT_DISTILLER_MODEL` | no | `claude-haiku-4-5` | Model for overnight lessons distillation. |
 | `NOCTIS_SCRATCH_ROOT` | no | `~/Developer` | Where Plan-stage scratch directories go before a project is named. |
 
@@ -450,7 +436,7 @@ Two variables are required. Everything else has a working default.
 
 ---
 
-## 21. Troubleshooting
+## 19. Troubleshooting
 
 Start with `make doctor`. It answers most of this in three lines.
 
@@ -469,7 +455,7 @@ Start with `make doctor`. It answers most of this in three lines.
 
 ---
 
-## 22. Testing
+## 20. Testing
 
 ```bash
 make test        # pytest + tsc -b + vitest
@@ -486,7 +472,7 @@ make test        # pytest + tsc -b + vitest
 
 ---
 
-## 23. Known gaps
+## 21. Known gaps
 
 **Outstanding:**
 - The `launchd`-on-wake scheduler — the only feature left in the build order. `brief/generate.py` writes the brief; nothing fires it, and the vault auto-commit/push job does not exist.
@@ -494,7 +480,7 @@ make test        # pytest + tsc -b + vitest
 **Known and accepted:**
 - Effort is not yet passed at spawn (`interactive-args` does not take it); the CLI's default applies until it is.
 - The brief page renders whatever `brief/today.md` last held, with no staleness indicator. `POST /v2/brief/generate` exists and nothing in the shell calls it, so a brief only refreshes when something asks — which today is nothing. The scheduler is the fix; until it lands, a stale brief looks exactly like a current one.
-- Whitespace-only text counts as speech — judging quality would be the guesswork §7 replaced.
+- Whitespace-only text counts as speech — judging quality would be the guesswork §5 replaced.
 - `seven_day_opus` is in the CLI binary and absent from an observed Haiku run. Unverified.
 
 **Permanently out of scope:** multi-user or hosting · code editing / custom IDE · any deployment story.
@@ -502,7 +488,7 @@ make test        # pytest + tsc -b + vitest
 
 ---
 
-## 24. The Terminal — the real CLI, hosted
+## 22. The Terminal — the real CLI, hosted
 
 **Shipped 2026-09-13 beside the `stream-json` transcript; the transcript and the orchestrator behind it were deleted 2026-09-14.** The terminal is the conversation surface. The migration record (`PTY-MIGRATION.md`, in the vault's `wiki/Noctis OS/` since 2026-09-15) has the full reasoning; this section is what exists, and §2 is the spawn.
 

@@ -24,7 +24,7 @@ import vault_io
 from prompts.render import render
 from jobs import MAINTENANCE, MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
 from nightshift import apply as proposals
-from engine import (EFFORT_CYCLE, MODEL_CATALOG, MODE_MODELS, MODE_TOOLS, PERMISSION_CYCLE)
+from engine import MODE_MODELS
 
 router = APIRouter(prefix="/v2", tags=["panels"])
 
@@ -111,27 +111,6 @@ def _flagged_jobs() -> list[dict]:
                 "at": str(meta.get("last_touched") or ""),
             })
     return out
-
-
-def _section(body: str, heading: str) -> str:
-    """The text under a `## Heading`, not the heading itself.
-
-    The inbox read `body.split()[0]` and so displayed "## Rationale" as every
-    proposal's summary — the header, while the sentence explaining the
-    proposal sat on the line below, unread. Three items all reading
-    "## Rationale" is why the panel made no sense.
-    """
-    lines = body.splitlines()
-    for i, line in enumerate(lines):
-        if line.strip().lower() != f"## {heading}".lower():
-            continue
-        out = []
-        for rest in lines[i + 1:]:
-            if rest.startswith("## "):
-                break
-            out.append(rest)
-        return " ".join(" ".join(out).split())
-    return ""
 
 
 MAINTENANCE_STATE = f"{MAINTENANCE}/state.md"
@@ -225,10 +204,9 @@ def _proposals() -> list[dict]:
         except Exception:  # noqa: BLE001 - covered by _safe_frontmatter above
             pass
         rationale = (entry.get("rationale") or meta.get("rationale")
-                     or _section(body, "Rationale"))
-        # Raw, line-preserving reads for the diff and the full text --
-        # `_section` above flattens to one line for a summary, which turns a
-        # diff header into "modes/dev/dev.md +++ modes/dev/dev.md @@ …".
+                     or proposals._section(body, "## rationale") or "")
+        # One section reader, nightshift's, for the listing and the apply
+        # pipeline alike; `_summary` flattens for the one-line view.
         raw = lambda h: (proposals._section(body, f"## {h}") or "").strip()  # noqa: E731
         diff = raw("diff")
         has_diff = bool(diff) and "none" not in diff.lower()[:20]
@@ -348,56 +326,6 @@ def recent_dirs() -> dict:
         return {"dirs": store.recent_cwds()}
     finally:
         store.close()
-
-
-@router.get("/config")
-def config() -> dict:
-    """What each mode actually runs — read from the driver, not restated.
-
-    The Settings page shows the values the orchestrator will really use. A
-    hand-maintained copy would drift from `driver.py` and quietly start
-    describing a system that no longer exists.
-    """
-    return {
-        "modes": [
-            {
-                "mode": mode,
-                "model": model,
-                # Empty means the full tool surface. Named explicitly so the
-                # page can say "full access" rather than leave a blank that
-                # reads as unknown.
-                "disallowed": MODE_TOOLS.get(mode, {}).get("disallowed", "").split() or [],
-                # Pre-approved at spawn, because a hosted session has nobody
-                # to ask. Surfaced so Settings can show what each mode may do
-                # without prompting, rather than leaving it implicit.
-                "allowed": MODE_TOOLS.get(mode, {}).get("allowed", "").split() or [],
-            }
-            for mode, model in MODE_MODELS.items()
-        ],
-        # What a session can be switched to, so the picker and Settings
-        # both read the same list the orchestrator validates against.
-        "models": MODEL_CATALOG,
-        "permission_cycle": list(PERMISSION_CYCLE),
-        # What the composer's chip cycles through now. It set the permission
-        # mode until every mode came to spawn with the same tools and one
-        # shared allowlist -- at which point that chip governed almost nothing
-        # a person would notice, while this governs the answer. dev.md has
-        # asked for the routing since it was written and nothing passed it.
-        "effort_cycle": list(EFFORT_CYCLE),
-        # Real and settable, deliberately not reachable by tapping a key --
-        # the same treatment bypassPermissions gets below.
-        "effort_excluded": ["max"],
-        # True since the permission prompt tool landed: a request now reaches
-        # a dialog in this window and waits for an answer, so "ask each time"
-        # asks. It was False because --print has no interactive session, which
-        # made every prompt an automatic refusal -- the UI said so rather than
-        # implying a dialog that never arrived.
-        "prompts_answerable": True,
-        # bypassPermissions is a real flag that stays settable, but is
-        # deliberately unreachable by tapping a key. Reported so Settings can
-        # state that rather than leave its absence looking like an oversight.
-        "excluded_from_cycle": ["bypassPermissions"],
-    }
 
 
 @router.get("/vault/doc")

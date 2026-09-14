@@ -193,7 +193,7 @@ def read(path: Path) -> Conversation:
                     # and never returned. All 34 blocks in the transcript this
                     # was first read against were empty. The transcript shows
                     # thinking as a counter and a duration rather than prose
-                    # (DOCUMENTATION §12), so the block's *existence* is the
+                    # (DOCUMENTATION §10), so the block's *existence* is the
                     # signal -- guarding on its text dropped every one of them.
                     c.messages.append({"role": "thinking",
                                        "content": b.get("thinking") or "", "meta": None})

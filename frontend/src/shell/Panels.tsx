@@ -114,13 +114,6 @@ export interface BillingPayload {
   basis: string
 }
 
-export interface ConfigPayload {
-  modes: { mode: string; model: string; disallowed: string[]; allowed: string[] }[]
-  permission_cycle: string[]
-  excluded_from_cycle: string[]
-  prompts_answerable: boolean
-}
-
 export function Heading({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <h2 className={`m-0 mb-[14px] font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint ${className}`}>

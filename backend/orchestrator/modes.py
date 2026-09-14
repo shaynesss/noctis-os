@@ -20,7 +20,6 @@ exists.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 # Which vault folder a mode's files live in. Imported rather than restated:
 # `jobs.py` has needed the same mapping since it was written, and a second

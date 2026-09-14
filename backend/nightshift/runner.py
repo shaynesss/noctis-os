@@ -22,6 +22,7 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 import vault_io  # noqa: E402
 from jobs import MAINTENANCE_INBOX, MAINTENANCE_STATE  # noqa: E402
+from nightshift.apply import _section  # noqa: E402
 from nightshift.slack_surface import SLACK_CHECKS, SlackItem  # noqa: E402
 
 STATE_PATH = MAINTENANCE_STATE
@@ -208,19 +209,8 @@ def run() -> list[str]:
 def _extract_rationale(proposal_text: str) -> str | None:
     """The index entry's `rationale` duplicates the proposal file's
     `## Rationale` section verbatim (inbox/README.md) -- one canonical
-    text, parsed rather than drafted twice.
-    """
-    lines = proposal_text.splitlines()
-    for i, line in enumerate(lines):
-        if line.strip().lower() == "## rationale":
-            body_lines = []
-            for follow in lines[i + 1 :]:
-                if follow.startswith("##"):
-                    break
-                body_lines.append(follow)
-            text = "\n".join(body_lines).strip()
-            return text or None
-    return None
+    text, parsed rather than drafted twice."""
+    return _section(proposal_text, "## rationale") or None
 
 
 def _extract_confidence(proposal_text: str) -> str | None:
@@ -228,19 +218,9 @@ def _extract_confidence(proposal_text: str) -> str | None:
     Confidence` section (inbox/README.md's fourth, judgment-only section).
     First word must be high/low -- anything else is a malformed draft.
     """
-    lines = proposal_text.splitlines()
-    for i, line in enumerate(lines):
-        if line.strip().lower() == "## confidence":
-            for follow in lines[i + 1 :]:
-                if follow.startswith("##"):
-                    return None
-                word = follow.strip().split()[:1]
-                if word and word[0].lower() in ("high", "low"):
-                    return word[0].lower()
-                if follow.strip():
-                    return None
-            return None
-    return None
+    body = _section(proposal_text, "## confidence") or ""
+    word = body.split()[:1]
+    return word[0].lower() if word and word[0].lower() in ("high", "low") else None
 
 
 def _confidence_for(item: SlackItem, proposal_text: str) -> str | None:

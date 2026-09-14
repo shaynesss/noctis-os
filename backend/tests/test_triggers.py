@@ -111,23 +111,6 @@ def _seed_inbox(items: list[dict]):
     )
 
 
-def test_diffs_awaiting_review_counts_only_settings_origin(vault):
-    _seed_inbox(
-        [
-            {"slug": "undistilled-lessons-undistilled-research-20260722", "origin_mode": "settings"},
-            {"slug": "flagged-job-some-job-20260722", "origin_mode": "dev"},
-        ]
-    )
-
-    assert triggers.compute_diffs_awaiting_review() == 1
-
-
-def test_diffs_awaiting_review_zero_when_inbox_empty(vault):
-    _seed_inbox([])
-
-    assert triggers.compute_diffs_awaiting_review() == 0
-
-
 def test_trigger_modes_names_only_the_modes_that_fired(vault):
     _seed_cursor({m: 1 for m in triggers.MODES})
     for m in triggers.MODES:

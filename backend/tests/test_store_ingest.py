@@ -6,7 +6,6 @@ migration's gate compares what the two counted, so the tests here are mostly
 about the comparison staying honest.
 """
 import json
-from pathlib import Path
 
 import pytest
 

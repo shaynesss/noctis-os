@@ -83,18 +83,6 @@ export async function get<T>(path: string): Promise<T | null> {
   }
 }
 
-export interface HistorySession {
-  id: number
-  mode: Mode
-  title: string
-  cwd: string | null
-  state: string
-  engine_id: string | null
-  resumable: boolean
-  started_at: string
-  ended_at: string | null
-}
-
 export interface HistoryTranscript {
   id: number
   mode: Mode

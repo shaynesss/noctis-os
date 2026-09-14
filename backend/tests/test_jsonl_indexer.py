@@ -5,10 +5,8 @@ on a machine that has never run Claude Code -- the conftest lesson: a test
 describing *this* machine passes alone and fails in CI.
 """
 import json
-import textwrap
 from pathlib import Path
 
-import pytest
 
 from orchestrator import jsonl
 

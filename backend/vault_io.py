@@ -128,21 +128,6 @@ def move_file(src_relative: str, dst_relative: str) -> None:
     src.rename(dst)
 
 
-def read_binary(relative_path: str) -> bytes:
-    return _resolve_within_vault(relative_path).read_bytes()
-
-
-def write_binary(relative_path: str, data: bytes) -> None:
-    """Design Lodge preview images are the first binary vault content --
-    everything else in the vault is markdown/frontmatter. Same containment
-    check and write lock as write_file, just bytes instead of text.
-    """
-    path = _resolve_within_vault(relative_path)
-    with _write_lock:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-
-
 def list_dir(relative_path: str) -> list[str]:
     """Markdown filenames (no extension) in a vault subdirectory, sorted.
 

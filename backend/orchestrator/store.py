@@ -223,18 +223,6 @@ class ConversationStore:
         self.db.commit()
         return int(cur.lastrowid)
 
-    def message_count(self, session_id: int) -> int:
-        return int(self.db.execute(
-            "SELECT COUNT(*) c FROM messages WHERE session_id=?", (session_id,)
-        ).fetchone()["c"])
-
-    def save_recap(self, session_id: int, recap: str, at_messages: int) -> None:
-        self.db.execute(
-            "UPDATE sessions SET recap=?, recap_at=? WHERE id=?",
-            (recap, at_messages, session_id),
-        )
-        self.db.commit()
-
     def transcript_state(self, engine_session_id: str) -> tuple[int, str, int] | None:
         """(row id, source, bytes read) for a filed session, or None.
 

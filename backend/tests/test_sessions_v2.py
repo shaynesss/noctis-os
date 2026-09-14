@@ -1,6 +1,5 @@
 """Session route tests: the argv a terminal spawns with, the status-line
 reports it sends back, history, stats, recap, panels."""
-import json
 import pathlib
 from pathlib import Path
 
@@ -162,30 +161,6 @@ def test_brief_reports_whether_it_was_generated(client):
     assert body["brief"]["generated"] == (body["brief"]["markdown"] is not None)
 
 
-def test_config_reports_what_the_orchestrator_will_really_run(client):
-    """Read from driver.py rather than restated, so Settings cannot drift
-    into describing a system that no longer exists."""
-    from engine import MODE_MODELS
-
-    body = client.get("/v2/config", headers=AUTH).json()
-    assert {m["mode"]: m["model"] for m in body["modes"]} == MODE_MODELS
-    assert "bypassPermissions" in body["excluded_from_cycle"]
-    assert "bypassPermissions" not in body["permission_cycle"]
-
-
-def test_every_mode_is_reported_with_the_same_capability(client):
-    """The interface should not imply a mode can do less than another one.
-
-    It used to: maintenance and the research modes were spawned with Edit,
-    Write and Bash disallowed, and a session handed work it could not perform
-    ended the turn with nothing done and no way to explain itself. What
-    separates the modes is the methodology each reads, not its tool surface.
-    """
-    body = client.get("/v2/config", headers=AUTH).json()
-    assert {tuple(m["disallowed"]) for m in body["modes"]} == {()}
-    assert len({tuple(sorted(m["allowed"])) for m in body["modes"]}) == 1
-
-
 def test_finished_jobs_are_not_inbox_items(monkeypatch):
     """Most of the vault's flagged jobs are settings work completed in July.
     Including them produced 22 entries, 20 long resolved -- which is how an
@@ -288,75 +263,8 @@ def test_a_failed_tool_result_opens_itself():
     assert blocks[0]["meta"] == "error" and blocks[0]["open"] is True
 
 
-def test_history_marks_what_cannot_be_resumed(client):
-    """A conversation whose engine id was never learned is history you can
-    read but not continue; the two must not look alike."""
-    body = client.get("/v2/sessions/history", headers=AUTH).json()
-    for s in body["sessions"]:
-        if not s["engine_id"]:
-            assert s["resumable"] is False
-
-
-def test_history_can_be_narrowed_before_the_limit_applies(client):
-    """The shell asks for the newest resumable General conversation. Asking
-    for a page and searching it client-side answers a different question: a
-    run of newer rows of another shape hides a session that is still there --
-    which is exactly what test debris in the live database did."""
-    from routers import sessions_v2 as sv2
-
-    wanted = sv2._store.open_session("general", cwd="/tmp", title="the real one")
-    sv2._store.db.execute("UPDATE sessions SET engine_session_id='eng-g' WHERE id=?", (wanted,))
-    sv2._store.db.commit()
-    for _ in range(30):
-        sv2._store.open_session("general", cwd="/tmp", title="debris")   # no engine id
-
-    body = client.get(
-        "/v2/sessions/history?mode=general&resumable=true&limit=1", headers=AUTH
-    ).json()
-    assert [s["id"] for s in body["sessions"]] == [wanted]
-
-
-def test_history_unfiltered_is_unchanged(client):
-    """The filters are opt-in; the plain call still returns everything."""
-    from routers import sessions_v2 as sv2
-
-    sv2._store.open_session("faber", cwd="/tmp", title="no engine id")
-    body = client.get("/v2/sessions/history?limit=5", headers=AUTH).json()
-    assert any(not s["resumable"] for s in body["sessions"])
-
-
 def test_transcript_404s_for_an_unknown_session(client):
     assert client.get("/v2/sessions/history/999999", headers=AUTH).status_code == 404
-
-
-def test_a_conversation_can_be_found_by_its_engine_id(client):
-    """The shell remembers its tabs by engine id, and matching them against
-    the recent-history page silently dropped any tab whose conversation had
-    fallen off it -- a reload lost the session with no error anywhere."""
-    from routers import sessions_v2 as sv2
-
-    sid = sv2._store.open_session("faber", cwd="/tmp", title="the one")
-    sv2._store.db.execute("UPDATE sessions SET engine_session_id='eng-42' WHERE id=?", (sid,))
-    sv2._store.db.commit()
-
-    body = client.get("/v2/sessions/history/by-engine/eng-42", headers=AUTH).json()
-    assert body["id"] == sid
-    assert body["title"] == "the one"
-
-
-def test_an_unknown_engine_id_is_a_404_not_a_422(client):
-    """`/history/{session_id}` takes an int, so a by-engine path reaching it
-    first would answer 422 -- an unhelpful shape for 'no such session'."""
-    r = client.get("/v2/sessions/history/by-engine/nope", headers=AUTH)
-    assert r.status_code == 404
-
-
-def test_history_by_engine_requires_auth(client):
-    assert client.get("/v2/sessions/history/by-engine/eng-42").status_code == 401
-
-
-def test_history_requires_auth(client):
-    assert client.get("/v2/sessions/history").status_code == 401
 
 
 # ------------------------------------------------------------------ search
@@ -499,12 +407,6 @@ def test_delete_requires_auth(client):
     assert client.delete("/v2/sessions/history/1").status_code == 401
 
 
-def test_config_lists_the_models_a_session_can_switch_to(client):
-    from engine import MODEL_CATALOG
-    body = client.get("/v2/config", headers=AUTH).json()
-    assert [m["id"] for m in body["models"]] == [m["id"] for m in MODEL_CATALOG]
-
-
 # ------------------------------------------------------------- recap
 
 def test_no_route_is_defined_twice():
@@ -527,91 +429,6 @@ def test_no_route_is_defined_twice():
             seen.add((method, path))
 
 
-def test_a_short_conversation_gets_no_recap(client, tmp_path, monkeypatch):
-    """Nothing has happened worth summarising, and a recap of one message is
-    noise wearing the shape of a summary."""
-    from orchestrator.store import ConversationStore
-    from routers import sessions_v2
-
-    store = ConversationStore(tmp_path / "h.db")
-    sid = store.open_session("general", cwd="/tmp")
-    store.add_message(sid, "user", "hello")
-    monkeypatch.setattr(sessions_v2, "_store", store)
-
-    assert client.get(f"/v2/sessions/history/{sid}/recap", headers=AUTH).json()["recap"] is None
-    store.close()
-
-
-def test_a_cached_recap_is_reused_without_calling_the_engine(client, tmp_path, monkeypatch):
-    """Generating costs an engine call, so reopening the same conversation
-    must not pay for it again."""
-    from orchestrator.store import ConversationStore
-    from routers import sessions_v2
-
-    store = ConversationStore(tmp_path / "h.db")
-    sid = store.open_session("general", cwd="/tmp")
-    for i in range(4):
-        store.add_message(sid, "user", f"m{i}")
-    store.save_recap(sid, "an earlier summary", 4)
-    monkeypatch.setattr(sessions_v2, "_store", store)
-
-    async def explode(*a, **k):
-        raise AssertionError("the engine must not be called for a fresh cached recap")
-
-    monkeypatch.setattr(sessions_v2, "one_shot", explode)
-    body = client.get(f"/v2/sessions/history/{sid}/recap", headers=AUTH).json()
-    assert body == {"recap": "an earlier summary", "cached": True}
-    store.close()
-
-
-def test_a_stale_recap_is_regenerated(client, tmp_path, monkeypatch):
-    """A line describing the first third of a long conversation is worse than
-    none, because it reads as current."""
-    from orchestrator.store import ConversationStore
-    from routers import sessions_v2
-
-    store = ConversationStore(tmp_path / "h.db")
-    sid = store.open_session("general", cwd="/tmp")
-    for i in range(20):
-        store.add_message(sid, "user", f"message {i}")
-    store.save_recap(sid, "stale", 2)          # far behind the message count
-    monkeypatch.setattr(sessions_v2, "_store", store)
-
-    async def fresh(prompt, **k):
-        return "a newer summary"
-
-    monkeypatch.setattr(sessions_v2, "one_shot", fresh)
-    body = client.get(f"/v2/sessions/history/{sid}/recap", headers=AUTH).json()
-    assert body == {"recap": "a newer summary", "cached": False}
-    assert store.db.execute("SELECT recap_at FROM sessions WHERE id=?", (sid,)).fetchone()[0] == 20
-    store.close()
-
-
-def test_an_engine_failure_returns_null_rather_than_erroring(client, tmp_path, monkeypatch):
-    """A missing recap should quietly not appear, never break the transcript
-    it sits above."""
-    from orchestrator.store import ConversationStore
-    from routers import sessions_v2
-
-    store = ConversationStore(tmp_path / "h.db")
-    sid = store.open_session("general", cwd="/tmp")
-    for i in range(4):
-        store.add_message(sid, "user", f"m{i}")
-    monkeypatch.setattr(sessions_v2, "_store", store)
-
-    async def broken(prompt, **k):
-        raise RuntimeError("engine away")
-
-    monkeypatch.setattr(sessions_v2, "one_shot", broken)
-    r = client.get(f"/v2/sessions/history/{sid}/recap", headers=AUTH)
-    assert r.status_code == 200 and r.json()["recap"] is None
-    store.close()
-
-
-def test_recap_404s_for_an_unknown_conversation(client):
-    assert client.get("/v2/sessions/history/999999/recap", headers=AUTH).status_code == 404
-
-
 # ------------------------------------------------------------- billing
 
 def test_billing_says_plainly_that_nothing_is_charged(client):
@@ -632,29 +449,6 @@ def test_limits_report_overage_even_before_anything_is_known(client):
 
 def test_billing_requires_auth(client):
     assert client.get("/v2/billing").status_code == 401
-
-
-def test_recent_dirs_come_from_real_sessions(tmp_path):
-    """The launcher's list was hardcoded, so it named the same directories
-    whether or not you had opened them and never learned a new project."""
-    from orchestrator.store import ConversationStore
-
-    store = ConversationStore(tmp_path / "h.db")
-    for cwd in ("/a", "/b", "/a"):
-        store.close_session(store.open_session("faber", cwd=cwd))
-    dirs = store.recent_cwds()
-    assert set(dirs) == {"/a", "/b"}      # deduplicated
-    assert dirs[0] == "/a"                # most recently used first
-    store.close()
-
-
-def test_recent_dirs_ignores_sessions_with_no_directory(tmp_path):
-    from orchestrator.store import ConversationStore
-
-    store = ConversationStore(tmp_path / "h.db")
-    store.close_session(store.open_session("faber", cwd=None))
-    assert store.recent_cwds() == []
-    store.close()
 
 
 def test_recent_dirs_come_from_real_sessions(tmp_path):
@@ -939,20 +733,14 @@ def test_mode_dirs_requires_auth(client):
 def test_a_proposal_summary_is_its_rationale_not_its_heading():
     """The inbox read the body's first line, which is "## Rationale" — so
     every item displayed the header while the sentence explaining it sat
-    unread on the line below. Three items all reading "## Rationale" is why
-    the panel made no sense."""
-    from routers.panels import _section
+    unread on the line below. One section reader now, nightshift's, used by
+    the listing and by the apply pipeline alike."""
+    from nightshift.apply import _section
 
     body = "## Rationale\nThe actual reason.\n\n## Diff\n(none)\n"
-    assert _section(body, "Rationale") == "The actual reason."
-    assert _section(body, "Diff") == "(none)"
-    assert _section(body, "Missing") == ""
-
-
-def test_a_multi_line_section_is_joined(): 
-    from routers.panels import _section
-    body = "## Rationale\nfirst line\nsecond line\n\n## Diff\nx"
-    assert _section(body, "Rationale") == "first line second line"
+    assert _section(body, "## rationale") == "The actual reason."
+    assert _section(body, "## diff") == "(none)"
+    assert _section(body, "## missing") is None
 
 
 # `test_deciding_archives_rather_than_applies` stood here until 2026-09-14. It
@@ -1110,7 +898,7 @@ def test_the_status_line_feeds_the_rolling_windows(client):
         "context_window": {"used_percentage": 20},
         "model": {"id": "claude-opus-5"},
     }
-    assert client.post("/v2/sessions/statusline", json=payload, headers=AUTH).status_code == 200
+    assert client.post("/v2/sessions/statusline?slot=term-1", json=payload, headers=AUTH).status_code == 200
 
     limits = client.get("/v2/sessions/limits", headers=AUTH).json()
     assert limits["known"] is True
@@ -1118,8 +906,8 @@ def test_the_status_line_feeds_the_rolling_windows(client):
     assert limits["seven_day"]["used"] == 0.09
     assert limits["five_hour"]["resets_at"] == 1789338000
 
-    back = client.get("/v2/sessions/statusline", headers=AUTH).json()
-    assert back["payload"]["context_window"]["used_percentage"] == 20
+    back = client.get("/v2/sessions/statusline/all", headers=AUTH).json()["slots"]
+    assert back["term-1"]["context_window"]["used_percentage"] == 20
 
 
 def test_a_status_line_post_never_rejects_a_shape(client):
@@ -1152,13 +940,15 @@ def test_a_status_line_report_is_filed_under_its_slot(client):
     this very report arrives."""
     client.post("/v2/sessions/statusline?mode=faber&slot=term-a", headers=AUTH,
                 json={"session_id": "s-a", "model": {"id": "claude-sonnet-5"}})
-    got = client.get("/v2/sessions/statusline?slot=term-a", headers=AUTH).json()["payload"]
+    got = client.get("/v2/sessions/statusline/all", headers=AUTH).json()["slots"]["term-a"]
     assert got["model"]["id"] == "claude-sonnet-5"
     assert "reported_at" in got, "the bar shows the reading's age"
-    # A '-' slot means the shell gave none; fall back to the session id.
+    # A '-' slot means the shell gave none; the report is filed under its
+    # session id, which is not a slot and so is not in the strip's listing.
+    import routers.sessions_v2 as sv2
     client.post("/v2/sessions/statusline?slot=-", headers=AUTH, json={"session_id": "s-b"})
-    assert client.get("/v2/sessions/statusline?session_id=s-b", headers=AUTH
-                      ).json()["payload"] is not None
+    assert "s-b" in sv2._statusline
+    assert "s-b" not in client.get("/v2/sessions/statusline/all", headers=AUTH).json()["slots"]
 
 
 def test_limits_carry_when_they_were_last_reported(client):

@@ -9,7 +9,7 @@ import { Markdown } from './Markdown'
 import { Artifacts } from './Artifacts'
 import { failures, groupTools, summarise, type ToolBlock } from './tools'
 import { Finished, Working } from './Working'
-import { MODE_ACCENT, MODE_LABEL, type Block, type Mode } from './domain'
+import { type Block, type Mode } from './domain'
 
 function Caret({ open }: { open: boolean }) {
   return (
@@ -323,95 +323,6 @@ function renderBlock(
                 meta={`${b.tokens} tokens · ${(b.ms / 1000).toFixed(1)}s`}
                 italic
               />
-            )
-          }
-          if (b.kind === 'handoff') {
-            /* Provenance, not a message. A handed-off session that opened on
-             * a bare prompt would look like something you started and forgot
-             * -- this says where it came from and what it was given, and the
-             * distinction between the two is the point: the new session got
-             * the summary, not the conversation. */
-            return (
-              <div key={i} className="mb-[16px] rounded-[3px] border border-line bg-surface">
-                <div className="flex items-center gap-[7px] border-b border-line px-[11px] py-[7px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-                  Handed off from
-                  <span
-                    className="h-[6px] w-[6px] rounded-[1px]"
-                    style={{ background: MODE_ACCENT[b.from] }}
-                  />
-                  <span className="normal-case tracking-normal text-ink-dim">{b.fromLabel}</span>
-                  <span className="ml-auto normal-case tracking-normal">
-                    carried summary · {MODE_LABEL[b.from]} session still open
-                  </span>
-                </div>
-                <p className="m-0 px-[11px] py-[10px] text-[12.5px] leading-[1.65] text-ink-dim">
-                  {b.carried}
-                </p>
-              </div>
-            )
-          }
-          if (b.kind === 'silent') {
-            /* Deliberately plain, and deliberately not an error: the turn
-             * did not fail, it just did not speak. What it needs to do is
-             * end the ambiguity -- you are looking at a finished turn, not
-             * a crash and not a pause. */
-            const denied = b.denials ?? []
-            return (
-              <div
-                key={i}
-                className="mb-[16px] rounded-[3px] border border-dashed border-line font-mono text-[11px]"
-              >
-                <div className="flex items-center gap-[7px] px-[11px] py-[7px] text-ink-faint">
-                  <span className="h-[5px] w-[5px] rounded-full bg-ink-faint" />
-                  {b.truncated
-                    ? 'turn hit the output limit'
-                    : denied.length > 0
-                      ? 'turn ended blocked'
-                      : b.spoke
-                        ? 'turn ended mid-work'
-                        : 'turn ended with no reply'}
-                  <span className="text-ink-dim">
-                    · {b.tools} tool {b.tools === 1 ? 'call' : 'calls'},{' '}
-                    {b.spoke ? 'nothing said after the last one' : 'no text'}
-                  </span>
-                </div>
-                {denied.length > 0 && (
-                  /* The cause, not a footnote. A session refused its tools had
-                   * nothing it could report -- naming the refusals turns an
-                   * unexplained silence into something you can go and fix. */
-                  <div className="border-t border-line px-[11px] py-[7px] text-ink-dim">
-                    <div className="mb-[4px] uppercase tracking-[0.1em] text-ink-faint">
-                      refused {denied.length} {denied.length === 1 ? 'tool' : 'tools'}
-                    </div>
-                    {denied.map((d, j) => (
-                      <div key={j} className="truncate">
-                        {d.tool}
-                        {d.target && <span className="text-ink-faint"> · {d.target}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          }
-          if (b.kind === 'error') {
-            /* In the transcript rather than a toast: a failed turn is
-             * exactly the thing you scroll back to find, and a toast puts it
-             * somewhere the session's own history does not record. */
-            return (
-              <div
-                key={i}
-                className="mb-[16px] rounded-[3px] border px-[11px] py-[9px] text-[12.5px] leading-[1.6]"
-                style={{
-                  borderColor: 'color-mix(in srgb, var(--color-faber) 40%, var(--color-surface))',
-                  background: 'color-mix(in srgb, var(--color-faber) 8%, var(--color-surface))',
-                }}
-              >
-                <div className="mb-[4px] font-mono text-[10.5px] uppercase tracking-[0.1em] text-faber">
-                  {b.fatal ? 'Session failed' : 'Engine error'}
-                </div>
-                <div className="text-ink-dim">{b.message}</div>
-              </div>
             )
           }
           if (b.kind === 'tool') {

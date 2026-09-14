@@ -3,26 +3,23 @@
 A session is a real interactive `claude` in a pseudo-terminal the shell
 hosts (PTY-MIGRATION.md). Nothing here streams a conversation any more;
 what remains is the argv a terminal spawns with, the status-line reports it
-sends back, history read from the CLI's own transcripts, stats, and recap.
+sends back, history read from the CLI's own transcripts, and stats.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 import interactive
-import jobs
 import vault_io
-from engine import EFFORT_CYCLE, MODE_MODELS, PERMISSION_CYCLE, one_shot
+from engine import MODE_MODELS
 from orchestrator import jsonl
 from orchestrator.store import ConversationStore
 from transcript import blocks_from_messages
@@ -260,22 +257,6 @@ def statusline_all() -> dict:
     return {"slots": {k: v for k, v in _statusline.items() if k.startswith("term-")}}
 
 
-@router.get("/statusline")
-def statusline_read(session_id: str | None = None, slot: str | None = None) -> dict:
-    """The newest status-line reading, for the bar.
-
-    By slot when the shell asks for one of its own terminals; by session id
-    for anything else; the newest of all when neither is given.
-    """
-    if slot:
-        return {"payload": _statusline.get(slot)}
-    if session_id:
-        return {"payload": _statusline.get(session_id)}
-    newest = max(_statusline.values(), key=lambda p: p.get("cost", {}).get(
-        "total_duration_ms", 0), default=None)
-    return {"payload": newest, "sessions": len(_statusline)}
-
-
 @router.get("/limits")
 def limits() -> dict:
     """The rolling windows, or nulls before any session has reported them.
@@ -366,61 +347,6 @@ def stats() -> dict:
     }
 
 
-@router.get("/history")
-def history(limit: int = 25, mode: str | None = None, resumable: bool = False) -> dict:
-    # SQLite reads a negative LIMIT as "no limit", and the list is the
-    # palette's first paint; a caller that asked for -1 gets 500 rows, not
-    # every conversation ever.
-    limit = max(1, min(limit, 500))
-    """Past conversations, newest first.
-
-    The shell reads this on launch, so closing the window stops losing work.
-    Sessions the engine can still resume are marked: a conversation whose
-    engine id we never learned (it died on spawn) is history you can read but
-    not continue, and the two must not look alike.
-
-    `mode` and `resumable` narrow it before the limit applies, which is the
-    only way to ask "the newest General conversation I can continue" and get
-    an answer. Filtering the page client-side cannot: the limit has already
-    chosen the rows.
-    """
-    return {
-        "sessions": [
-            {
-                "id": r["id"],
-                "mode": r["mode"],
-                "title": r["title"] or "(untitled)",
-                "cwd": r["cwd"],
-                "state": r["state"],
-                "engine_id": r["engine_session_id"],
-                "resumable": bool(r["engine_session_id"]) and r["state"] != "failed",
-                "started_at": r["started_at"],
-                "ended_at": r["ended_at"],
-            }
-            for r in _store.recent_sessions(limit=limit, mode=mode, resumable_only=resumable)
-        ]
-    }
-
-
-@router.get("/history/by-engine/{engine_id}")
-def transcript_by_engine(engine_id: str) -> dict:
-    """The same conversation, found by the id the *engine* knows it as.
-
-    The shell remembers an arrangement of tabs by engine id, because that is
-    the id it holds for a live session and the one `--resume` takes. Turning
-    that back into a conversation used to mean scanning the recent-history
-    page and matching -- so a tab opened before the last 25 rows was simply
-    not found, and a reload quietly dropped it. A lookup has no window.
-
-    Declared above the `{session_id}` route: that one takes an int, and
-    `by-engine` reaching it first would be a 422 rather than this.
-    """
-    row_id = _store.find_by_engine_id(engine_id)
-    if row_id is None:
-        raise HTTPException(status_code=404, detail=f"No session for engine id {engine_id}")
-    return transcript(row_id)
-
-
 @router.get("/history/{session_id}")
 def transcript(session_id: int) -> dict:
     """One conversation, as the blocks the shell renders.
@@ -484,84 +410,6 @@ def delete_conversation(session_id: int) -> dict:
 #
 # Three routes for one conversation between three processes: the MCP server
 # asks, the shell shows and answers, the CLI acts on the result.
-
-
-class PermissionAsk(BaseModel):
-    mode: str = "general"
-    tool: str
-    args: dict = Field(default_factory=dict)
-
-
-class PermissionDecision(BaseModel):
-    decision: str
-    # Question text -> the label chosen for it. Only AskUserQuestion sends
-    # this; for every other tool the decision itself is the whole answer.
-    answers: dict[str, str] | None = None
-
-    @field_validator("decision")
-    @classmethod
-    def _known(cls, v: str) -> str:
-        if v not in ("allow", "deny"):
-            raise ValueError("decision must be allow or deny")
-        return v
-
-
-# Regenerated once the conversation has moved on by this many messages; a
-# recap that still describes the state six turns ago is a reminder of the
-# wrong thing.
-RECAP_STALE_AFTER = 6
-
-RECAP_PROMPT = """Summarise this conversation in ONE sentence, for the person who was in it,
-as a reminder of where they left off. Present tense. Name what is being worked on and what
-came last. No preamble, no quotes, no markdown — output only the sentence.
-
-CONVERSATION:
-"""
-
-
-@router.get("/history/{session_id}/recap")
-async def recap(session_id: int) -> dict:
-    """A one-line reminder of what a conversation is about.
-
-    Generated on the cheap tier and cached on the row, so reopening the same
-    conversation does not pay for it again. Regenerated only once the
-    conversation has moved on enough that the stored line would mislead.
-
-    Returns recap: null rather than erroring when there is nothing to
-    summarise or the engine is unavailable — a missing recap should quietly
-    not appear, never break the transcript it sits above.
-    """
-    row = _store.db.execute(
-        "SELECT id, recap, recap_at FROM sessions WHERE id=?", (session_id,)
-    ).fetchone()
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"No session {session_id}")
-
-    count = _store.message_count(session_id)
-    if count < 2:
-        return {"recap": None}          # nothing has happened worth recapping
-    if row["recap"] and count - row["recap_at"] < RECAP_STALE_AFTER:
-        return {"recap": row["recap"], "cached": True}
-
-    # Newest messages, not oldest: the reminder you want is where the
-    # conversation got to, and the tail is also what a long transcript would
-    # otherwise lose to truncation.
-    rows = _store.transcript(session_id)[-40:]
-    body = "\n".join(f"{r['role']}: {(r['content'] or '')[:600]}" for r in rows)
-    if not body.strip():
-        return {"recap": None}
-
-    try:
-        text = await one_shot(RECAP_PROMPT + body[-8000:])
-    except Exception:  # noqa: BLE001 - a recap must never break the transcript
-        return {"recap": None}
-
-    line = " ".join(text.split())
-    if not line:
-        return {"recap": None}
-    _store.save_recap(session_id, line, count)
-    return {"recap": line, "cached": False}
-
 
 
 # Tools that produce a file, and the argument naming it. Derived from what a

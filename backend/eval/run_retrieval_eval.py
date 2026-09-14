@@ -27,8 +27,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
-import sqlite3
 import sys
 from pathlib import Path
 

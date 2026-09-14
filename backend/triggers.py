@@ -102,26 +102,3 @@ def compute_triggers() -> dict[str, bool]:
     tests already depend on."""
     return {trigger: bool(modes) for trigger, modes in compute_trigger_modes().items()}
 
-
-def compute_diffs_awaiting_review() -> int:
-    """"The one stat block on Custos's card" (settings.md) -- must reflect
-    what's actually still sitting in nightshift's inbox, not a counter a
-    settings session set when it staged the proposal and nothing ever
-    updates again. `POST /nightshift/inbox/{id}/accept` (routers/
-    nightshift.py) only touches nightshift's own inbox list and settings'
-    lessons_distilled_through cursor; it has no reference back to the
-    settings-mode job that staged the item, so it can't decrement a stored
-    counter. Recomputing live here each poll -- same self-heal pattern as
-    compute_triggers() above -- sidesteps needing that link at all: found
-    2026-07-22 when an accepted item still read "1 diff staged, awaiting
-    Shayne's accept" on Custos's card an hour after Echo's own inbox
-    already showed empty.
-
-    Counts only origin_mode == "settings" entries -- dev's flagged-job
-    slack items land in the same inbox but never propose a diff (see
-    runner.py's _draft_flagged_job_summary), so they aren't a "diff
-    awaiting review" in the sense this stat means.
-    """
-    nightshift_state, _ = vault_io.read_frontmatter(MAINTENANCE_STATE)
-    inbox = nightshift_state.get("inbox", []) or []
-    return sum(1 for item in inbox if item.get("origin_mode") == "settings")

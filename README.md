@@ -175,7 +175,7 @@ for a file-watching reloader, which are alternatives rather than layers.
 
 **And outside it:** `backend/data/` (SQLite) and `backend/runtime/` (action logs), both gitignored.
 
-**`bootstrap.sh` modifies the machine**, not just the repo — config directories, a `launchd` job, telemetry hooks. `./bootstrap/bootstrap.sh --dry-run` shows exactly what it would do first.
+**`bootstrap.sh` modifies the machine**, not just the repo — a `launchd` job for nightshift, and `.env` if absent. `./bootstrap/bootstrap.sh --dry-run` shows exactly what it would do first.
 
 ## Status
 

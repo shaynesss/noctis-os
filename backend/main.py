@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from auth import ALLOWED_ORIGINS, require_auth  # noqa: E402
-from routers import health, panels, search, sessions_v2  # noqa: E402
+from routers import panels, search, sessions_v2  # noqa: E402
 
 app = FastAPI(title="Noctis OS backend")
 
@@ -27,16 +27,12 @@ app.add_middleware(
 app.include_router(sessions_v2.router, dependencies=[Depends(require_auth)])
 app.include_router(panels.router, dependencies=[Depends(require_auth)])
 app.include_router(search.router, dependencies=[Depends(require_auth)])
-app.include_router(health.router, dependencies=[Depends(require_auth)])
 
 
 # Deliberately unauthenticated, and the only route that is: a liveness probe
 # has to answer before anything is configured, and it returns a constant --
 # no vault data, no state, nothing an unauthenticated caller learns beyond
-# "the process is up". Everything under the /health *router* (/health/strip
-# and friends) does carry auth, which makes this pair easy to misread as a
-# gap; it is not, but say so here rather than leave the next reader to work
-# it out from two files.
+# "the process is up".
 @app.get("/health")
 def health():
     return {"status": "ok"}

@@ -9,6 +9,47 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### What nothing called (2026-09-15)
+
+A scan of the code, the docs and the assets for what nothing references,
+after a week that replaced the orchestrator with a terminal. Removed, each
+confirmed by a caller search and the suites:
+
+- **Backend routes nothing calls:** `GET /v2/config`, `GET /v2/sessions/history`
+  (the list), `GET /v2/sessions/history/by-engine/{id}`,
+  `GET /v2/sessions/history/{id}/recap`, `GET /v2/sessions/statusline` (the
+  single read), `GET /health/strip` and the `health` router — with the
+  orchestrator-era `PermissionAsk`/`PermissionDecision` models, the recap
+  constants, and the store methods only they used (`message_count`,
+  `save_recap`).
+- **Modules nothing imports:** `session_prompt.py` (v1's session-start
+  callout extraction), `health_strip.py`; `vault_io.read_binary` /
+  `write_binary` (Design Lodge previews); `triggers.compute_diffs_awaiting_review`
+  (tests only).
+- **Three copies of one section reader** → one: `nightshift.apply._section`
+  now serves the inbox listing and the runner's rationale and confidence
+  extraction; `panels._section` and the runner's two hand loops are gone.
+- **Frontend exports nothing imports:** the effort cycle (`EFFORT_*`,
+  `DEFAULT_EFFORT`, `Effort` — the per-turn chip went with the composer),
+  `uniqueLabel`, `patchEntry`, `HistorySession`, `ConfigPayload`; the
+  transcript's `error`/`silent`/`handoff` block kinds and their renderers,
+  which the transcript reader cannot emit; the character strip's `working`
+  state, which no caller passed since the stream went.
+- **`bootstrap.sh` steps 6 and 7** — creating per-mode config directories and
+  wiring hooks into them — which the script itself called obsolete: identity
+  travels in the argv and hooks ride in `--settings`.
+- **Retired art:** `assets/world/` (the pixel backdrop), the v1 sprite sheet,
+  and Custos's and Echo's sprites; `public/icons.svg` (template social
+  icons). `NOCTIS_SCRATCH_ROOT` from `.env.example`, which nothing read.
+- Two test functions defined twice (the first copies never ran); unused
+  imports across six files.
+- **Docs:** DOCUMENTATION's two "— removed" placeholder sections deleted and
+  the rest renumbered (every `§` cross-reference updated); STATUS.md rewritten
+  to the current state, its 400 lines of v1 pass logs left to this file.
+
+Suites: 298 backend + 67 frontend after, from 326 + 75 — the difference is
+exactly the tests that covered removed code.
+
 ### Both halves of one piece of work, in one view (2026-09-15)
 
 - **Notes under the project.** A build has two commit paths on purpose —
@@ -497,7 +538,7 @@ real use — the 09-12 cutover removed `launch_config/` while a guard still
 required it and broke every spawn.
 
 Review: `PTY-MIGRATION.md`. Decision record: `SPEC.md` Open questions 7.
-Reference: `DOCUMENTATION.md` §24.
+Reference: `DOCUMENTATION.md` §22.
 
 ### One command to run Noctis, and it opens the app (2026-09-13)
 
@@ -573,7 +614,7 @@ condition, no trace in the vault. Its only defensible reading is what enters a
 session's context at entry versus what it fetches on demand, and the system
 already does that — capped job brief, overlay-as-pointer, opt-in retrieval.
 The policy existed and was undocumented, not unbuilt. Written up in
-DOCUMENTATION.md §6.
+DOCUMENTATION.md §4.
 
 **api_error_status** is parsed, independently of `is_error`: a turn that died
 on a provider 429 was reported as a plain empty turn, which sends you looking
