@@ -70,8 +70,8 @@ doctor:
 		&& echo "up    http://127.0.0.1:$${PORT:-8000}" \
 		|| echo "DOWN  -> make dev   (or: make reload)"
 	@printf 'frontend '
-	@curl -sf -m 2 -o /dev/null http://127.0.0.1:5180 \
-		&& echo 'up    http://127.0.0.1:5180' \
+	@curl -sf -m 2 -o /dev/null http://localhost:5180 \
+		&& echo 'up    http://localhost:5180' \
 		|| echo 'DOWN  -> make dev'
 	@printf 'imports  '
 	@cd backend && .venv/bin/python -c 'import main' >/dev/null 2>&1 \
