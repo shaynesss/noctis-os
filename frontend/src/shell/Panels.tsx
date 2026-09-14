@@ -36,6 +36,13 @@ export interface InboxPayload {
      *  a status and change nothing, and that is the first thing you need to
      *  know before deciding. */
     changes_files?: boolean
+    /** The file the diff edits, if any. */
+    target?: string | null
+    /** What accepting does to Noctis, in one sentence -- derived from the
+     *  diff by the backend, not claimed by the proposal. */
+    effect?: string
+    /** The whole argument, for the read that a decision deserves. */
+    full?: { rationale: string; diff: string; evidence: string; confidence: string }
   }[]
   counts: { proposals: number; flagged: number }
 }
@@ -110,10 +117,16 @@ const KIND_LABEL: Record<string, string> = {
   unreadable: 'unreadable',
 }
 
-export function Inbox({ data }: { data: InboxPayload }) {
+export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () => void }) {
   // Decided items disappear at once rather than at the next load: a row
   // that lingers after you dispatch it reads as a decision that failed.
   const [decided, setDecided] = useState<Set<string>>(new Set())
+  // A decision that failed says why, under the row it failed on. The first
+  // version swallowed the error and left the row as it was, which is
+  // indistinguishable from a button that does nothing.
+  const [failed, setFailed] = useState<Record<string, string>>({})
+  const [open, setOpen] = useState<Set<string>>(new Set())
+  const [busy, setBusy] = useState<string | null>(null)
   const items = data.items.filter((i) => !decided.has(i.id))
 
   if (items.length === 0) {
@@ -129,6 +142,20 @@ export function Inbox({ data }: { data: InboxPayload }) {
     )
   }
 
+  const decide = async (id: string, decision: 'accept' | 'reject') => {
+    setBusy(id)
+    const out = await post<{ decision: string; applied_to: string | null }>(`/v2/inbox/${id}/${decision}`, {})
+    setBusy(null)
+    if ('error' in out) {
+      setFailed((f) => ({ ...f, [id]: out.error }))
+      return
+    }
+    setDecided((d) => new Set(d).add(id))
+    onDecided?.()
+  }
+  const toggle = (id: string) =>
+    setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n })
+
   return (
     <>
       <Heading>
@@ -138,6 +165,7 @@ export function Inbox({ data }: { data: InboxPayload }) {
       <Card>
         {items.map((item, i) => {
           const accent = MODE_ACCENT[item.mode as Mode] ?? 'var(--color-ink-dim)'
+          const isOpen = open.has(item.id)
           return (
             <div key={item.id} className={`px-4 py-[12px] ${i ? 'border-t border-line' : ''}`}>
               <div className="mb-[5px] flex items-center gap-[9px]">
@@ -157,47 +185,83 @@ export function Inbox({ data }: { data: InboxPayload }) {
                   {KIND_LABEL[item.kind] ?? item.kind}
                 </span>
               </div>
+
+              {/* Two lines, in the order a decision needs them: what it is,
+                  then what saying yes does. The consequence comes from the
+                  diff itself, so it cannot be oversold. */}
               <div className="pl-[16px] text-[12px] leading-[1.55] text-ink-dim">{item.detail}</div>
+              {item.effect && (
+                <div className="mt-[4px] pl-[16px] text-[12px] leading-[1.55] text-ink">
+                  <span className="text-ink-faint">→ </span>{item.effect}
+                </div>
+              )}
+
               <div className="mt-[6px] flex items-center gap-[10px] pl-[16px] font-mono text-[10.5px] text-ink-faint">
                 <span>
                   {MODE_LABEL[item.mode as Mode] ?? item.mode}
                   {item.at ? ` · ${item.at.slice(0, 10)}` : ''}
                   {item.confidence ? ` · ${item.confidence} confidence` : ''}
-                  {item.kind === 'proposal' &&
-                    ` · ${item.changes_files ? 'changes files' : 'changes nothing'}`}
+                  {item.target ? ` · ${item.target}` : ''}
                 </span>
-
-                {/* An inbox you cannot dispatch is a report. Accepting
-                    archives the proposal; it never applies a diff, because
-                    maintenance proposes and never edits and a button here
-                    would be that power through another door. */}
                 {item.kind === 'proposal' && (
                   <span className="ml-auto flex items-center gap-[4px]">
+                    {item.full && (
+                      <button type="button" onClick={() => toggle(item.id)}
+                              className="rounded-[3px] border border-line px-[7px] py-[2px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink">
+                        {isOpen ? 'close' : 'read'}
+                      </button>
+                    )}
                     {(['accept', 'reject'] as const).map((decision) => (
                       <button
                         key={decision}
                         type="button"
-                        onClick={async () => {
-                          const out = await post<{ decision: string }>(
-                            `/v2/inbox/${item.id}/${decision}`, {},
-                          )
-                          if (!('error' in out)) {
-                            setDecided((d) => new Set(d).add(item.id))
-                          }
-                        }}
-                        className="rounded-[3px] border border-line px-[7px] py-[2px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink"
+                        disabled={busy === item.id}
+                        onClick={() => void decide(item.id, decision)}
+                        className="rounded-[3px] border border-line px-[7px] py-[2px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink disabled:opacity-40"
                       >
-                        {decision}
+                        {decision === 'accept' && item.changes_files ? 'accept · apply' : decision}
                       </button>
                     ))}
                   </span>
                 )}
               </div>
+
+              {failed[item.id] && (
+                <div className="mt-[6px] pl-[16px] font-mono text-[11px]" style={{ color: 'var(--color-faber)' }}>
+                  {failed[item.id]}
+                </div>
+              )}
+
+              {isOpen && item.full && (
+                <div className="mt-[10px] ml-[16px] flex flex-col gap-[10px] border-l border-line pl-[12px] text-[12px] leading-[1.6] text-ink-dim">
+                  <Section label="rationale"><Markdown src={item.full.rationale} /></Section>
+                  {item.full.diff && (
+                    <Section label="diff">
+                      <pre className="overflow-x-auto whitespace-pre-wrap rounded-[3px] bg-elevated px-[10px] py-[8px] font-mono text-[11px] leading-[1.5]">
+                        {item.full.diff.split('\n').map((l, k) => (
+                          <div key={k} className={l.startsWith('+') ? 'text-ink' : l.startsWith('-') ? 'text-ink-faint line-through' : 'text-ink-faint'}>{l}</div>
+                        ))}
+                      </pre>
+                    </Section>
+                  )}
+                  {item.full.evidence && <Section label="evidence"><Markdown src={item.full.evidence} /></Section>}
+                  {item.full.confidence && <Section label="confidence"><Markdown src={item.full.confidence} /></Section>}
+                </div>
+              )}
             </div>
           )
         })}
       </Card>
     </>
+  )
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">{label}</div>
+      {children}
+    </div>
   )
 }
 

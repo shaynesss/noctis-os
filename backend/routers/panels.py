@@ -11,6 +11,7 @@ says the generator has not run, because the invented one gets believed.
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -19,7 +20,8 @@ from pydantic import BaseModel, Field
 
 import vault_io
 from prompts.render import render
-from jobs import MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
+from jobs import MAINTENANCE, MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
+from nightshift import apply as proposals
 from engine import (EFFORT_CYCLE, MODEL_CATALOG, MODE_MODELS, MODE_TOOLS, PERMISSION_CYCLE)
 
 router = APIRouter(prefix="/v2", tags=["panels"])
@@ -130,15 +132,81 @@ def _section(body: str, heading: str) -> str:
     return ""
 
 
+MAINTENANCE_STATE = f"{MAINTENANCE}/state.md"
+
+
+def _inbox_index() -> dict[str, dict]:
+    """The index Custos keeps beside the files: `state.md`'s `inbox` array,
+    keyed by slug. The proposal file is the content; the index is where the
+    one-line description, the rationale and the confidence live, per
+    `inbox/README.md` -- so a listing that read only the file's own
+    frontmatter (which it does not have) showed slugs for titles."""
+    if not vault_io.file_exists(MAINTENANCE_STATE):
+        return {}
+    meta = _safe_frontmatter(MAINTENANCE_STATE) or {}
+    return {str(e.get("slug")): e for e in (meta.get("inbox") or []) if isinstance(e, dict)}
+
+
+def _plain(text: str) -> str:
+    """Markdown emphasis out of a one-line summary: `**probe**` reads as
+    asterisks in a plain span."""
+    return re.sub(r"[*_`]+", "", text).strip()
+
+
+def _summary(text: str, limit: int = 320) -> str:
+    """A cut at a word, with an ellipsis, rather than mid-word at a byte count
+    ("This names that mo")."""
+    text = _plain(" ".join(text.split()))
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0]
+    return cut.rstrip(",;:") + "…"
+
+
+def _target_of(diff: str) -> str | None:
+    match = re.search(r"^--- (.+)$", diff, re.MULTILINE)
+    return match.group(1).strip() if match else None
+
+
+_FILE_NAMES = {
+    "modes/dev/dev.md": ("Faber's methodology", "Faber"),
+    "modes/learn/learn.md": ("Noctua's methodology", "Noctua"),
+    "modes/research/research.md": ("Vesper's methodology", "Vesper"),
+    "maintenance/audit.md": ("Custos's own method", "Custos"),
+    "maintenance/schedule.md": ("the maintenance schedule", "maintenance"),
+}
+
+
+def _effect(target: str | None, hunks: int) -> str:
+    """What accepting does to Noctis, in one sentence. Deterministic from the
+    diff, because the person deciding needs the consequence before the
+    argument -- and the consequence is a fact about the file, not a claim
+    the proposal makes about itself."""
+    if not target:
+        return "Accepting archives this note. Nothing in Noctis changes."
+    name, who = _FILE_NAMES.get(target, (f"`{target}`", None))
+    where = f"in {hunks} place{'s' if hunks != 1 else ''}"
+    if who:
+        return (f"Accepting edits {name} {where} and commits the vault. "
+                f"The next {who} session reads the new text; sessions already running do not.")
+    if target.startswith("wiki/"):
+        return f"Accepting edits the wiki page {name} {where} and commits the vault."
+    return f"Accepting edits {name} {where} and commits the vault."
+
+
 def _proposals() -> list[dict]:
     """Maintenance proposals staged for review.
 
     Maintenance can only propose — the tool policy enforces it at spawn —
     so everything here is waiting on a human decision by construction.
+    Each item carries the decision's consequence (`effect`, `target`) and the
+    full read (`full`: rationale, diff, evidence, confidence) so the panel can
+    show a summary and open into the whole argument without a second call.
     """
     staged = MAINTENANCE_INBOX
     if not vault_io.file_exists(staged):
         return []
+    index = _inbox_index()
     items: list[dict] = []
     # list_dir already returns stems of *.md, so there is no extension to
     # strip or filter on -- doing either silently matched nothing.
@@ -147,26 +215,52 @@ def _proposals() -> list[dict]:
         # a documentation file in a queue of things awaiting a decision.
         if slug.upper() == "README":
             continue
+        entry = index.get(slug, {})
         meta = _safe_frontmatter(f"{staged}/{slug}.md") or {}
         body = ""
         try:
             _, body = vault_io.read_frontmatter(f"{staged}/{slug}.md")
         except Exception:  # noqa: BLE001 - covered by _safe_frontmatter above
             pass
-        rationale = meta.get("rationale") or _section(body, "Rationale")
-        diff = _section(body, "Diff")
+        rationale = (entry.get("rationale") or meta.get("rationale")
+                     or _section(body, "Rationale"))
+        # Raw, line-preserving reads for the diff and the full text --
+        # `_section` above flattens to one line for a summary, which turns a
+        # diff header into "modes/dev/dev.md +++ modes/dev/dev.md @@ …".
+        raw = lambda h: (proposals._section(body, f"## {h}") or "").strip()  # noqa: E731
+        diff = raw("diff")
+        has_diff = bool(diff) and "none" not in diff.lower()[:20]
+        if not rationale and not has_diff:
+            # A file with neither an argument nor a change is not a proposal;
+            # an empty template was sitting in the queue as "untitled".
+            items.append({"id": slug, "kind": "unreadable", "mode": "maintenance",
+                          "title": slug, "detail": "no rationale and no diff -- not a proposal",
+                          "at": ""})
+            continue
+        target = _target_of(diff) if has_diff else None
+        hunks = len(proposals._hunks(diff)) if has_diff else 0
+        confidence = entry.get("confidence") or meta.get("confidence") or \
+            (raw("confidence").split("--")[0].split("—")[0].strip().lower() or None)
         items.append({
             "id": slug,
             "kind": "proposal",
-            "mode": "maintenance",
-            "title": meta.get("description") or slug.replace("-", " "),
-            "detail": rationale[:300],
+            "mode": entry.get("origin_mode") or "maintenance",
+            "title": entry.get("description") or meta.get("description") or slug.replace("-", " "),
+            "detail": _summary(rationale),
             # Whether accepting it would change a file, which is the first
             # thing you need to know before deciding. Several proposals are
             # status surfacing and change nothing at all.
-            "changes_files": bool(diff) and "none" not in diff.lower()[:20],
-            "at": str(meta.get("staged_at") or ""),
-            "confidence": meta.get("confidence"),
+            "changes_files": has_diff,
+            "target": target,
+            "effect": _effect(target, hunks),
+            "at": str(entry.get("staged_at") or meta.get("staged_at") or ""),
+            "confidence": confidence,
+            "full": {
+                "rationale": raw("rationale"),
+                "diff": diff if has_diff else "",
+                "evidence": raw("evidence"),
+                "confidence": raw("confidence"),
+            },
         })
     return items
 
@@ -493,6 +587,39 @@ def mode_dirs() -> dict:
     }
 
 
+def _drop_index_entry(slug: str) -> None:
+    """The index entry goes with the file. `diffs_awaiting_review` and the
+    rail badge both read the live `inbox` array, so a decided item left in it
+    is an item that never leaves the count."""
+    if not vault_io.file_exists(MAINTENANCE_STATE):
+        return
+    try:
+        meta, body = vault_io.read_frontmatter(MAINTENANCE_STATE)
+    except Exception:  # noqa: BLE001 - a malformed index must not block the decision
+        return
+    inbox = [e for e in (meta.get("inbox") or []) if not (isinstance(e, dict) and e.get("slug") == slug)]
+    meta["inbox"] = inbox
+    meta["diffs_awaiting_review"] = len(inbox)
+    vault_io.write_frontmatter(MAINTENANCE_STATE, meta, body)
+
+
+def _commit_vault(message: str, paths: list[str]) -> bool:
+    """A decision is a commit. The vault is a git repo and applying a diff is
+    deterministic backend work (`audit.md`, "Apply + verify"); leaving the
+    result uncommitted would make the next session's `git status` the only
+    record that anything was decided. Never pushes. Returns False rather than
+    failing the decision when git itself cannot run."""
+    root = vault_io.get_vault_path()
+    try:
+        subprocess.run(["git", "-C", str(root), "add", "-A", "--", *paths],
+                       check=True, capture_output=True, timeout=20)
+        subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", message],
+                       check=True, capture_output=True, timeout=20)
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
+
+
 @router.post("/inbox/{item_id}/{decision}")
 def decide(item_id: str, decision: str) -> dict:
     """Accept or reject a staged proposal.
@@ -501,10 +628,20 @@ def decide(item_id: str, decision: str) -> dict:
     and offered nothing to do about them, so the only way to clear it was to
     go and move files by hand — which is why it stopped being read.
 
-    Accepting archives the proposal rather than applying it. Maintenance
-    proposes and never edits, and that guarantee is enforced at spawn; a
-    route here that applied a diff would be the same power arriving through
-    a different door.
+    **Accepting applies the diff.** A previous version archived without
+    applying, on the argument that maintenance proposes and never edits and
+    a route that applied would be that power through another door. That
+    inverted the design: the guarantee is that *maintenance* never edits;
+    the person accepting is the edit, and `audit.md`'s Apply + verify stage
+    names this route as where it happens — deterministic backend work, not
+    session judgment. So: apply (all hunks or none, `apply.py`), honour the
+    markers a proposal may carry (a lessons cursor to advance, a job to
+    close), archive, drop the index entry, commit the vault. A diff that no
+    longer applies -- the target moved on -- is a 409 with the reason, and
+    nothing is moved: the proposal stays in the queue, visibly stale.
+
+    Rejecting archives, drops the index entry and commits, so a rejection is
+    on the record too.
     """
     if decision not in {"accept", "reject"}:
         raise HTTPException(status_code=400, detail="Decision is accept or reject")
@@ -519,8 +656,31 @@ def decide(item_id: str, decision: str) -> dict:
     if vault_io.file_exists(archive):
         raise HTTPException(status_code=409, detail=f"{item_id} was already decided")
 
+    applied: str | None = None
+    closed: str | None = None
+    if decision == "accept":
+        text = vault_io.read_file(staged)
+        try:
+            applied = proposals.apply_proposal(text)
+        except proposals.DiffApplyError as exc:
+            raise HTTPException(status_code=409, detail=f"Could not apply: {exc}")
+        if mode := proposals.parse_cursor_advance(text):
+            proposals.advance_lessons_cursor(mode)
+        origin = proposals.parse_job_origin(text)
+        if origin:
+            job_mode, job_slug = origin
+            proposals.close_job(job_mode, job_slug,
+                                f"Resolved: {item_id} accepted and applied to {applied or 'nothing'}.")
+            closed = f"{job_mode}/{job_slug}"
+
     vault_io.move_file(staged, archive)
-    return {"item": item_id, "decision": decision, "archived_to": archive}
+    _drop_index_entry(item_id)
+    touched = [staged, archive, MAINTENANCE_STATE] + ([applied] if applied else [])
+    committed = _commit_vault(
+        f"{'Accept' if decision == 'accept' else 'Reject'} {item_id}"
+        + (f": applied to {applied}" if applied else ""), touched)
+    return {"item": item_id, "decision": decision, "archived_to": archive,
+            "applied_to": applied, "closed_job": closed, "committed": committed}
 
 
 class WorklistUpdate(BaseModel):

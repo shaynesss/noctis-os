@@ -9,11 +9,18 @@ const RAIL = [
   // The conversation surface: the real CLI, hosted in a pseudo-terminal.
   { id: 'terminal', label: 'Terminal', d: 'M4 4h16v16H4zM7 9l3 3-3 3M13 15h4' },
   { id: 'stats', label: 'Stats', d: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
-  { id: 'inbox', label: 'Inbox', d: 'M4 13h5l1 3h4l1-3h5M4 13l2-8h12l2 8v6H4z', badge: 3 },
+  { id: 'inbox', label: 'Inbox', d: 'M4 13h5l1 3h4l1-3h5M4 13l2-8h12l2 8v6H4z' },
   { id: 'settings', label: 'Settings', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 14H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z' },
 ] as const
 
-export function Rail({ view, onView }: { view: string; onView: (v: string) => void }) {
+export function Rail({ view, onView, badges }: {
+  view: string
+  onView: (v: string) => void
+  /** Counts worth a glance, by rail item id. The inbox's is what is
+   *  actually waiting on a decision -- it was a literal 3 in this file for
+   *  weeks, which is a badge that says nothing. */
+  badges?: Partial<Record<string, number>>
+}) {
   // pt-7 clears the macOS traffic lights, which titleBarStyle:"Overlay"
   // floats over the content at the top-left. They cannot be moved to the
   // right on macOS, so the rail moves out from under them instead.
@@ -50,9 +57,9 @@ export function Rail({ view, onView }: { view: string; onView: (v: string) => vo
               <path d={item.d} />
             </svg>
             {item.label}
-            {'badge' in item && item.badge ? (
+            {badges?.[item.id] ? (
               <span className="ml-auto rounded-lg bg-maint px-[6px] font-mono text-[10px] font-bold text-ground">
-                {item.badge}
+                {badges[item.id]}
               </span>
             ) : null}
           </button>

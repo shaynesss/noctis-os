@@ -943,21 +943,10 @@ def test_a_multi_line_section_is_joined():
     assert _section(body, "Rationale") == "first line second line"
 
 
-def test_deciding_archives_rather_than_applies(monkeypatch, client):
-    """Maintenance proposes and never edits, enforced at spawn. A route that
-    applied a diff would be the same power arriving through another door."""
-    from routers import panels
-
-    moved = {}
-    monkeypatch.setattr(panels.vault_io, "file_exists",
-                        lambda p: "inbox" in p)
-    monkeypatch.setattr(panels.vault_io, "move_file",
-                        lambda src, dst: moved.update({"src": src, "dst": dst}))
-
-    body = client.post("/v2/inbox/some-proposal/accept", headers=AUTH).json()
-    assert moved["src"].endswith("inbox/some-proposal.md")
-    assert moved["dst"].endswith("archive/some-proposal.md")
-    assert body["decision"] == "accept"
+# `test_deciding_archives_rather_than_applies` stood here until 2026-09-14. It
+# pinned the inversion the inbox rebuild removed: accepting now applies the
+# diff (test_inbox.py). The guarantee that survives is that *maintenance*
+# never edits; the person accepting is the edit.
 
 
 def test_an_unsafe_item_id_is_refused(client):

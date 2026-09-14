@@ -9,6 +9,34 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The inbox decides, and says what deciding does (2026-09-14)
+
+Found live with two real proposals waiting: titles were slugs, summaries
+were cut mid-word with markdown asterisks in them, an empty template sat in
+the queue as "untitled", the rail badge was a literal `3` in the source, and
+**accept archived the proposal without applying its diff** — the route's own
+docstring argued that applying would be "maintenance's power through another
+door", which inverted the design: the guarantee is that *maintenance* never
+edits; the person accepting *is* the edit, and `audit.md` names this route as
+where the deterministic apply happens.
+
+- Each row now reads: the proposal's description (from Custos's index in
+  `state.md`, which the listing never consulted), a one-line summary cut at
+  a word, and **what accepting does** — "edits Faber's methodology in 2
+  places and commits the vault; the next Faber session reads the new text"
+  — derived from the diff by the backend, so it cannot be oversold.
+  `read` opens the whole argument: rationale, the diff with removed and
+  added lines told apart, evidence, confidence.
+- **Accept applies** — all hunks or none (`nightshift/apply.py`), then the
+  markers a proposal may carry (a lessons cursor, a job to close), archive,
+  the index entry dropped, and a commit in the vault. A diff that no longer
+  applies is a 409 with the reason and the proposal stays, visibly stale.
+  Reject archives, drops the entry and commits too, so a no is on record.
+- A decision that fails says why under its row. The first version swallowed
+  the error, which is indistinguishable from a button that does nothing.
+- The badge is the live count of proposals, re-read every 30s and the moment
+  a decision is made here.
+
 ### Two lines and a row (2026-09-14)
 
 - The tab strip is the rail's title band's height, from the same token, so

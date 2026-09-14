@@ -131,6 +131,24 @@ export function App() {
     return () => { alive = false; clearInterval(id) }
   }, [])
 
+  /* What the inbox holds, for the rail's badge: proposals waiting on a
+   * decision. Read on a slow cadence -- Custos stages overnight and a
+   * session stages rarely -- and again the moment a decision is made here,
+   * so the badge never shows an item that was just dispatched. */
+  const [inboxCount, setInboxCount] = useState(0)
+  const [inboxTick, setInboxTick] = useState(0)
+  useEffect(() => {
+    let alive = true
+    const read = () => {
+      void get<InboxPayload>('/v2/inbox').then((d) => {
+        if (alive && d) setInboxCount(d.counts.proposals)
+      })
+    }
+    read()
+    const id = setInterval(read, 30_000)
+    return () => { alive = false; clearInterval(id) }
+  }, [inboxTick])
+
   /* Strays from before a reload.
    *
    * The PTY registry lives in the Rust process, and a reload of the web
@@ -294,10 +312,10 @@ export function App() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <Rail view={view} onView={setView} />
+        <Rail view={view} onView={setView} badges={{ inbox: inboxCount }} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {view !== 'terminal' && <Pane view={view} limits={limits} />}
+          {view !== 'terminal' && <Pane view={view} limits={limits} onInboxDecided={() => setInboxTick((t) => t + 1)} />}
           {/* Always mounted, shown only on its rail item: a terminal's
               session dies with its component, so it cannot live inside a
               conditional the way the panels do. */}
@@ -411,13 +429,18 @@ function HistoryView({ transcript, full, onResume, onClose, onOpenDoc }: {
   )
 }
 
-function Pane({ view, limits }: { view: string; limits?: { five_hour: Window; seven_day: Window } | null }) {
+function Pane({ view, limits, onInboxDecided }: {
+  view: string
+  limits?: { five_hour: Window; seven_day: Window } | null
+  /** A proposal was just accepted or rejected here; the rail's badge re-reads. */
+  onInboxDecided?: () => void
+}) {
   if (view === 'stats') return <Stats limits={limits} />
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
         {view === 'brief' && <Fetched<BriefPayload> path="/v2/brief" what="the brief" render={(d) => <Brief data={d} />} />}
-        {view === 'inbox' && <Fetched<InboxPayload> path="/v2/inbox" what="the inbox" render={(d) => <Inbox data={d} />} />}
+        {view === 'inbox' && <Fetched<InboxPayload> path="/v2/inbox" what="the inbox" render={(d) => <Inbox data={d} onDecided={onInboxDecided} />} />}
         {view === 'settings' && <Settings />}
       </div>
     </div>
