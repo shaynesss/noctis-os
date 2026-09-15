@@ -14,7 +14,7 @@ import { post, put } from './engine'
 import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
 import { MODE_ACCENT, MODE_LABEL, VAULT_MODE, type Mode } from './domain'
-import { ModeMark } from './Chrome'
+import { ModeMark, Pill, usePill } from './Chrome'
 import { gridColumns } from './Terminals'
 import { openExternal } from './host'
 
@@ -859,6 +859,9 @@ function Prompts() {
   const [selected, setSelected] = useState('system')
   const [draft, setDraft] = useState<string | null>(null)
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  // The same sliding highlight as the rail and the tab strip: the pill in
+  // the signature follows the pointer and rests on the selected file.
+  const tabs = usePill(selected)
 
   if (data === false) return <Unreachable what="the prompts" />
   if (data === null) return <Loading />
@@ -869,18 +872,22 @@ function Prompts() {
 
   return (
     <Card>
-      <div className="flex items-center gap-[6px] border-b border-line px-[10px] py-[7px]">
+      <div ref={tabs.list} onMouseLeave={tabs.leave}
+           className="relative flex items-center gap-[6px] border-b border-line px-[10px] py-[7px]">
+        <Pill at={tabs.pill} />
         {data.prompts.map((p) => (
           <button
             key={p.id}
+            ref={tabs.row(p.id)}
             type="button"
+            onMouseEnter={() => tabs.enter(p.id)}
             onClick={() => {
               setSelected(p.id)
               setDraft(null)          // an unsaved edit is not carried to another file
               setSaving('idle')
             }}
-            className={`rounded-control px-[8px] py-[3px] font-mono text-[11.5px] transition-colors ${
-              p.id === selected ? 'bg-elevated text-ink' : 'text-ink-faint hover:text-ink-dim'
+            className={`relative rounded-control px-[8px] py-[3px] font-mono text-[11.5px] transition-colors ${
+              p.id === selected || tabs.hover === p.id ? 'text-ink' : 'text-ink-faint'
             }`}
           >
             {p.id}
