@@ -17,6 +17,42 @@ const RAIL = [
   { id: 'settings', label: 'Settings', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 14H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z' },
 ] as const
 
+/* One highlight for a whole list, not one per row (2026-09-15, after
+ * Bencho's selection list): a rounded pill that slides to the row under the
+ * pointer and settles back on the active row when the pointer leaves. Rows
+ * register with `row(key)`; the pill is measured from their rects relative
+ * to the list after layout -- so a badge, a longer label or a row nested in
+ * a bracket never puts it off, and on the first pass (refs still empty) it
+ * simply waits for the measurement. Used by the rail and the tab strip. */
+export type PillRect = { top: number; left: number; width: number; height: number }
+export function usePill(active: string | null) {
+  const [hover, setHover] = useState<string | null>(null)
+  const rows = useRef<Record<string, HTMLElement | null>>({})
+  const list = useRef<HTMLDivElement>(null)
+  const [pill, setPill] = useState<PillRect | null>(null)
+  const key = hover ?? active
+  useLayoutEffect(() => {
+    const target = key ? rows.current[key] : null
+    const box = list.current
+    if (!target || !box) { setPill(null); return }
+    const t = target.getBoundingClientRect(), b = box.getBoundingClientRect()
+    setPill({ top: t.top - b.top, left: t.left - b.left, width: t.width, height: t.height })
+  }, [key])
+  return {
+    list, hover, pill,
+    row: (k: string) => (el: HTMLElement | null) => { rows.current[k] = el },
+    enter: (k: string) => setHover(k),
+    leave: () => setHover(null),
+  }
+}
+export function Pill({ at }: { at: PillRect | null }) {
+  if (!at) return null
+  return (
+    <div aria-hidden className="pointer-events-none absolute rounded-control bg-elevated"
+         style={{ ...at, transition: 'top 220ms cubic-bezier(0.2, 0.8, 0.2, 1), left 220ms cubic-bezier(0.2, 0.8, 0.2, 1), width 220ms cubic-bezier(0.2, 0.8, 0.2, 1), height 220ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />
+  )
+}
+
 export function Rail({ view, onView, badges }: {
   view: string
   onView: (v: string) => void
@@ -25,22 +61,7 @@ export function Rail({ view, onView, badges }: {
    *  weeks, which is a badge that says nothing. */
   badges?: Partial<Record<string, number>>
 }) {
-  /* One highlight for the whole list, not one per row (2026-09-15, after
-   * Bencho's selection list): a rounded pill that slides to the row under
-   * the pointer and settles back on the active row when the pointer
-   * leaves. Its position is measured from the rows themselves, so a badge
-   * or a longer label never puts it off. */
-  const [hover, setHover] = useState<string | null>(null)
-  const rows = useRef<Record<string, HTMLButtonElement | null>>({})
-  const list = useRef<HTMLDivElement>(null)
-  const [pill, setPill] = useState<{ top: number; height: number } | null>(null)
-  // Measured after layout, not during render: on the first pass the row
-  // refs are empty, and a pill computed then would not appear until the
-  // first hover.
-  useLayoutEffect(() => {
-    const target = rows.current[hover ?? view]
-    setPill(target ? { top: target.offsetTop, height: target.offsetHeight } : null)
-  }, [hover, view])
+  const { list, row, enter, leave, hover, pill } = usePill(view)
 
   // pt-7 clears the macOS traffic lights, which titleBarStyle:"Overlay"
   // floats over the content at the top-left. They cannot be moved to the
@@ -60,25 +81,22 @@ export function Rail({ view, onView, badges }: {
 
       <div className="h-[10px] shrink-0" />
 
-      <div ref={list} className="relative flex flex-col gap-[2px] px-[10px]" onMouseLeave={() => setHover(null)}>
-        {pill && (
-          <div aria-hidden
-               className="pointer-events-none absolute left-[10px] right-[10px] rounded-control bg-elevated"
-               style={{ top: pill.top, height: pill.height,
-                        transition: 'top 220ms cubic-bezier(0.2, 0.8, 0.2, 1), height 220ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />
-        )}
+      {/* The rows keep icon-then-label, left-aligned; the block of rows is
+          what sits in the middle of the rail. */}
+      <div ref={list} className="relative mx-auto flex w-[124px] flex-col gap-[2px]" onMouseLeave={leave}>
+        <Pill at={pill} />
         {RAIL.map((item) => {
           const active = view === item.id
           const lit = active || hover === item.id
           return (
             <button
               key={item.id}
-              ref={(el) => { rows.current[item.id] = el }}
+              ref={row(item.id)}
               type="button"
               onClick={() => onView(item.id)}
-              onMouseEnter={() => setHover(item.id)}
+              onMouseEnter={() => enter(item.id)}
               aria-current={active}
-              className={`relative flex w-full items-center justify-center gap-[9px] rounded-control px-[12px] py-[7px] text-[12.5px] transition-colors duration-150 ${
+              className={`relative flex w-full items-center gap-[9px] rounded-control px-[12px] py-[7px] text-[12.5px] transition-colors duration-150 ${
                 lit ? 'text-ink' : 'text-ink-dim'
               }`}
             >

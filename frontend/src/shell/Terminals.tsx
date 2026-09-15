@@ -21,7 +21,7 @@
 import { useRef } from 'react'
 import { Terminal } from './Terminal'
 import { MODE_LABEL, type Mode } from './domain'
-import { ModeMark } from './Chrome'
+import { ModeMark, Pill, usePill } from './Chrome'
 
 export interface Slot {
   id: string
@@ -107,6 +107,11 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
     if (dragging.current && !dragging.current.includes(target.id)) e.preventDefault()
   }
 
+  // The strip's one sliding highlight, as the rail's: it follows the
+  // pointer and rests on the showing tab. The showing tab is also ringed in
+  // the signature, so which one you are on survives the pill leaving it.
+  const strip = usePill(shown?.id ?? null)
+
   const tab = (s: Slot, grouped: boolean) => {
     const i = slots.indexOf(s)
     const on = s.id === shown?.id
@@ -114,13 +119,15 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
     return (
       <div
         key={s.id}
+        ref={strip.row(s.id)}
         draggable={!grouped}
         onDragStart={grouped ? undefined : startDrag([s.id])}
         onDragEnd={() => { dragging.current = null }}
         onDragOver={canDropOn(s)}
         onDrop={dropOn(s)}
-        className={`group flex h-[26px] cursor-default items-center gap-[7px] rounded-control px-[9px] ${
-          on ? 'bg-elevated text-ink' : inSplit ? 'text-ink' : 'text-ink-dim hover:text-ink'
+        onMouseEnter={() => strip.enter(s.id)}
+        className={`group relative flex h-[26px] cursor-default items-center gap-[7px] rounded-control px-[9px] transition-colors duration-150 ${
+          on ? 'text-ink shadow-[inset_0_0_0_1px_var(--color-sig)]' : inSplit || strip.hover === s.id ? 'text-ink' : 'text-ink-dim'
         }`}
       >
         <button type="button" onClick={() => onSelect(s.id)} className="flex items-center gap-[7px]">
@@ -166,6 +173,8 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
           right edge outside the centring so it cannot push the tabs off
           centre. */}
       <div data-tauri-drag-region
+           ref={strip.list}
+           onMouseLeave={strip.leave}
            className="relative flex h-[var(--head-band)] shrink-0 items-center justify-center gap-[2px] border-b border-line px-[8px] font-mono text-[11px]"
            onDragOver={(e) => { if (dragging.current) e.preventDefault() }}
            onDrop={(e) => {
@@ -173,6 +182,7 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
              if (dragging.current) onReorder(dragging.current, null)
              dragging.current = null
            }}>
+        <Pill at={strip.pill} />
         {runs.map((run) =>
           run.length === 1 ? tab(run[0], false) : (
             /* One bracket around a split's tabs, with a rule between them:
@@ -185,7 +195,7 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
                  draggable
                  onDragStart={startDrag(run.map((s) => s.id))}
                  onDragEnd={() => { dragging.current = null }}
-                 className="flex h-[26px] cursor-grab items-center rounded-control border border-line px-[2px] active:cursor-grabbing"
+                 className="relative flex h-[26px] cursor-grab items-center rounded-control border border-line px-[2px] active:cursor-grabbing"
                  title="shown together — drag to move the group">
               {run.map((s, k) => (
                 <div key={s.id} className="flex items-center">
