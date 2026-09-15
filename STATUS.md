@@ -19,7 +19,7 @@ The spec, the product brief and the PTY migration record live in the vault: `sec
 Verified live, not only by tests.
 
 - **Terminal** — the real `claude`, one per tab, in the app's palette. A fresh session opens by saying what it is; sessions survive a reload (the PTY registry outlives the page and reattaches with a replay), resume by engine session id, split into a grid (`⌘⇧-number`; a row to three, then 2×2, 3×2, 3×3), and a split's tabs drag as one bracket.
-- **Repo** — one group per repository the open terminals are in; branch, ahead/behind, uncommitted files, the last twenty commits with red/green push dots and the sprite of whose work each is; GitHub's PRs and issues loaded after the local half; a **Notes** section showing the vault side of a dev job's project; the **push button**, which runs as you, refuses attribution lines, and asks separately before a force push.
+- **Repo** — one group per repository the open terminals are in; branch, ahead/behind, uncommitted files, the last twenty commits with red/green push dots and the sprite of whose work each is; GitHub's PRs and issues loaded after the local half; a **Record** section showing the vault side of a dev job's project; the **push button**, which runs as you, refuses attribution lines, and asks separately before a force push.
 - **Stats** — the 5-hour and 7-day windows, lifetime tokens by kind, a year of activity, and every session's history indexed from the CLI's own transcripts; `⌘K` searches it.
 - **Inbox** — maintenance proposals as packages with a red/green diff; accepting applies the diff, archives the proposal and commits the vault.
 - **Settings** — the universal prompt and each mode's overlay, edited in the vault in place, with the regression suite listed.
@@ -35,7 +35,7 @@ Verified live, not only by tests.
 3. **Effort at spawn.** `interactive-args` does not take `--effort`; a terminal session runs at the CLI's default. Should come back as a launcher option and a Settings default.
 4. **Running the regression suite from Settings.** The cases are listed with their cost; running them means hosting thirteen sessions and reporting back.
 5. **The MCP server travels as three directories.** `mcp/server.py` imports `retrieval/` and `orchestrator/`; "nothing to install" is true, "copy one file" is not. The adoption docs should say so.
-6. **The Repo tab's Notes section** — review its fold, the whole-vault push it carries, and whether every commit touching a job's `context.md` belongs in it (see the vault's job context for the open questions).
+6. **The Repo tab's Record section** — review its fold, the whole-vault push it carries, and whether every commit touching a job's `context.md` belongs in it (see the vault's job context for the open questions).
 
 ## Known gaps, accepted
 

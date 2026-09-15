@@ -9,6 +9,27 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The Repo tab: one module per repository (2026-09-15)
+
+- **A repository is one box.** Name and branch on the lid, its terminals and
+  path, where it stands and the push, then Uncommitted, Commits, Record and
+  GitHub as folds inside the same border — the grouping is the box, not the
+  reader's inference. Modules lay out by the terminals' rule: a row up to
+  three, a grid after; with more than one on screen the commit lists start
+  folded.
+- **Ten commits show; the rest scroll.** Subjects wrap instead of truncating
+  — a line you cannot finish reading is a line you did not read — and the
+  fold headers say `9 of 20 not on GitHub` rather than a cut-off subject.
+- **Notes is Record.** "Notes" was too vague; "Documentation" would collide
+  with the repo's own `DOCUMENTATION.md`. The vault side of a project is the
+  build's *record* — spec, briefs, migration log — which is what `dev.md`
+  calls it.
+- The universal prompt names the vault's **absolute path** and the
+  folder-to-character mapping (`modes/dev` is Faber, and so on): a session
+  in a project directory could not resolve a relative `second-brain/`, and
+  one reading `modes/` found four folder names and three character names
+  with nothing joining them.
+
 ### Sessions restore one at a time (2026-09-15)
 
 The dev stack was killed twice for memory while restoring six tabs. Measured

@@ -8,7 +8,7 @@ Full spec, with reasoning: `second-brain/wiki/Noctis OS/SPEC.md` — **in the va
 
 ## Two commit paths, one rule for what goes where
 
-This file stays in the repo because Claude Code loads it from the working directory — a copy in the vault would never be read. So it is the **contributor document**: the repo's docs (`README`, `DOCUMENTATION`, `CHANGELOG`, `STATUS`, `SETUP`, this file) must carry **every decision a contributor needs** — the deploy target, the push rule, the no-attribution rule, the stack — and nothing that is only the build's own reasoning. The build's reasoning (spec, briefs, migration records, open questions) lives in the vault at the job's `notes_path` (`wiki/Noctis OS/`), and a Faber session reads and writes it there. The Repo tab shows that side's commits under the project as **Notes**, so both halves of one piece of work are one view.
+This file stays in the repo because Claude Code loads it from the working directory — a copy in the vault would never be read. So it is the **contributor document**: the repo's docs (`README`, `DOCUMENTATION`, `CHANGELOG`, `STATUS`, `SETUP`, this file) must carry **every decision a contributor needs** — the deploy target, the push rule, the no-attribution rule, the stack — and nothing that is only the build's own reasoning. The build's reasoning (spec, briefs, migration records, open questions) lives in the vault at the job's `notes_path` (`wiki/Noctis OS/`), and a Faber session reads and writes it there. The Repo tab shows that side's commits under the project as **Record**, so both halves of one piece of work are one view.
 
 ## Stack
 

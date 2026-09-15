@@ -37,7 +37,7 @@ describe('Repo view', () => {
       { id: 'a', mode: 'faber', cwd: '/Users/me/Developer/x', index: 1, showing: false },
       { id: 'b', mode: 'faber', cwd: '/Users/me/Developer/x', index: 3, showing: true },
     ])
-    expect(t).toContain('Repo · x · main')
+    expect(t).toContain('x · main')
     expect(t).toContain('faber · 1')
     expect(t).toContain('faber · 3')
     expect(t).toContain('/Users/me/Developer/x')
@@ -54,7 +54,7 @@ describe('Repo view', () => {
     ]
     const t = strip(renderToStaticMarkup(
       <Repo data={{ repos: [base, y], outside: ['/Users/me/notes'] }} terminals={terminals} />))
-    const yAt = t.indexOf('Repo · y · main'), xAt = t.indexOf('Repo · x · main'), outsideAt = t.indexOf('Not in a repository')
+    const yAt = t.indexOf('y · main'), xAt = t.indexOf('x · main'), outsideAt = t.indexOf('Not in a repository')
     expect(yAt).toBeGreaterThan(-1); expect(xAt).toBeGreaterThan(-1); expect(outsideAt).toBeGreaterThan(-1)
     expect(yAt).toBeLessThan(xAt)
     expect(xAt).toBeLessThan(outsideAt)
@@ -64,7 +64,7 @@ describe('Repo view', () => {
     expect(t.slice(outsideAt)).toContain('general · 4')
   })
 
-  it('folds the commit lists when there is more than one repository, and still says whose they are', () => {
+  it('folds the commit lists when there is more than one repository, and still says how many', () => {
     const y: RepoInfo = {
       ...base, root: '/Users/me/Developer/y', name: 'y', cwds: ['/Users/me/Developer/y'],
       commits: [
@@ -77,7 +77,7 @@ describe('Repo view', () => {
       { id: 'b', mode: 'faber', cwd: '/Users/me/Developer/y', index: 2, showing: false },
     ]
     const t = strip(renderToStaticMarkup(<Repo data={{ repos: [base, y], outside: [] }} terminals={terminals} />))
-    expect(t).toContain('Commits · 2 · 1 not on GitHub · aaa1111 y local')
+    expect(t).toContain('Commits · 1 of 2 not on GitHub')
     expect(t).not.toContain('bbb2222'), 'folded: the list itself is not rendered'
     // Alone, the list is open.
     expect(text({ commits: y.commits })).toContain('aaa1111 y local')

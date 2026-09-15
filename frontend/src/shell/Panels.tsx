@@ -13,6 +13,7 @@ import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
 import { MODE_ACCENT, MODE_LABEL, VAULT_MODE, type Mode } from './domain'
 import { ModeMark } from './Chrome'
+import { gridColumns } from './Terminals'
 import { openExternal } from './host'
 
 export interface BriefPayload {
@@ -378,18 +379,17 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
   const groups = [...data.repos].sort((a, b) =>
     Number(b.cwds.includes(showingCwd ?? '')) - Number(a.cwds.includes(showingCwd ?? '')))
   const outside = terminals.filter((t) => data.outside.includes(t.cwd))
-  /* More than one repository: side by side, each column its own, with the
-   * commit lists folded so the columns read as repositories first and
-   * histories second. One repository: the full page, commits open. */
+  /* One module per repository, laid out like the terminals: a row up to
+   * three, a grid after. With more than one on screen the commit lists
+   * start folded, so the page reads as repositories first. */
   const many = groups.length > 1
   return (
     <>
-      <div className={many ? 'grid grid-cols-2 items-start gap-x-6' : ''}>
-        {groups.map((r, i) => (
-          <div key={r.root} className="min-w-0">
-            <RepoGroup r={r} first={many || i === 0} folded={many} onChanged={onChanged}
-                       terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
-          </div>
+      <div className="grid items-start gap-6"
+           style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
+        {groups.map((r) => (
+          <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
+                      terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
         ))}
       </div>
       {outside.length > 0 && (
@@ -477,168 +477,137 @@ function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
   )
 }
 
-function RepoGroup({ r, terminals, first, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; first: boolean; folded: boolean; onChanged?: () => void }) {
-  const unpushed = r.ahead ?? 0
-  const [commitsOpen, setCommitsOpen] = useState(!folded)
-  const local = r.commits.filter((c) => !c.pushed).length
+/* A section inside a module: a fold with a title and a count, the body
+ * under it. Folded, it says how many; open, it shows them. */
+function Fold({ title, meta, open, onToggle, right, children }: {
+  title: string; meta?: React.ReactNode; open: boolean; onToggle: () => void; right?: React.ReactNode; children: React.ReactNode
+}) {
   return (
-    <>
-      <Heading className={first ? '' : 'mt-9'}>
-        Repo · {r.name}{r.branch ? ` · ${r.branch}` : ''}
-      </Heading>
-
-      {/* Where it stands, in one line: the numbers that decide what to do
-          next, then the sentence that says what that is. Above it, which
-          terminals are in this repository -- the reason it is on the page. */}
-      <Card>
-        {/* Terminals on one row, the path on the next -- each truncating
-            rather than wrapping, so two columns keep the same rhythm. */}
-        <div className="px-4 py-[9px]">
-          <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px]">
-            {terminals.map((t) => <TerminalChip key={t.id} t={t} />)}
-          </div>
-          <div className="mt-[4px] truncate font-mono text-[11px] text-ink-faint" title={r.root}>{r.root}</div>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[11px] font-mono text-[11.5px]">
-          <span className="text-ink">{r.branch ?? 'detached'}</span>
-          {r.upstream ? (
-            <>
-              <span className={unpushed ? 'text-ink' : 'text-ink-faint'}>↑ {unpushed} not on GitHub</span>
-              <span className={r.behind ? 'text-ink' : 'text-ink-faint'}>↓ {r.behind ?? 0} behind</span>
-            </>
-          ) : (
-            <span className="text-ink-faint">no upstream</span>
-          )}
-          <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'}>{r.dirty.length} uncommitted</span>
-          {r.slug && (
-            <Ext href={`https://github.com/${r.slug}`} className="ml-auto text-ink-dim hover:text-ink">
-              {r.slug} ↗
-            </Ext>
-          )}
-        </div>
-        <div className="flex items-center gap-[12px] border-t border-line px-4 py-[10px] text-[12px] leading-[1.55] text-ink-dim">
-          <span className="min-w-0 flex-1">{nextStep(r)}</span>
-          <PushButton r={r} onPushed={onChanged} />
-        </div>
-      </Card>
-
-      {r.dirty.length > 0 && (
-        <>
-          <Heading className="mt-7">Uncommitted</Heading>
-          <Card>
-            <div className="px-4 py-[9px] font-mono text-[11.5px] leading-[1.7] text-ink-dim">
-              {r.dirty.slice(0, 20).map((f) => <div key={f}>{f}</div>)}
-              {r.dirty.length > 20 && <div className="text-ink-faint">… and {r.dirty.length - 20} more</div>}
-            </div>
-          </Card>
-        </>
-      )}
-
-      {/* The heading is the fold. Folded, it still says how many and how
-          many are local, so the column answers the question without being
-          opened. */}
-      <button type="button" onClick={() => setCommitsOpen((o) => !o)}
-              className="mt-7 mb-[14px] flex w-full items-center gap-[8px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint hover:text-ink">
-        <span className="inline-block w-[10px] text-center">{commitsOpen ? '▾' : '▸'}</span>
-        <span>Commits</span>
-        <span className="font-normal normal-case tracking-normal text-ink-faint">
-          · {r.commits.length}{local ? ` · ${local} not on GitHub` : ''}
-        </span>
-        {/* Folded, the newest subject still shows: it is what says whose
-            history this is, when two columns both read "20 · 20". */}
-        {!commitsOpen && r.commits[0] && (
-          <span className="min-w-0 flex-1 truncate font-normal normal-case tracking-normal text-ink-dim">
-            · {r.commits[0].sha} {r.commits[0].subject}
-          </span>
-        )}
-        {/* What the marks mean, where they are: the dot is whether GitHub
-            has the commit, the face is whose work it was. */}
-        {commitsOpen && (
-          <span className="ml-auto flex shrink-0 items-center gap-[10px] font-normal normal-case tracking-normal text-ink-faint">
-            <span><span style={{ color: 'var(--color-faber)' }}>●</span> not on GitHub</span>
-            <span><span style={{ color: 'var(--color-good)' }}>●</span> on GitHub</span>
-            <span>face · whose session</span>
-          </span>
-        )}
+    <div className="border-t border-line">
+      <button type="button" onClick={onToggle}
+              className="flex w-full items-center gap-[8px] px-4 py-[9px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint hover:text-ink">
+        <span className="inline-block w-[10px] text-center">{open ? '▾' : '▸'}</span>
+        <span>{title}</span>
+        {meta && <span className="font-normal normal-case tracking-normal text-ink-faint">· {meta}</span>}
+        {right && <span className="ml-auto font-normal normal-case tracking-normal">{right}</span>}
       </button>
-      {commitsOpen && <Card>
-        {r.commits.map((c, i) => (
-          <div key={c.sha} className={`flex items-baseline gap-[10px] px-4 py-[7px] font-mono text-[11.5px] ${i ? 'border-t border-line' : ''}`}>
-            <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
-                  style={{ color: c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>
-              ●
-            </span>
-            {/* Whose commit: the character of the session that was live
-                here when it was made. Blank for one made by hand. */}
-            <span className="grid w-[14px] shrink-0 place-items-center self-center">
-              {c.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
-            </span>
-            <span className="shrink-0 text-ink-faint">{c.sha}</span>
-            <span className="min-w-0 flex-1 truncate text-ink">{c.subject}</span>
-            <span className="shrink-0 text-ink-faint">{ago(c.at)}</span>
-          </div>
-        ))}
-        {r.commits.length === 0 && <div className="px-4 py-[9px] text-[12px] text-ink-faint">no commits yet</div>}
-      </Card>}
-
-      {r.notes && <NotesGroup n={r.notes} folded={folded} onChanged={onChanged} />}
-
-      <Heading className="mt-7">GitHub</Heading>
-      {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
-    </>
+      {open && children}
+    </div>
   )
 }
 
-/* The vault side of a project, under the project. A build has two commit
- * paths on purpose -- code here, the record there -- and the record's half
- * was invisible from the project's group. Same rows, same marks, its own
- * push: pushing the vault pushes the whole vault, and the count says so. */
-function NotesGroup({ n, folded, onChanged }: { n: RepoInfo & { paths: string[] }; folded: boolean; onChanged?: () => void }) {
-  const [open, setOpen] = useState(!folded)
-  const local = n.commits.filter((c) => !c.pushed).length
+/* Ten commits fit; the other ten scroll. A subject wraps rather than
+ * truncates: a line you cannot finish reading is a line you did not read. */
+function CommitList({ commits, paths }: { commits: RepoInfo['commits']; paths?: string[] }) {
+  if (commits.length === 0) {
+    return <div className="border-t border-line px-4 py-[9px] text-[12px] text-ink-faint">
+      {paths ? `no commits touch ${paths.join(' or ')} yet` : 'no commits yet'}
+    </div>
+  }
   return (
-    <>
-      <button type="button" onClick={() => setOpen((o) => !o)}
-              className="mt-7 mb-[14px] flex w-full items-center gap-[8px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint hover:text-ink">
-        <span className="inline-block w-[10px] text-center">{open ? '▾' : '▸'}</span>
-        <span>Notes</span>
-        <span className="font-normal normal-case tracking-normal text-ink-faint">
-          · {n.name} · {n.paths[0]} · {n.commits.length}{local ? ` · ${local} not on GitHub` : ''}
-        </span>
-        {!open && n.commits[0] && (
-          <span className="min-w-0 flex-1 truncate font-normal normal-case tracking-normal text-ink-dim">
-            · {n.commits[0].sha} {n.commits[0].subject}
+    <div className="max-h-[352px] overflow-y-auto">
+      {commits.map((c) => (
+        <div key={c.sha} className="flex items-baseline gap-[10px] border-t border-line px-4 py-[7px] font-mono text-[11.5px]">
+          <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
+                style={{ color: c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>●</span>
+          <span className="grid w-[14px] shrink-0 place-items-center self-center">
+            {c.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
           </span>
+          <span className="shrink-0 text-ink-faint">{c.sha}</span>
+          <span className="min-w-0 flex-1 whitespace-normal break-words leading-[1.45] text-ink">{c.subject}</span>
+          <span className="shrink-0 text-ink-faint">{ago(c.at)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+const Legend = () => (
+  <span className="flex items-center gap-[8px] text-[10.5px] text-ink-faint">
+    <span><span style={{ color: 'var(--color-faber)' }}>●</span> local</span>
+    <span><span style={{ color: 'var(--color-good)' }}>●</span> on GitHub</span>
+  </span>
+)
+
+/* One repository as one module: its name and branch on the lid, the
+ * terminals in it, where it stands, then its sections -- uncommitted,
+ * commits, the record (for a dev job's project), GitHub -- each a fold
+ * inside the same border, so the grouping is the box and not the reader's
+ * inference. */
+function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void }) {
+  const unpushed = r.ahead ?? 0
+  const [dirtyOpen, setDirtyOpen] = useState(!folded)
+  const [commitsOpen, setCommitsOpen] = useState(!folded)
+  const [recordOpen, setRecordOpen] = useState(false)
+  const [githubOpen, setGithubOpen] = useState(true)
+  const local = r.commits.filter((c) => !c.pushed).length
+  const rec = r.notes
+  const recLocal = rec ? rec.commits.filter((c) => !c.pushed).length : 0
+  return (
+    <section className="rounded-[4px] border border-line bg-surface">
+      <div className="flex items-baseline gap-[10px] px-4 py-[10px]">
+        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{r.name}</span>
+        <span className="font-mono text-[11px] text-ink-faint">· {r.branch ?? 'detached'}</span>
+        {r.slug && (
+          <Ext href={`https://github.com/${r.slug}`} className="ml-auto font-mono text-[11px] text-ink-dim hover:text-ink">{r.slug} ↗</Ext>
         )}
-      </button>
-      {open && (
-        <Card>
-          <div className="flex items-center gap-[12px] px-4 py-[9px] text-[12px] text-ink-dim">
-            <span className="min-w-0 flex-1">
-              {n.dirty.length ? `${n.dirty.length} note${n.dirty.length === 1 ? '' : 's'} changed and not committed. ` : ''}
-              {n.ahead ? `The vault has ${n.ahead} commit${n.ahead === 1 ? '' : 's'} not on GitHub; pushing it pushes all of them.` : 'The vault is on GitHub.'}
-            </span>
-            <PushButton r={n} onPushed={onChanged} />
+      </div>
+      <div className="border-t border-line px-4 py-[8px]">
+        <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px]">
+          {terminals.map((t) => <TerminalChip key={t.id} t={t} />)}
+        </div>
+        <div className="mt-[3px] truncate font-mono text-[11px] text-ink-faint" title={r.root}>{r.root}</div>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[9px] font-mono text-[11.5px]">
+        {r.upstream ? (
+          <>
+            <span className={unpushed ? 'text-ink' : 'text-ink-faint'}>↑ {unpushed} not on GitHub</span>
+            <span className={r.behind ? 'text-ink' : 'text-ink-faint'}>↓ {r.behind ?? 0} behind</span>
+          </>
+        ) : (
+          <span className="text-ink-faint">no upstream</span>
+        )}
+        <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'}>{r.dirty.length} uncommitted</span>
+      </div>
+      <div className="flex items-center gap-[12px] border-t border-line px-4 py-[9px] text-[12px] leading-[1.5] text-ink-dim">
+        <span className="min-w-0 flex-1">{nextStep(r)}</span>
+        <PushButton r={r} onPushed={onChanged} />
+      </div>
+
+      {r.dirty.length > 0 && (
+        <Fold title="Uncommitted" meta={r.dirty.length} open={dirtyOpen} onToggle={() => setDirtyOpen((o) => !o)}>
+          <div className="max-h-[220px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7] text-ink-dim">
+            {r.dirty.map((f) => <div key={f}>{f}</div>)}
           </div>
-          {n.dirty.map((f) => (
+        </Fold>
+      )}
+
+      <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
+            open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)} right={commitsOpen ? <Legend /> : undefined}>
+        <CommitList commits={r.commits} />
+      </Fold>
+
+      {rec && (
+        <Fold title="Record" meta={`${rec.name} · ${rec.paths[0]} · ${recLocal ? `${recLocal} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}`}`}
+              open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}>
+          <div className="flex items-center gap-[12px] border-t border-line px-4 py-[8px] text-[12px] text-ink-dim">
+            <span className="min-w-0 flex-1">
+              {rec.dirty.length ? `${rec.dirty.length} file${rec.dirty.length === 1 ? '' : 's'} changed and not committed. ` : ''}
+              {rec.ahead ? `The vault has ${rec.ahead} commit${rec.ahead === 1 ? '' : 's'} not on GitHub; pushing it pushes all of them.` : 'The vault is on GitHub.'}
+            </span>
+            <PushButton r={rec} onPushed={onChanged} />
+          </div>
+          {rec.dirty.map((f) => (
             <div key={f} className="border-t border-line px-4 py-[6px] font-mono text-[11.5px] text-ink-dim">{f}</div>
           ))}
-          {n.commits.map((c) => (
-            <div key={c.sha} className="flex items-baseline gap-[10px] border-t border-line px-4 py-[7px] font-mono text-[11.5px]">
-              <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
-                    style={{ color: c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>●</span>
-              <span className="grid w-[14px] shrink-0 place-items-center self-center">
-                {c.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
-              </span>
-              <span className="shrink-0 text-ink-faint">{c.sha}</span>
-              <span className="min-w-0 flex-1 truncate text-ink">{c.subject}</span>
-              <span className="shrink-0 text-ink-faint">{ago(c.at)}</span>
-            </div>
-          ))}
-          {n.commits.length === 0 && <div className="border-t border-line px-4 py-[9px] text-[12px] text-ink-faint">no commits touch {n.paths.join(' or ')} yet</div>}
-        </Card>
+          <CommitList commits={rec.commits} paths={rec.paths} />
+        </Fold>
       )}
-    </>
+
+      <Fold title="GitHub" open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>
+        {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
+      </Fold>
+    </section>
   )
 }
 
@@ -653,17 +622,15 @@ function GithubLive({ slug }: { slug: string }) {
 export function GithubCard({ gh, reason, pending = false }: { gh: GithubInfo | null; reason: string | null; pending?: boolean }) {
   if (!gh) {
     return (
-      <Card>
-        <div className="px-4 py-[11px] text-[12.5px] text-ink-dim">
-          {pending ? 'Asking GitHub…' : `Not available: ${reason ?? 'unknown'}.`}
-        </div>
-      </Card>
+      <div className="border-t border-line px-4 py-[10px] text-[12.5px] text-ink-dim">
+        {pending ? 'Asking GitHub…' : `Not available: ${reason ?? 'unknown'}.`}
+      </div>
     )
   }
   return (
-      <Card>
+      <div>
           <>
-            <div className="flex items-center px-4 py-[9px] font-mono text-[11px] text-ink-faint">
+            <div className="flex items-center border-t border-line px-4 py-[9px] font-mono text-[11px] text-ink-faint">
               <span>pull requests · {gh.pull_requests.length} open</span>
               <Ext href={gh.url ?? `https://github.com/${gh.slug}`} className="ml-auto text-ink-dim hover:text-ink">
                 {gh.slug} · {gh.private ? 'private' : 'public'} ↗
@@ -696,7 +663,7 @@ export function GithubCard({ gh, reason, pending = false }: { gh: GithubInfo | n
               <div className="border-t border-line px-4 py-[8px] text-[12px] text-ink-faint">none — an issue per piece of work is the backlog a branch and a PR close</div>
             )}
           </>
-      </Card>
+      </div>
   )
 }
 
