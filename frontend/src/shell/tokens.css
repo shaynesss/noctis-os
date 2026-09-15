@@ -55,7 +55,12 @@
    * The body must keep painting `--color-ground`. A transparent body would
    * show the raw material with no tint at all, which reads as a bug rather
    * than as glass. */
-  --color-ground: rgba(15, 15, 15, 0.42);
+  /* 0.42 until 2026-09-15: over a bright desktop the pane read as a hole
+     in the chrome and the words on it were hard to see. The rail, the
+     title strip and the status bar paint this same ground now, so the
+     glass is one sheet through the whole window rather than a dark frame
+     round a clear pane. */
+  --color-ground: rgba(15, 15, 15, 0.62);
   /* Surfaces heavier since 2026-09-15: at 0.55 a card's contents read
      differently over a light desktop and a dark one, and the Activity
      grid's empty cells could vanish. The glass stays in the ground. */
@@ -82,6 +87,20 @@
 
   /* semantic, kept distinct from the accents */
   --color-good: #3fa463;
+
+  /* the signature -- one hue the interface's own readings are drawn in
+     (2026-09-15): usage bars and their percentages, the activity ramp, the
+     token bar, the status meters. Not a character's colour and not a
+     brand: a wine-rose, chosen so a reading is never mistaken for Faber's
+     red or Noctua's amber. Six steps of one hue, darkest to lightest; the
+     mid step is `--color-sig`. */
+  --color-sig-1: #2a0b12;
+  --color-sig-2: #501c27;
+  --color-sig-3: #7a2d3c;
+  --color-sig-4: #9c3f53;
+  --color-sig-5: #bd5a6e;
+  --color-sig-6: #de778a;
+  --color-sig: var(--color-sig-4);
 
   --font-mono: "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;

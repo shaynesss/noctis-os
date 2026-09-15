@@ -555,7 +555,10 @@ const fmt = (n: number) => n.toLocaleString()
 
 function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } | null }) {
   const stats = useFetched<StatsPayload>('/v2/sessions/stats')
-  const bar = (pct: number) => (pct < 60 ? 'var(--color-good)' : pct < 85 ? 'var(--color-noctua)' : 'var(--color-faber)')
+  // The signature, brightening as a window fills: the reading's own hue at
+  // three steps rather than a traffic light. A fuller bar is a brighter
+  // bar, which is the warning, without borrowing a character's colour.
+  const bar = (pct: number) => (pct < 60 ? 'var(--color-sig-4)' : pct < 85 ? 'var(--color-sig-5)' : 'var(--color-sig-6)')
 
   const windows = limits
     ? [
@@ -632,10 +635,10 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
               </span>
             </div>
             <Stacked parts={[
-              { label: 'input', value: stats.lifetime.input, tone: '#d6d6d6' },
-              { label: 'output', value: stats.lifetime.output, tone: '#a3a3a3' },
-              { label: 'cache read', value: stats.lifetime.cached, tone: '#6f6f6f' },
-              { label: 'cache write', value: stats.lifetime.cache_write, tone: '#4a4a4a' },
+              { label: 'input', value: stats.lifetime.input, tone: 'var(--color-sig-6)' },
+              { label: 'output', value: stats.lifetime.output, tone: 'var(--color-sig-5)' },
+              { label: 'cache read', value: stats.lifetime.cached, tone: 'var(--color-sig-4)' },
+              { label: 'cache write', value: stats.lifetime.cache_write, tone: 'var(--color-sig-3)' },
             ]} />
             {/* One number, no tiers. Read from the CLI's own transcripts, so
                 it counts every session on this machine, not only the ones
@@ -659,10 +662,11 @@ function resetIn(epoch: number): string {
 
 /* The four token kinds as one stacked bar -- each a share of the same
  * total, which is the only comparison that puts them on one line -- with a
- * dot-and-figure legend under it. Greys, darkest to lightest, in the order
- * the legend reads. Cache reads are three thousand times the input, so the
- * small kinds are slivers: each keeps a 2px minimum so it exists on the bar
- * at all, and the legend carries the number the bar cannot. */
+ * dot-and-figure legend under it. Four steps of the signature, lightest to
+ * darkest, in the order the legend reads. Cache reads are three thousand
+ * times the input, so the small kinds are slivers: each keeps a 2px minimum
+ * so it exists on the bar at all, and the legend carries the number the bar
+ * cannot. */
 function Stacked({ parts }: { parts: { label: string; value: number; tone: string }[] }) {
   const total = parts.reduce((s, p) => s + p.value, 0)
   return (

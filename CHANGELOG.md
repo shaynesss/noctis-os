@@ -9,6 +9,27 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### A signature colour, and glass through the whole window (2026-09-15)
+
+- **The signature.** One hue the interface's own readings are drawn in —
+  a wine-rose (`--color-sig`, `#9c3f53`) in six steps from `#2a0b12` to
+  `#de778a` — so a reading is never mistaken for a character's colour: the
+  usage bars and their percentages (brightening as a window fills, in place
+  of the green-amber-red traffic light), the activity ramp (was Faber red,
+  which made a day's count read as a Faber thing), the token bar's four
+  shares (were greys, which is what made them hard to tell apart), and the
+  status bar's meters and context figure (were green and amber). The
+  characters keep their accents; `--color-good` stays for diffs and pushed
+  commits, which are outcomes rather than readings.
+- **Glass through the whole window.** The rail, the title strip and the
+  status bar paint the ground now rather than the heavier surface, so the
+  vibrancy is one sheet through the window instead of a dark frame round a
+  clear pane; and the ground is heavier (`0.42 → 0.62`) so the words on it
+  read over a bright desktop.
+- **Pools on Stats only.** They were on the Repo modules too and looked
+  wrong against the folds and the push row; the Repo view will get its own
+  treatment.
+
 ### One glass, one set of corners (2026-09-15)
 
 - **Corners on a scale.** Nine radii between 1px and 6px, chosen per

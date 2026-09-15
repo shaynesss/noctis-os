@@ -29,7 +29,7 @@ export function Rail({ view, onView, badges }: {
   // floats over the content at the top-left. They cannot be moved to the
   // right on macOS, so the rail moves out from under them instead.
   return (
-    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-surface">
+    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-ground">
       {/* Mark and wordmark centred together. The star takes the active
           mode's accent via currentColor, so the identity shifts with the
           session rather than sitting inert above a UI that changes. */}
@@ -92,11 +92,11 @@ function Kbd({ children }: { children: React.ReactNode }) {
  * data-tauri-drag-region makes it behave like a title bar: drag to move.
  */
 export function TitleStrip() {
-  return <div data-tauri-drag-region className="h-7 shrink-0 bg-surface" />
+  return <div data-tauri-drag-region className="h-7 shrink-0 bg-ground" />
 }
 
 /* ---------------------------------------------------- status + characters */
-function Meter({ pct, tone = 'var(--color-good)' }: { pct: number; tone?: string }) {
+function Meter({ pct, tone = 'var(--color-sig-5)' }: { pct: number; tone?: string }) {
   return (
     <span className="mx-[3px] inline-block h-1 w-[30px] overflow-hidden rounded-sm bg-line align-[1px]">
       <span className="block h-full" style={{ width: `${pct}%`, background: tone }} />
@@ -232,8 +232,8 @@ export function StatusBar({ limits, state }: { limits?: LiveLimits | null; state
       <div className="flex min-w-0 items-center whitespace-nowrap">
         {/* A dash, not 0%: unknown and empty are different, and an invented
             0% reads as a conversation with room to spare. */}
-        <Seg className={ctx === null ? '' : 'text-noctua'}>
-          ctx {ctx === null ? '—' : <><Meter pct={ctx} tone="var(--color-noctua)" /> {ctx}%</>}
+        <Seg className={ctx === null ? '' : 'text-[var(--color-sig-6)]'}>
+          ctx {ctx === null ? '—' : <><Meter pct={ctx} /> {ctx}%</>}
         </Seg>
         <Seg>
           5h{' '}
@@ -285,7 +285,7 @@ export function BottomBar({
        the composer went with the orchestrator. The strip at the top is the
        rail's title band's height; this is the status band's, and the cell,
        the readings and the characters share it. */
-    <div className="flex h-[var(--status-band)] shrink-0 items-center border-t border-line bg-surface">
+    <div className="flex h-[var(--status-band)] shrink-0 items-center border-t border-line bg-ground">
       {/* Rail-width cell, always present. It was previously only rendered in
           the narrow layout, so the permission hint vanished on a wide window
           -- the same "hidden rather than moved" mistake as before. */}

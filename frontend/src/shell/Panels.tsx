@@ -138,8 +138,9 @@ function Card({ children }: { children: React.ReactNode }) {
  *  Mono": soft light pooling at points round the edge and blooming outward,
  *  breathing rather than travelling. `Pools` is that mechanism ported, with
  *  the pools laid out evenly so a card five times wider than the library's
- *  demo has no dark stretch of edge. Silver for a card no character owns,
- *  Faber's red for a build. `radius` must match the card's own. */
+ *  demo has no dark stretch of edge. On the Stats cards only, in silver;
+ *  the Repo modules wore it for an afternoon and it looked wrong there.
+ *  `radius` must match the card's own. */
 export function Beam({ tone = 'silver', radius = 8, children }: { tone?: PoolTone; radius?: number; children: React.ReactNode }) {
   return <Pools tone={tone} radius={radius} strength={0.5}>{children}</Pools>
 }
@@ -615,11 +616,10 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
   const local = r.commits.filter((c) => !c.pushed).length
   const rec = r.notes
   const recLocal = rec ? rec.commits.filter((c) => !c.pushed).length : 0
-  // The beam is the character's when the repository is a dev job's project
-  // -- Faber's build, so Faber's warmth -- and silver for every other
-  // repository, the vault included.
+  // No pools here: they were tried on the modules (2026-09-15) and looked
+  // wrong against the folds and the push row. The Repo view will get its
+  // own treatment.
   return (
-    <Beam tone={rec ? 'faber' : 'silver'}>
     <section className="flex flex-col rounded-card border border-line bg-surface">
       <div className="flex items-baseline gap-[10px] px-4 py-[10px]">
         <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{r.name}</span>
@@ -687,7 +687,6 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
       </Fold>
     </section>
-    </Beam>
   )
 }
 
