@@ -98,33 +98,30 @@
   --color-sig-2: #501c27;
   --color-sig-3: #7a2d3c;
   --color-sig-4: #9c3f53;
-  /* The spoke's own two lightest steps were #bd5a6e and #de778a -- tints
-     that gain saturation as they lighten and drift to pink, which is what
-     the first cut looked like where they were used. These hold the wine:
-     lighter, but no more saturated than the base. */
-  --color-sig-5: #b44c62;
-  --color-sig-6: #c9667a;
+  --color-sig-5: #bd5a6e;
+  --color-sig-6: #de778a;
 
   /* Which step is the base is one choice, made here and nowhere else: the
-     readings reference roles, not steps. Two candidates were tried on
+     readings reference roles, not steps. Three cuts were compared on
      2026-09-15 -- the spoke's "Primary" (#501c27, steps 2/3/4: richer,
-     but a 28% bar sat close to its track) and its "Light" (#9c3f53),
-     which this block sets. Nothing reads on the lightest step alone: it
-     is the top of a ramp, never a fill or a figure. */
+     but a 28% bar sat close to its track), a "Light" with the top two
+     steps desaturated to hold the burgundy, and this one: the spoke as
+     drawn, "Light" (#9c3f53) as the base and its own tints above it.
+     Kept because it read best on the glass. */
   --color-sig: var(--color-sig-4);
   --sig-fill: var(--color-sig-4);       /* a bar under 60% */
   --sig-fill-hot: var(--color-sig-5);   /* 60–85% */
   --sig-fill-max: var(--color-sig-6);   /* past 85% */
-  --sig-text: var(--color-sig-5);       /* a percentage beside a bar */
-  --sig-meter: var(--color-sig-4);      /* the status bar's meters */
+  --sig-text: var(--color-sig-6);       /* a percentage beside a bar */
+  --sig-meter: var(--color-sig-5);      /* the status bar's meters */
   --sig-ramp-1: var(--color-sig-2);     /* activity: one session … */
   --sig-ramp-2: var(--color-sig-3);
   --sig-ramp-3: var(--color-sig-4);
-  --sig-ramp-4: var(--color-sig-5);     /* … four or more */
-  --sig-share-1: var(--color-sig-5);    /* token bar, first share … */
-  --sig-share-2: var(--color-sig-4);
-  --sig-share-3: var(--color-sig-3);
-  --sig-share-4: var(--color-sig-2);    /* … last */
+  --sig-ramp-4: var(--color-sig-6);     /* … four or more */
+  --sig-share-1: var(--color-sig-6);    /* token bar, first share … */
+  --sig-share-2: var(--color-sig-5);
+  --sig-share-3: var(--color-sig-4);
+  --sig-share-4: var(--color-sig-3);    /* … last */
 
   --font-mono: "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
