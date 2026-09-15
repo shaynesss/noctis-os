@@ -571,7 +571,9 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         )}
         <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'}>{r.dirty.length} uncommitted</span>
       </div>
-      <div className="flex items-center gap-[12px] border-t border-line px-4 py-[9px] text-[12px] leading-[1.5] text-ink-dim">
+      {/* Three lines' worth of height whatever the sentence needs, so the
+          folds below sit at the same height in every module on the row. */}
+      <div className="flex min-h-[72px] items-center gap-[12px] border-t border-line px-4 py-[9px] text-[12px] leading-[1.5] text-ink-dim">
         <span className="min-w-0 flex-1">{nextStep(r)}</span>
         <PushButton r={r} onPushed={onChanged} />
       </div>
