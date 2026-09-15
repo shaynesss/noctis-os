@@ -55,11 +55,11 @@
    * The body must keep painting `--color-ground`. A transparent body would
    * show the raw material with no tint at all, which reads as a bug rather
    * than as glass. */
-  /* 0.42 until 2026-09-15: over a bright desktop the pane read as a hole
-     in the chrome and the words on it were hard to see. The rail, the
-     title strip and the status bar paint this same ground now, so the
-     glass is one sheet through the whole window rather than a dark frame
-     round a clear pane. */
+  /* 0.42 until 2026-09-15: over a bright desktop the words on the pane were
+     hard to see. The body paints this once across the whole window, and
+     nothing else paints it: the rail, the title strip and the status bar
+     painted it a second time and two coats at 0.62 are 0.86 -- the chrome
+     read as a dark frame round a clear pane. One coat is the glass. */
   --color-ground: rgba(15, 15, 15, 0.62);
   /* Surfaces heavier since 2026-09-15: at 0.55 a card's contents read
      differently over a light desktop and a dark one, and the Activity

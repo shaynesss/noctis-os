@@ -21,11 +21,12 @@ scheduler, which is the only feature left in the build order.
   status bar's meters and context figure (were green and amber). The
   characters keep their accents; `--color-good` stays for diffs and pushed
   commits, which are outcomes rather than readings.
-- **Glass through the whole window.** The rail, the title strip and the
-  status bar paint the ground now rather than the heavier surface, so the
-  vibrancy is one sheet through the window instead of a dark frame round a
-  clear pane; and the ground is heavier (`0.42 → 0.62`) so the words on it
-  read over a bright desktop.
+- **Glass through the whole window.** The body paints the ground once
+  across the window and nothing else paints it: the rail, the title strip
+  and the status bar had painted it a second time, and two coats at 0.62
+  are 0.86 — the chrome read as a dark frame round a clear pane. The
+  ground is heavier (`0.42 → 0.62`) so the words on it read over a bright
+  desktop.
 - **Pools on Stats only.** They were on the Repo modules too and looked
   wrong against the folds and the push row; the Repo view will get its own
   treatment.

@@ -29,7 +29,7 @@ export function Rail({ view, onView, badges }: {
   // floats over the content at the top-left. They cannot be moved to the
   // right on macOS, so the rail moves out from under them instead.
   return (
-    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line bg-ground">
+    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line">
       {/* Mark and wordmark centred together. The star takes the active
           mode's accent via currentColor, so the identity shifts with the
           session rather than sitting inert above a UI that changes. */}
@@ -92,7 +92,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
  * data-tauri-drag-region makes it behave like a title bar: drag to move.
  */
 export function TitleStrip() {
-  return <div data-tauri-drag-region className="h-7 shrink-0 bg-ground" />
+  return <div data-tauri-drag-region className="h-7 shrink-0" />
 }
 
 /* ---------------------------------------------------- status + characters */
@@ -285,7 +285,7 @@ export function BottomBar({
        the composer went with the orchestrator. The strip at the top is the
        rail's title band's height; this is the status band's, and the cell,
        the readings and the characters share it. */
-    <div className="flex h-[var(--status-band)] shrink-0 items-center border-t border-line bg-ground">
+    <div className="flex h-[var(--status-band)] shrink-0 items-center border-t border-line">
       {/* Rail-width cell, always present. It was previously only rendered in
           the narrow layout, so the permission hint vanished on a wide window
           -- the same "hidden rather than moved" mistake as before. */}
