@@ -93,6 +93,19 @@ function fitOrBorrow(el: HTMLElement, term: Xterm, fit: FitAddon): void {
   }
 }
 
+/* Spawns are queued, not simultaneous. A reload restores every tab at once,
+ * and each tab's session is a ~300MB process plus its MCP servers booting
+ * together; six of those in the same second is a spike the machine was
+ * shedding processes for. Attaching to a session that survived the reload
+ * costs nothing and is not queued -- only a real spawn waits its turn. */
+let spawnQueue: Promise<void> = Promise.resolve()
+const SPAWN_GAP_MS = 700
+function spawnTurn(): Promise<void> {
+  const turn = spawnQueue.then(() => new Promise<void>((r) => setTimeout(r, SPAWN_GAP_MS)))
+  spawnQueue = turn.catch(() => undefined)
+  return turn
+}
+
 export function Terminal({
   id, mode, cwd, accent, resumeId, prompt, onExit,
 }: {
@@ -439,6 +452,8 @@ export function Terminal({
           void invoke('pty_resize', { id, rows: term_.rows, cols: term_.cols })
         }
       } else {
+        await spawnTurn()
+        if (!live) return
         const fetched = await getResult<{ binary: string; args: string[]; env?: Record<string, string> }>(
           `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`
           + (resumeRef.current ? `&resume_id=${encodeURIComponent(resumeRef.current)}` : '')

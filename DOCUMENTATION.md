@@ -516,6 +516,12 @@ argv and hands it to `pty_spawn`.
 Bytes cross the IPC **base64-encoded**. A read can split a multi-byte
 character, and xterm.js has its own UTF-8 decoder that holds the seam.
 
+**Spawns queue; attaches do not.** A restored arrangement of six tabs used to
+boot six `claude` processes (270–310 MB each, plus the MCP servers each one
+inherits from `~/.claude.json`) in the same second, and the machine shed the
+stack for memory. `Terminal.tsx` serialises real spawns 700 ms apart; a tab
+reattaching to a session the PTY registry kept skips the queue.
+
 **The status bar has a second source.** `statusLine` is a command the CLI runs
 on every render, handed a JSON payload on stdin: `rate_limits.five_hour` and
 `seven_day`, `context_window`, `effort`, `cost`, `session_id`,

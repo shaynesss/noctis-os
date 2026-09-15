@@ -9,6 +9,18 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Sessions restore one at a time (2026-09-15)
+
+The dev stack was killed twice for memory while restoring six tabs. Measured
+rather than guessed: the stack itself is ~370 MB; each open tab is a `claude`
+process of 270–310 MB plus every user-scope MCP server it inherits
+(`railway` 31 MB, `headroom` 15 MB, `noctis` 4 MB), so six tabs are ~1.9 GB —
+and on a reload all six booted in the same second. Spawns now queue with a
+700 ms gap; attaching to a session that survived the reload is not queued,
+because it costs nothing. Whether hosted sessions should inherit the
+user-scope MCP servers at all (`--strict-mcp-config` would give them only
+`noctis`) is a capability decision left open.
+
 ### What nothing called (2026-09-15)
 
 A scan of the code, the docs and the assets for what nothing references,
