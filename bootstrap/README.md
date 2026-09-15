@@ -14,25 +14,16 @@ Idempotent. Re-running reports what is already correct and skips it. Nothing is 
 
 | # | Step | Notes |
 |---|---|---|
-| 1 | **Tooling** | Checks `python3`, `node`, `claude`, `git` (required); `cargo`, `jq`, `pyinstaller` (optional, needed at Stage 2). Also probes SQLite for **FTS5 + `bm25()`** — not optional, and a compile-time flag rather than something installable later, so it is checked here rather than discovered at build time. |
-| 2 | **Vault** | Confirms it exists, is a git repo, and has a remote. A vault with no remote is the only copy on the machine — that was the live state on 2026-09-06. |
-| 3 | **Symlink** | `~/.claude/CLAUDE.md` → `second-brain/modes/dev/dev.md`. This one line is what makes every Claude Code session in every project read the methodology. Nothing else wires it up. |
+| 1 | **Tooling** | Checks `python3`, `node`, `claude`, `git` (required); `cargo`, `jq` (optional). Also probes SQLite for **FTS5 + `bm25()`** — not optional, and a compile-time flag rather than something installable later; all retrieval depends on it. |
+| 2 | **Vault** | Confirms `second-brain/` exists, is a git repo, and has a remote. A vault with no remote is the only copy on the machine — that was the live state on 2026-09-06. |
+| 3 | **Symlink** | `~/.claude/CLAUDE.md` → `second-brain/prompts/system.md`, the *universal* prompt. This is what every Claude Code session on the machine reads; a mode's overlay travels in the argv at launch (`interactive.py`). Until 2026-09-11 the link pointed at `modes/dev/dev.md`, which made the machine itself Faber — and this script still said so until 2026-09-15, when a re-run would have undone the cutover. |
 | 4 | **`.env`** | Generated from `.env.example` with a fresh 32-byte token and the resolved vault path, `chmod 600`. An existing `.env` is never touched — it holds a real secret. |
-| 5 | **launchd** | Renders `launchd/*.plist.template`, validates with `plutil`, loads it. launchd expands neither `~` nor environment variables in its paths, which is exactly why the tracked file is a template. |
-| 6 | **Mode config dirs** | One `CLAUDE_CONFIG_DIR` per mode under `backend/launch_config/`. |
-| 7 | **Telemetry hooks** | Wires `PostToolUse` and `SessionEnd` into each config dir with absolute interpreter paths — which is why generated `settings.json` is machine state and never tracked. |
+| 5 | **launchd** | Renders `launchd/com.noctis-os.nightshift.plist.template` (launchd expands neither `~` nor environment variables in its paths, which is why the tracked file is a template), validates it with `plutil`, and loads it: **nightshift runs nightly at 03:00** via `scripts/nightshift_run.sh`, logging to `backend/runtime/nightshift.log`. That script exports a PATH with Homebrew's bin on it — launchd's own has none, and from 2026-08-05 to 2026-09-15 every night failed to find `claude` and logged a quiet night. |
 
-## The one thing it cannot do for you
+## What is no longer here
 
-**Each config dir needs its own interactive `claude` login, once.**
-
-Claude Code stores credentials as a macOS Keychain entry **keyed to the config-dir path** (`Claude Code-credentials-<hash>`). Verified 2026-09-07: a freshly created dir *and* a byte-for-byte copy of an already-working one both report `Not logged in`, while the original path authenticates fine. There is no file to copy and no environment variable to set.
-
-The script detects which dirs are unauthenticated and prints the exact command per dir. Expect to do this once, ever.
-
-**Why separate dirs at all**, given the orchestrator rewrites each dir's `CLAUDE.md` on every launch: two concurrent sessions in different modes would otherwise race on the same file, and the concurrency cap is 2. Sharing one dir would make the cap unsafe rather than merely wasteful.
+Per-mode `CLAUDE_CONFIG_DIR`s under `backend/launch_config/`, their one-time interactive logins, and the telemetry hooks wired into each — all of it went with the 2026-09-12 cutover. A session is the real `claude` in a PTY with its identity in the argv; it inherits the machine's own `~/.claude`, so there is nothing per mode to create, log into, or hook.
 
 ## What it deliberately leaves alone
 
-- `backend/launch_config/nondev/` — v1's config dir, still live until the Stage 2 cutover.
-- An existing `.env`, an existing `~/.claude/CLAUDE.md` pointing somewhere else, an existing `settings.json` with different hooks. All reported, none clobbered without `--force`.
+An existing `.env`, an existing `~/.claude/CLAUDE.md` pointing somewhere else, an existing nightshift plist that differs. All reported, none clobbered without `--force`.

@@ -898,17 +898,17 @@ function Prompts() {
 
       <div className="flex items-center gap-[10px] border-t border-line px-[12px] py-[8px]">
         <span className="font-mono text-[11px] text-ink-faint">
-          {/* Saving re-renders every config dir that composes this file, so
-              the change is live for the next session rather than the next
-              launch — said plainly, because that is the reason to edit here
-              at all. */}
+          {/* What saving does, said plainly: the file in the vault is what
+              the next session reads. It used to say "re-renders every mode",
+              which stopped being true on 2026-09-12 and stayed on the
+              screen until 09-15. */}
           {saving === 'saved'
-            ? 'Saved and re-rendered — live for the next session'
+            ? 'Saved to the vault — the next session reads it; running ones do not'
             : saving === 'failed'
               ? 'Could not save'
               : dirty
                 ? 'Unsaved changes'
-                : 'Saving re-renders every mode that uses this file'}
+                : 'Saves the file in the vault, uncommitted — commit it from Repo'}
         </span>
         <button
           type="button"
@@ -919,8 +919,8 @@ function Prompts() {
             setSaving(ok ? 'saved' : 'failed')
             if (ok) setDraft(null)
           }}
-          className="ml-auto rounded-control px-[11px] py-[4px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
-          style={{ background: 'var(--color-noctua)' }}
+          className="ml-auto rounded-control px-[11px] py-[4px] font-mono text-[11.5px] text-ink transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+          style={{ background: 'var(--color-sig)' }}
         >
           Save
         </button>

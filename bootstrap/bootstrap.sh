@@ -106,12 +106,15 @@ fi
 # ── 3. the load-bearing symlink ───────────────────────────────────────
 head_ "3. Symlinks"
 
-# ~/.claude/CLAUDE.md is what makes every Claude Code session in every
-# project read dev.md's methodology. Nothing else wires that up.
-link_target="$VAULT_PATH/modes/dev/dev.md"
+# ~/.claude/CLAUDE.md is what every Claude Code session on the machine
+# reads. It points at the *universal* prompt, prompts/system.md -- not at
+# dev.md, which it did until 2026-09-11 and which made the machine itself
+# Faber (this script still said dev.md until 2026-09-15; a re-run would have
+# undone the cutover). Each mode's overlay travels in the argv at launch.
+link_target="$VAULT_PATH/prompts/system.md"
 link_path="$HOME/.claude/CLAUDE.md"
 if [ -L "$link_path" ] && [ "$(readlink "$link_path")" = "$link_target" ]; then
-  skip "~/.claude/CLAUDE.md already points at modes/dev/dev.md"
+  skip "~/.claude/CLAUDE.md already points at prompts/system.md"
 elif [ -e "$link_path" ] && [ "$FORCE" != 1 ]; then
   warn "~/.claude/CLAUDE.md exists and differs — left alone (use --force to replace)"
   printf "      ${DIM}currently: %s${RESET}\n" "$(readlink "$link_path" 2>/dev/null || echo '(a real file)')"

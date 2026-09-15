@@ -22,7 +22,6 @@ from pydantic import BaseModel, Field
 
 import digest
 import vault_io
-from prompts.render import render
 from jobs import MAINTENANCE, MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
 from nightshift import apply as proposals
 from engine import MODE_MODELS
@@ -808,29 +807,24 @@ class PromptUpdate(BaseModel):
 
 @router.put("/prompts/{prompt_id}")
 def save_prompt(prompt_id: str, body: PromptUpdate) -> dict:
-    """Write a prompt and re-render the config dirs that use it.
-
-    Re-rendering here rather than at next launch is the point: an edit that
-    only takes effect the next time a session starts is an edit you cannot
-    check, and the whole reason to edit prompts in the app is a short loop
-    between changing one and running the regression suite against it.
+    """Write a prompt to the vault. That is the whole save: `system.md` is
+    what `~/.claude/CLAUDE.md` links to, and an overlay is composed into the
+    argv at the next spawn, so the file on disk is what the next session
+    reads. Nothing is rendered -- this used to re-render per-mode config
+    dirs that the 2026-09-12 cutover removed, and reported "config dir
+    missing" five times per save until 2026-09-15.
 
     `prompt_id` is matched against the known set rather than joined into a
-    path, so it cannot address anything but these files.
+    path, so it cannot address anything but these files. The vault is not
+    committed here: the Repo tab shows the file as uncommitted, which is
+    where the commit belongs.
     """
     files = _prompt_files()
     if prompt_id not in files:
         raise HTTPException(status_code=404, detail=f"No such prompt: {prompt_id}")
 
     vault_io.write_file(files[prompt_id], body.markdown)
-
-    # The system prompt is composed into every mode; an overlay into one.
-    affected = sorted(MODE_MODELS) if prompt_id == "system" else [prompt_id]
-    rendered = []
-    for mode in affected:
-        changed, message = render(mode)
-        rendered.append({"mode": mode, "changed": changed, "message": message})
-    return {"saved": prompt_id, "rendered": rendered}
+    return {"saved": prompt_id, "path": files[prompt_id], "bytes": len(body.markdown.encode("utf-8"))}
 
 
 @router.get("/regression")

@@ -7,20 +7,17 @@ prompt still produce the behaviour it is supposed to?**
 
     python3 backend/prompts/run_regression.py
     python3 backend/prompts/run_regression.py --verbose      # show replies
-    python3 backend/prompts/run_regression.py --config-dir   # production path
 
 Assertions are deterministic string checks, not a model-as-judge. That is a
 deliberate trade: a judge would catch nuance this misses, but it doubles the
 cost, adds its own variance, and turns a regression suite into something you
 stop running. Cheap and boring is what gets run.
 
-Injection: by default the composed prompt goes in via `--append-system-prompt`,
-because the per-mode config dirs are created but not yet logged in (Claude Code
-keys credentials to the config-dir path). `--config-dir` uses the production
-path instead and should be preferred once those logins exist. The two are not
-identical mechanisms -- project memory vs. an appended system prompt -- so a
-green run under the default is evidence about the prompt's *content*, not
-final proof of the production wiring.
+Injection is the production path: the composed prompt goes in via
+`--append-system-prompt`, exactly as `interactive.py` hands it to a hosted
+session, so a green run is evidence about what a session actually receives.
+(A `--config-dir` alternative existed for the per-mode config dirs; those
+went with the 2026-09-12 cutover and the flag went 2026-09-15.)
 """
 from __future__ import annotations
 
@@ -32,7 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from render import CONFIG_ROOT, VAULT, compose  # noqa: E402
+from render import VAULT, compose  # noqa: E402
 
 REGRESSION = VAULT / "prompts" / "regression.jsonl"
 # Test each mode on the model it actually runs. An earlier version tested
@@ -61,19 +58,17 @@ DISALLOWED = "Bash Edit Write WebFetch WebSearch Read Grep Glob"
 NEUTRAL_CWD = Path(os.environ.get("TMPDIR", "/tmp")) / "noctis-regression-cwd"
 
 
-def ask(prompt: str, mode: str, use_config_dir: bool) -> str:
+def ask(prompt: str, mode: str) -> str:
+    # Injected the way a hosted session gets it: the composed prompt in the
+    # argv. The `--config-dir` path went 2026-09-15 with the config dirs it
+    # pointed at, gone since the 09-12 cutover.
     model = DEFAULT_MODEL or MODE_MODELS.get(mode, "claude-opus-5")
     cmd = ["claude", "-p", prompt, "--model", model, "--disallowedTools", DISALLOWED,
-           "--output-format", "json"]
-    env = dict(os.environ)
-    if use_config_dir:
-        env["CLAUDE_CONFIG_DIR"] = str(CONFIG_ROOT / mode)
-    else:
-        cmd += ["--append-system-prompt", compose(mode)]
+           "--output-format", "json", "--append-system-prompt", compose(mode)]
     try:
         NEUTRAL_CWD.mkdir(parents=True, exist_ok=True)
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=180,
-                             env=env, cwd=NEUTRAL_CWD)
+                             env=dict(os.environ), cwd=NEUTRAL_CWD)
         return json.loads(out.stdout).get("result", "")
     except (subprocess.TimeoutExpired, json.JSONDecodeError, ValueError):
         return ""
@@ -82,8 +77,6 @@ def ask(prompt: str, mode: str, use_config_dir: bool) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--verbose", action="store_true")
-    ap.add_argument("--config-dir", action="store_true",
-                    help="inject via CLAUDE_CONFIG_DIR (needs those dirs logged in)")
     args = ap.parse_args()
 
     cases = [json.loads(l) for l in REGRESSION.read_text().splitlines() if l.strip()]
@@ -93,7 +86,7 @@ def main() -> int:
 
     passed, failures = 0, []
     for c in cases:
-        reply = ask(c["prompt"], c["mode"], args.config_dir)
+        reply = ask(c["prompt"], c["mode"])
         low = reply.lower()
 
         missing_absent = [a for a in c.get("absent", []) if a.lower() in low]

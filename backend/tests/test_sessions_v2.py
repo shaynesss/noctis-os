@@ -514,35 +514,25 @@ def test_a_prompt_id_cannot_address_anything_else(client):
         assert r.status_code in (404, 405), attempt
 
 
-def test_saving_a_prompt_rerenders_the_modes_that_use_it(client, monkeypatch):
-    """An edit that only takes effect at the next launch is an edit you
-    cannot check, and the point of editing here is a short loop to the
-    regression suite."""
+def test_saving_a_prompt_writes_the_vault_file_and_nothing_else(client, monkeypatch):
+    """The save is the write: `system.md` is what `~/.claude/CLAUDE.md`
+    links to and an overlay is composed into the argv at the next spawn.
+    Until 2026-09-15 the route also "re-rendered" per-mode config dirs
+    that the 09-12 cutover had removed, reporting "config dir missing"
+    five times per save -- which two tests here pinned as the behaviour."""
     from routers import panels
 
     written = {}
-    rendered = []
     monkeypatch.setattr(panels.vault_io, "write_file", lambda p, c: written.update({p: c}))
-    monkeypatch.setattr(panels, "render", lambda m, *a, **k: (rendered.append(m), (True, "ok"))[1])
 
     body = client.put("/v2/prompts/faber", headers=AUTH, json={"markdown": "new overlay"}).json()
     assert written == {"prompts/overlays/faber.md": "new overlay"}
-    assert rendered == ["faber"]                    # only the mode it belongs to
-    assert body["saved"] == "faber"
+    assert body == {"saved": "faber", "path": "prompts/overlays/faber.md", "bytes": len("new overlay")}
 
-
-def test_editing_the_system_prompt_rerenders_every_mode(client, monkeypatch):
-    """It is composed into all of them, so one of them going stale would be
-    a silent divergence between modes."""
-    from routers import panels
-    from engine import MODE_MODELS
-
-    rendered = []
-    monkeypatch.setattr(panels.vault_io, "write_file", lambda p, c: None)
-    monkeypatch.setattr(panels, "render", lambda m, *a, **k: (rendered.append(m), (True, "ok"))[1])
-
-    client.put("/v2/prompts/system", headers=AUTH, json={"markdown": "base"})
-    assert sorted(rendered) == sorted(MODE_MODELS)
+    body = client.put("/v2/prompts/system", headers=AUTH, json={"markdown": "base"}).json()
+    assert written["prompts/system.md"] == "base"
+    assert body["path"] == "prompts/system.md"
+    assert client.put("/v2/prompts/../etc", headers=AUTH, json={"markdown": "x"}).status_code == 404
 
 
 def test_reading_the_regression_suite_runs_nothing(client):

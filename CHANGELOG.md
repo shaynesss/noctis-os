@@ -9,6 +9,38 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Settings' Save tells the truth, and nightshift finally finds `claude` (2026-09-15)
+
+- **Save is the write.** `PUT /v2/prompts/{id}` writes the file in the
+  vault and returns its path and size; that is the whole save, because
+  `system.md` is what `~/.claude/CLAUDE.md` links to and an overlay is
+  composed into the argv at the next spawn. It used to go on to "re-render"
+  per-mode config dirs the 2026-09-12 cutover had removed, answering
+  "config dir missing" five times per save, and the card said "re-renders
+  every mode" for three days after that stopped being true. The card now
+  says what happens: saved to the vault, uncommitted — commit it from Repo;
+  the next session reads it, running ones do not. The button is the
+  signature. Verified by round-trip: the file's mtime advances, byte for
+  byte what was sent.
+- **The system prompt lost its banner.** `compose()` prepended
+  `<!-- GENERATED … Rendered <timestamp> -->` to every prompt sent in
+  `--append-system-prompt` — describing a file that no longer existed, and
+  putting a fresh timestamp at the head of every session's system prompt,
+  the one place a cacheable prefix must not change. `render()` and the
+  config-dir path in the regression runner went with it.
+- **Nightshift has run nightly at 03:00 since 2026-08-05 — and failed every
+  night.** `bootstrap.sh` installs its launchd plist; launchd's PATH has no
+  Homebrew bin, so every advance step died with
+  `No such file or directory: 'claude'` and the log said "quiet night". 47
+  failures over 41 nights; only flagged-job items (no model needed) ever
+  staged; not one lessons distillation ran. `scripts/nightshift_run.sh`
+  exports its PATH now. The morning's "nothing runs on a schedule" in the
+  docs and spec was wrong and is corrected.
+- **`bootstrap.sh` step 3 would have undone the cutover.** It still
+  symlinked `~/.claude/CLAUDE.md` to `modes/dev/dev.md`; it points at
+  `prompts/system.md` now, and `bootstrap/README.md` describes the five
+  steps the script actually runs rather than the seven it ran in August.
+
 ### A signature colour, and glass through the whole window (2026-09-15)
 
 - **The signature.** One hue the interface's own readings are drawn in —
