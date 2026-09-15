@@ -385,7 +385,7 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
   const many = groups.length > 1
   return (
     <>
-      <div className="grid items-start gap-6"
+      <div className="grid items-stretch gap-6"
            style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
         {groups.map((r) => (
           <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
@@ -479,19 +479,21 @@ function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
 
 /* A section inside a module: a fold with a title and a count, the body
  * under it. Folded, it says how many; open, it shows them. */
-function Fold({ title, meta, open, onToggle, right, children }: {
-  title: string; meta?: React.ReactNode; open: boolean; onToggle: () => void; right?: React.ReactNode; children: React.ReactNode
+function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
+  title: string; meta?: React.ReactNode; open: boolean; onToggle: () => void; right?: React.ReactNode
+  /** Nothing to open: the row stays, so modules keep the same rows, but it does not fold. */
+  empty?: boolean; children?: React.ReactNode
 }) {
   return (
     <div className="border-t border-line">
-      <button type="button" onClick={onToggle}
-              className="flex w-full items-center gap-[8px] px-4 py-[9px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint hover:text-ink">
-        <span className="inline-block w-[10px] text-center">{open ? '▾' : '▸'}</span>
+      <button type="button" onClick={empty ? undefined : onToggle} disabled={empty}
+              className="flex w-full items-center gap-[8px] px-4 py-[9px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint enabled:hover:text-ink disabled:cursor-default">
+        <span className="inline-block w-[10px] text-center">{empty ? '·' : open ? '▾' : '▸'}</span>
         <span>{title}</span>
         {meta && <span className="font-normal normal-case tracking-normal text-ink-faint">· {meta}</span>}
         {right && <span className="ml-auto font-normal normal-case tracking-normal">{right}</span>}
       </button>
-      {open && children}
+      {open && !empty && children}
     </div>
   )
 }
@@ -544,7 +546,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
   const rec = r.notes
   const recLocal = rec ? rec.commits.filter((c) => !c.pushed).length : 0
   return (
-    <section className="rounded-[4px] border border-line bg-surface">
+    <section className="flex flex-col rounded-[4px] border border-line bg-surface">
       <div className="flex items-baseline gap-[10px] px-4 py-[10px]">
         <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{r.name}</span>
         <span className="font-mono text-[11px] text-ink-faint">· {r.branch ?? 'detached'}</span>
@@ -574,20 +576,18 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         <PushButton r={r} onPushed={onChanged} />
       </div>
 
-      {r.dirty.length > 0 && (
-        <Fold title="Uncommitted" meta={r.dirty.length} open={dirtyOpen} onToggle={() => setDirtyOpen((o) => !o)}>
-          <div className="max-h-[220px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7] text-ink-dim">
-            {r.dirty.map((f) => <div key={f}>{f}</div>)}
-          </div>
-        </Fold>
-      )}
+      <Fold title="Uncommitted" meta={r.dirty.length} open={dirtyOpen} onToggle={() => setDirtyOpen((o) => !o)} empty={r.dirty.length === 0}>
+        <div className="max-h-[220px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7] text-ink-dim">
+          {r.dirty.map((f) => <div key={f}>{f}</div>)}
+        </div>
+      </Fold>
 
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
             open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)} right={commitsOpen ? <Legend /> : undefined}>
         <CommitList commits={r.commits} />
       </Fold>
 
-      {rec && (
+      {rec ? (
         <Fold title="Record" meta={`${rec.name} · ${rec.paths[0]} · ${recLocal ? `${recLocal} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}`}`}
               open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}>
           <div className="flex items-center gap-[12px] border-t border-line px-4 py-[8px] text-[12px] text-ink-dim">
@@ -602,6 +602,8 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
           ))}
           <CommitList commits={rec.commits} paths={rec.paths} />
         </Fold>
+      ) : (
+        <Fold title="Record" meta="not a job's project" open={false} onToggle={() => undefined} empty />
       )}
 
       <Fold title="GitHub" open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>

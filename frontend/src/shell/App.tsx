@@ -493,8 +493,11 @@ function Pane({ view, limits, terminals, onInboxDecided }: {
   if (view === 'stats') return <Stats limits={limits} />
   const cwds = terminals.map((t) => `cwd=${encodeURIComponent(t.cwd)}`).join('&')
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className={`mx-auto px-8 pb-8 pt-7 ${view === 'repo' ? 'max-w-[1240px]' : 'max-w-[840px]'}`}>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {/* The Repo view centres itself: auto vertical margins inside a flex
+          column sit a short page in the middle and let a tall one flow from
+          the top, which justify-content would clip. */}
+      <div className={`mx-auto w-full px-8 pb-8 pt-7 ${view === 'repo' ? 'my-auto max-w-[1240px]' : 'max-w-[840px]'}`}>
         {view === 'brief' &&<Fetched<BriefPayload> path="/v2/brief" what="the brief" render={(d) => <Brief data={d} />} />}
         {view === 'repo' && <Fetched<RepoPayload> key={`${cwds}#${repoTick}`} path={`/v2/repos?${cwds}`} what="the repositories" render={(d) => <Repo data={d} terminals={terminals} onChanged={() => setRepoTick((t) => t + 1)} />} />}
         {view === 'inbox' && <Fetched<InboxPayload> path="/v2/inbox" what="the inbox" render={(d) => <Inbox data={d} onDecided={onInboxDecided} />} />}
