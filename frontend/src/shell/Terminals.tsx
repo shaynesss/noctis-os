@@ -195,7 +195,12 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
                  draggable
                  onDragStart={startDrag(run.map((s) => s.id))}
                  onDragEnd={() => { dragging.current = null }}
-                 className="relative flex h-[26px] cursor-grab items-center rounded-control border border-line px-[2px] active:cursor-grabbing"
+                 // Sized by its tabs, not fixed at their height: at h-26 with a
+                 // 1px border the tabs overhung the bracket a pixel each way and
+                 // the pill showed it. Radius 8 over 1px border + 2px padding
+                 // leaves 6px inside, which is the pill's own corner -- so it
+                 // nests instead of crossing the bracket's curve.
+                 className="relative flex cursor-grab items-center rounded-card border border-line p-[2px] active:cursor-grabbing"
                  title="shown together — drag to move the group">
               {run.map((s, k) => (
                 <div key={s.id} className="flex items-center">
