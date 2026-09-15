@@ -127,7 +127,7 @@ export function Palette({
         aria-modal="true"
         aria-label="Search"
         onKeyDown={onKey}
-        className="flex max-h-[66vh] w-[640px] max-w-[calc(100%-32px)] flex-col overflow-hidden rounded-[6px] border border-line bg-surface shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
+        className="flex max-h-[66vh] w-[640px] max-w-[calc(100%-32px)] flex-col overflow-hidden rounded-sheet border border-line bg-sheet shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
       >
         <div className="flex items-center gap-[10px] border-b border-line px-[14px] py-[11px]">
           <span aria-hidden className="font-mono text-[13px] text-ink-faint">⌕</span>
@@ -241,7 +241,7 @@ function Row({
         selected ? 'bg-elevated' : ''
       }`}
     >
-      <span className="mt-[5px] h-[7px] w-[7px] shrink-0 rounded-[1px]" style={{ background: accent }} />
+      <span className="mt-[5px] h-[7px] w-[7px] shrink-0 rounded-[2px]" style={{ background: accent }} />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-mono text-[11.5px] text-ink-dim">{title}</span>
         <span className="mt-[2px] block text-[12.5px] leading-[1.5] text-ink-faint">{excerpt}</span>
@@ -256,7 +256,7 @@ function Row({
             e.stopPropagation()   // deleting must not also open it
             onDelete()
           }}
-          className={`shrink-0 rounded-[3px] px-[5px] py-[2px] text-[12px] leading-none transition-colors hover:bg-line hover:text-faber ${
+          className={`shrink-0 rounded-control px-[5px] py-[2px] text-[12px] leading-none transition-colors hover:bg-line hover:text-faber ${
             selected ? 'text-ink-faint' : 'text-transparent'
           }`}
         >

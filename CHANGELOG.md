@@ -9,6 +9,35 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### One glass, one set of corners (2026-09-15)
+
+- **Corners on a scale.** Nine radii between 1px and 6px, chosen per
+  element, become three tokens: `rounded-card` (8px) on anything that is a
+  panel of content, `rounded-sheet` (12px) on the overlays, `rounded-control`
+  (6px) on anything you press or type into. Marks — cells, dots, bars —
+  keep their tiny radii, because at 7px wide a 6px corner is a circle.
+- **The terminals are cards too.** They were the one view that did not look
+  like the rest of the app: a flat slab divided by rules. Each terminal now
+  sits in the same card as a Stats card or a Repo module — corners, border,
+  surface — with the ground showing in the gaps, and when several show the
+  focused one's border takes the mode's accent instead of a strip on top.
+- **Every view centres itself** when shorter than the window, not just Repo
+  and Stats; Inbox and Settings used to start at the top.
+- **Sheets are opaque.** The launcher, palette and reader sat on `surface`
+  and the page's own text read through them — the one place glass works
+  against you. A `--color-sheet` token, `#181818`: a sheet floats over the
+  page, not the desktop, so there is no glass to lose.
+- **The focus ring is one pixel** of the accent at 70%, not two solid: ⌘K
+  and ⌘T focus their field from a keystroke, which counts as focus-visible,
+  and the old ring read as an error state around the search box.
+- **The pools are ours.** `Pools.tsx` is border-beam's pulse-outside ported
+  (MIT), with thirteen pools laid out evenly — five along the top, four
+  along the bottom, two up each side, a glow in each corner — each 1.6× the
+  library's so neighbours' tails meet and the edge carries one band of
+  light with brighter passages. Same three layers, same 30fps oscillators,
+  one loop for every card, each at its own phase. Silver, or Faber's red for
+  a build. The package and the halo are gone.
+
 ### Border beam on the cards (2026-09-15)
 
 - **Stats cards and Repo modules carry a border beam** — the `border-beam`

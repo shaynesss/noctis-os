@@ -56,7 +56,7 @@ export function Reader({ path, onClose }: { path: string; onClose: () => void })
         role="dialog"
         aria-modal="true"
         aria-label={path}
-        className="flex max-h-[80vh] w-[760px] max-w-[calc(100%-32px)] flex-col overflow-hidden rounded-[6px] border border-line bg-surface shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
+        className="flex max-h-[80vh] w-[760px] max-w-[calc(100%-32px)] flex-col overflow-hidden rounded-sheet border border-line bg-sheet shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
       >
         <div className="flex shrink-0 items-center gap-[10px] border-b border-line px-[14px] py-[10px]">
           {/* The full path, not a prettified title: it is how you find the

@@ -144,7 +144,7 @@ export function Launcher({
         aria-modal="true"
         aria-label={handoff ? 'Hand off session' : 'New session'}
         onKeyDown={onKey}
-        className="w-[560px] max-w-[calc(100%-32px)] overflow-hidden rounded-[6px] border border-line bg-surface shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
+        className="w-[560px] max-w-[calc(100%-32px)] overflow-hidden rounded-sheet border border-line bg-sheet shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
         style={{ ['--accent' as string]: MODE_ACCENT[mode] }}
       >
         <div className="flex items-center gap-[9px] border-b border-line px-[14px] py-[10px] font-mono text-[11px] uppercase tracking-[0.13em] text-ink-faint">
@@ -153,7 +153,7 @@ export function Launcher({
             <span className="flex items-center gap-[6px] normal-case tracking-normal">
               <span className="text-ink-faint">from</span>
               <span
-                className="h-[7px] w-[7px] rounded-[1px]"
+                className="h-[7px] w-[7px] rounded-[2px]"
                 style={{ background: MODE_ACCENT[handoff.mode] }}
               />
               <span className="text-ink-dim">{handoff.label}</span>
@@ -173,7 +173,7 @@ export function Launcher({
                   type="button"
                   onClick={() => setMode(m)}
                   aria-pressed={selected}
-                  className={`flex items-center gap-[10px] rounded-[4px] border px-[10px] py-[8px] text-left transition-colors ${
+                  className={`flex items-center gap-[10px] rounded-control border px-[10px] py-[8px] text-left transition-colors ${
                     selected ? '' : 'border-transparent hover:bg-elevated'
                   }`}
                   style={
@@ -186,7 +186,7 @@ export function Launcher({
                   }
                 >
                   <span
-                    className="h-[8px] w-[8px] shrink-0 rounded-[1px]"
+                    className="h-[8px] w-[8px] shrink-0 rounded-[2px]"
                     style={{ background: MODE_ACCENT[m], opacity: selected ? 1 : 0.55 }}
                   />
                   <span className="min-w-0 flex-1">
@@ -201,7 +201,7 @@ export function Launcher({
                   {/* The tool policy is shown because it is the one thing that
                       changes what the session can do to your files. */}
                   {info.policy && (
-                    <span className="shrink-0 rounded-[3px] border border-line px-[5px] py-px font-mono text-[10px] text-ink-faint">
+                    <span className="shrink-0 rounded-control border border-line px-[5px] py-px font-mono text-[10px] text-ink-faint">
                       {info.policy}
                     </span>
                   )}
@@ -224,7 +224,7 @@ export function Launcher({
                 value={carried}
                 onChange={(e) => setCarried(e.target.value)}
                 rows={3}
-                className="w-full resize-none rounded-[4px] border border-line bg-ground px-[10px] py-[8px] font-mono text-[11.5px] leading-[1.6] text-ink-dim outline-none focus:border-[var(--accent)]"
+                className="w-full resize-none rounded-control border border-line bg-ground px-[10px] py-[8px] font-mono text-[11.5px] leading-[1.6] text-ink-dim outline-none focus:border-[var(--accent)]"
               />
             </label>
           )}
@@ -241,7 +241,7 @@ export function Launcher({
               }}
               list="cwd-recents"
               spellCheck={false}
-              className="w-full rounded-[4px] border border-line bg-ground px-[10px] py-[7px] font-mono text-[11.5px] text-ink outline-none focus:border-[var(--accent)]"
+              className="w-full rounded-control border border-line bg-ground px-[10px] py-[7px] font-mono text-[11.5px] text-ink outline-none focus:border-[var(--accent)]"
             />
             <datalist id="cwd-recents">
               {dirs.map((d) => (
@@ -260,7 +260,7 @@ export function Launcher({
               onChange={(e) => setPrompt(e.target.value)}
               rows={3}
               spellCheck={false}
-              className="w-full resize-none rounded-[4px] border border-line bg-ground px-[10px] py-[8px] font-mono text-[12px] leading-[1.6] text-ink outline-none focus:border-[var(--accent)]"
+              className="w-full resize-none rounded-control border border-line bg-ground px-[10px] py-[8px] font-mono text-[12px] leading-[1.6] text-ink outline-none focus:border-[var(--accent)]"
             />
           </label>
         </div>
@@ -274,7 +274,7 @@ export function Launcher({
             onClick={launch}
             disabled={!!full}
 
-            className="ml-auto rounded-[4px] px-[13px] py-[6px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+            className="ml-auto rounded-control px-[13px] py-[6px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
             style={{ background: MODE_ACCENT[mode] }}
           >
             Start {MODE_LABEL[mode]}

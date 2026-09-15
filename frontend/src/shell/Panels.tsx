@@ -131,7 +131,7 @@ export function Heading({ children, className = '' }: { children: React.ReactNod
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-[3px] border border-line bg-surface">{children}</div>
+  return <div className="rounded-card border border-line bg-surface">{children}</div>
 }
 
 /** The border beam, as libraries.dev/beam has it at "Pulse · Pulse Outside ·
@@ -140,7 +140,7 @@ function Card({ children }: { children: React.ReactNode }) {
  *  the pools laid out evenly so a card five times wider than the library's
  *  demo has no dark stretch of edge. Silver for a card no character owns,
  *  Faber's red for a build. `radius` must match the card's own. */
-export function Beam({ tone = 'silver', radius = 3, children }: { tone?: PoolTone; radius?: number; children: React.ReactNode }) {
+export function Beam({ tone = 'silver', radius = 8, children }: { tone?: PoolTone; radius?: number; children: React.ReactNode }) {
   return <Pools tone={tone} radius={radius} strength={0.5}>{children}</Pools>
 }
 
@@ -221,7 +221,7 @@ export function Digest({ data, onView }: { data: DigestPayload; onView?: (view: 
           </div>
           {pushable && onView && (
             <button type="button" onClick={() => onView('repo')}
-                    className="shrink-0 rounded-[4px] border border-line px-[10px] py-[4px] font-mono text-[11px] text-ink hover:bg-elevated">
+                    className="shrink-0 rounded-control border border-line px-[10px] py-[4px] font-mono text-[11px] text-ink hover:bg-elevated">
               Repo
             </button>
           )}
@@ -249,7 +249,7 @@ export function Diff({ text }: { text: string }) {
     ctx: { color: 'var(--color-ink-dim)' },
   }
   return (
-    <pre className="m-0 overflow-x-auto rounded-[3px] border border-line bg-ground font-mono text-[11.5px] leading-[1.6]">
+    <pre className="m-0 overflow-x-auto rounded-card border border-line bg-ground font-mono text-[11.5px] leading-[1.6]">
       {text.split('\n').map((l, k) => {
         const t = kind(l)
         return (
@@ -326,7 +326,7 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
             <Card key={item.id}>
               {/* The sender's face, the title, what kind of thing it is. */}
               <div className="flex items-center gap-[10px] px-4 pt-[13px]">
-                <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[3px] bg-elevated">
+                <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-control bg-elevated">
                   <ModeMark mode={mode} size={16} />
                 </span>
                 <span className="min-w-0 flex-1 text-[13.5px] font-medium leading-[1.4] text-ink">{item.title}</span>
@@ -334,7 +334,7 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
                     the file could not be parsed, so nothing about it is
                     known -- including whether it needs attention. */}
                 <span
-                  className="shrink-0 rounded-[3px] border px-[6px] py-px font-mono text-[10px]"
+                  className="shrink-0 rounded-control border px-[6px] py-px font-mono text-[10px]"
                   style={
                     item.kind === 'unreadable'
                       ? { borderColor: 'var(--color-faber)', color: 'var(--color-faber)' }
@@ -368,7 +368,7 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
                   <span className="ml-auto flex shrink-0 items-center gap-[5px]">
                     {item.full && (
                       <button type="button" onClick={() => toggle(item.id)}
-                              className="rounded-[3px] border border-line px-[8px] py-[3px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink">
+                              className="rounded-control border border-line px-[8px] py-[3px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink">
                         {isOpen ? 'close' : 'read'}
                       </button>
                     )}
@@ -376,7 +376,7 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
                       type="button"
                       disabled={busy === item.id}
                       onClick={() => void decide(item.id, 'reject')}
-                      className="rounded-[3px] border border-line px-[8px] py-[3px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink disabled:opacity-40"
+                      className="rounded-control border border-line px-[8px] py-[3px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink disabled:opacity-40"
                     >
                       reject
                     </button>
@@ -384,7 +384,7 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
                       type="button"
                       disabled={busy === item.id}
                       onClick={() => void decide(item.id, 'accept')}
-                      className="rounded-[3px] border px-[9px] py-[3px] text-ink transition-colors hover:bg-elevated disabled:opacity-40"
+                      className="rounded-control border px-[9px] py-[3px] text-ink transition-colors hover:bg-elevated disabled:opacity-40"
                       style={{ borderColor: accent }}
                     >
                       {item.changes_files ? 'accept · apply' : 'accept'}
@@ -530,15 +530,15 @@ function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
         <>
           <span className="text-ink-dim">history rewritten — replace origin's {behind}?</span>
           <button type="button" onClick={() => void run(true)}
-                  className="rounded-[3px] border px-[8px] py-[2px] text-ink hover:bg-elevated" style={{ borderColor: 'var(--color-faber)' }}>
+                  className="rounded-control border px-[8px] py-[2px] text-ink hover:bg-elevated" style={{ borderColor: 'var(--color-faber)' }}>
             force push
           </button>
-          <button type="button" onClick={() => setState('idle')} className="rounded-[3px] border border-line px-[8px] py-[2px] text-ink-faint hover:text-ink">cancel</button>
+          <button type="button" onClick={() => setState('idle')} className="rounded-control border border-line px-[8px] py-[2px] text-ink-faint hover:text-ink">cancel</button>
         </>
       ) : state === 'done' ? null : (
         <button type="button" disabled={state === 'pushing'}
                 onClick={() => (diverged ? setState('confirm-force') : void run(false))}
-                className="rounded-[3px] border px-[9px] py-[2px] text-ink transition-colors hover:bg-elevated disabled:opacity-40"
+                className="rounded-control border px-[9px] py-[2px] text-ink transition-colors hover:bg-elevated disabled:opacity-40"
                 style={{ borderColor: diverged ? 'var(--color-faber)' : 'var(--color-line)' }}>
           {state === 'pushing' ? 'pushing…' : !r.upstream ? `publish ${r.branch ?? 'branch'}` : diverged ? 'push · force' : `push ${ahead}`}
         </button>
@@ -619,8 +619,8 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
   // -- Faber's build, so Faber's warmth -- and silver for every other
   // repository, the vault included.
   return (
-    <Beam tone={rec ? 'faber' : 'silver'} radius={4}>
-    <section className="flex flex-col rounded-[4px] border border-line bg-surface">
+    <Beam tone={rec ? 'faber' : 'silver'}>
+    <section className="flex flex-col rounded-card border border-line bg-surface">
       <div className="flex items-baseline gap-[10px] px-4 py-[10px]">
         <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{r.name}</span>
         <span className="font-mono text-[11px] text-ink-faint">· {r.branch ?? 'detached'}</span>
@@ -763,7 +763,7 @@ function nextStep(r: RepoInfo): string {
 function Tag({ children, tone }: { children: React.ReactNode; tone?: 'good' | 'bad' }) {
   const color = tone === 'bad' ? 'var(--color-faber)' : tone === 'good' ? 'var(--color-noctua)' : 'var(--color-ink-faint)'
   return (
-    <span className="shrink-0 rounded-[3px] border px-[6px] py-px font-mono text-[10px]" style={{ borderColor: 'var(--color-line)', color }}>
+    <span className="shrink-0 rounded-control border px-[6px] py-px font-mono text-[10px]" style={{ borderColor: 'var(--color-line)', color }}>
       {children}
     </span>
   )
@@ -891,7 +891,7 @@ function Prompts() {
               setDraft(null)          // an unsaved edit is not carried to another file
               setSaving('idle')
             }}
-            className={`rounded-[4px] px-[8px] py-[3px] font-mono text-[11.5px] transition-colors ${
+            className={`rounded-control px-[8px] py-[3px] font-mono text-[11.5px] transition-colors ${
               p.id === selected ? 'bg-elevated text-ink' : 'text-ink-faint hover:text-ink-dim'
             }`}
           >
@@ -931,7 +931,7 @@ function Prompts() {
             setSaving(ok ? 'saved' : 'failed')
             if (ok) setDraft(null)
           }}
-          className="ml-auto rounded-[4px] px-[11px] py-[4px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+          className="ml-auto rounded-control px-[11px] py-[4px] font-mono text-[11.5px] text-ground transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
           style={{ background: 'var(--color-noctua)' }}
         >
           Save
@@ -1016,7 +1016,7 @@ function Regression() {
 
 function Loading() {
   return (
-    <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
+    <div className="rounded-card border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
       Loading…
     </div>
   )

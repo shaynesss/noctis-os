@@ -62,7 +62,7 @@ export function Rail({ view, onView, badges }: {
             </svg>
             {item.label}
             {badges?.[item.id] ? (
-              <span className="ml-auto rounded-lg bg-maint px-[6px] font-mono text-[10px] font-bold text-ground">
+              <span className="ml-auto rounded-full bg-maint px-[6px] font-mono text-[10px] font-bold text-ground">
                 {badges[item.id]}
               </span>
             ) : null}
@@ -75,7 +75,7 @@ export function Rail({ view, onView, badges }: {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="rounded-[3px] border border-b-2 border-line bg-elevated px-[5px] py-[2px] font-mono text-[11px] text-ink-dim">
+    <kbd className="rounded-control border border-b-2 border-line bg-elevated px-[5px] py-[2px] font-mono text-[11px] text-ink-dim">
       {children}
     </kbd>
   )
@@ -154,7 +154,7 @@ export function OverageBanner({ onDismiss }: { onDismiss: () => void }) {
       <button
         type="button"
         onClick={onDismiss}
-        className="ml-auto rounded-[3px] px-[6px] py-px text-ink-faint transition-colors hover:bg-line hover:text-ink"
+        className="ml-auto rounded-control px-[6px] py-px text-ink-faint transition-colors hover:bg-line hover:text-ink"
       >
         dismiss
       </button>
@@ -388,7 +388,7 @@ function CharacterStrip({
             key={c.mode}
             type="button"
             title={`${MODE_LABEL[c.mode]} · ${hasSession ? 'open' : 'idle'}`}
-            className="group relative grid h-6 w-6 place-items-center rounded-[3px] hover:bg-elevated"
+            className="group relative grid h-6 w-6 place-items-center rounded-control hover:bg-elevated"
           >
             {sprite ? (
               <img

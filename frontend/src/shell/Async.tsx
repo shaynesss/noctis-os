@@ -11,7 +11,7 @@
  *  "you have no data" when it means "nothing was asked". */
 export function Unreachable({ what }: { what: string }) {
   return (
-    <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-dim">
+    <div className="rounded-card border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-dim">
       Could not load {what}. The backend on{' '}
       <code className="font-mono text-[11.5px] text-ink-faint">localhost:8000</code> is not
       responding, or answered with an error.

@@ -482,7 +482,7 @@ function HistoryView({ transcript, full, onResume, onClose, onOpenDoc }: {
             <span className="text-ink-dim">{full}</span>
           ) : (
             <button type="button" onClick={() => onResume(transcript)}
-                    className="rounded-[4px] px-[10px] py-[4px] text-ground"
+                    className="rounded-control px-[10px] py-[4px] text-ground"
                     style={{ background: MODE_ACCENT[transcript.mode] }}>
               resume in a terminal
             </button>
@@ -516,10 +516,11 @@ function Pane({ view, limits, terminals, onInboxDecided, onView }: {
   const cwds = terminals.map((t) => `cwd=${encodeURIComponent(t.cwd)}`).join('&')
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {/* The Repo view centres itself: auto vertical margins inside a flex
-          column sit a short page in the middle and let a tall one flow from
-          the top, which justify-content would clip. */}
-      <div className={`mx-auto w-full px-8 pb-8 pt-7 ${view === 'repo' ? 'my-auto max-w-[1240px]' : 'max-w-[840px]'}`}>
+      {/* Every view centres itself the same way: auto vertical margins inside
+          a flex column sit a short page in the middle and let a tall one
+          flow from the top, which justify-content would clip. Repo is the
+          wide one. */}
+      <div className={`mx-auto my-auto w-full px-8 pb-8 pt-7 ${view === 'repo' ? 'max-w-[1240px]' : 'max-w-[840px]'}`}>
         {view === 'repo' && <Fetched<RepoPayload> key={`${cwds}#${repoTick}`} path={`/v2/repos?${cwds}`} what="the repositories" render={(d) => <Repo data={d} terminals={terminals} onChanged={() => setRepoTick((t) => t + 1)} />} />}
         {/* Two reads, so a slow git pass for the digest never holds up the
             decisions below it, and an unreachable one says so in its place. */}
@@ -543,7 +544,7 @@ function Fetched<T>({ path, what, render }: {
   if (data === false) return <Unreachable what={what} />
   if (data === null)
     return (
-      <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
+      <div className="rounded-card border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
         Loading…
       </div>
     )
@@ -576,7 +577,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
         </h2>
 
         {windows ? (
-          <Beam><div className="mb-[10px] rounded-[3px] border border-line bg-surface px-4 pb-[6px] pt-1">
+          <Beam><div className="mb-[10px] rounded-card border border-line bg-surface px-4 pb-[6px] pt-1">
             {windows.map((w, i) => (
               <div
                 key={w.label}
@@ -598,7 +599,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
             ))}
           </div></Beam>
         ) : (
-          <div className="mb-[10px] rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-dim">
+          <div className="mb-[10px] rounded-card border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-dim">
             A session reports the rolling windows once it has spoken to the API. Run one and they appear here.
           </div>
         )}
@@ -612,11 +613,11 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
         {stats === false ? (
           <Unreachable what="usage history" />
         ) : stats === null ? (
-          <div className="rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
+          <div className="rounded-card border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-faint">
             Loading…
           </div>
         ) : (
-          <Beam><div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
+          <Beam><div className="rounded-card border border-line bg-surface px-4 py-[14px]">
             <div className="mb-4 flex items-baseline gap-[9px]">
               <b className="font-mono text-[29px] font-bold tabular-nums tracking-[-0.02em] text-ink">
                 {fmt(
@@ -666,7 +667,7 @@ function Stacked({ parts }: { parts: { label: string; value: number; tone: strin
   const total = parts.reduce((s, p) => s + p.value, 0)
   return (
     <div className="font-mono text-[11.5px]">
-      <div className="flex h-[7px] overflow-hidden rounded-[3px] bg-line">
+      <div className="flex h-[7px] overflow-hidden rounded-full bg-line">
         {parts.map((p) => (
           <span key={p.label} title={`${p.label} ${p.value.toLocaleString()}`}
                 className="block h-full min-w-[2px]"

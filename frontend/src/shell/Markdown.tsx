@@ -137,7 +137,7 @@ function renderSpan(span: Span, key: number) {
       return (
         <code
           key={key}
-          className="rounded-[3px] border border-line bg-elevated px-[4px] py-px font-mono text-[0.87em] text-ink"
+          className="rounded-control border border-line bg-elevated px-[4px] py-px font-mono text-[0.87em] text-ink"
         >
           {span.text}
         </code>
@@ -190,14 +190,14 @@ function CodeBlock({ code }: { code: string }) {
 
   return (
     <div className="group relative mb-[10px] mt-[2px]">
-      <pre className="overflow-x-auto rounded-[4px] border border-line bg-ground py-[9px] pl-[11px] pr-[64px] font-mono text-[11.5px] leading-[1.6] text-ink-dim">
+      <pre className="overflow-x-auto rounded-card border border-line bg-ground py-[9px] pl-[11px] pr-[64px] font-mono text-[11.5px] leading-[1.6] text-ink-dim">
         <code>{code}</code>
       </pre>
       <button
         type="button"
         onClick={copy}
         aria-label="Copy to clipboard"
-        className={`absolute right-[7px] top-[6px] rounded-[3px] border border-line bg-surface px-[7px] py-[2px] font-mono text-[10.5px] transition-opacity ${
+        className={`absolute right-[7px] top-[6px] rounded-card border border-line bg-surface px-[7px] py-[2px] font-mono text-[10.5px] transition-opacity ${
           copied
             ? 'text-good opacity-100'
             : 'text-ink-faint opacity-0 hover:text-ink group-hover:opacity-100 focus-visible:opacity-100'

@@ -44,7 +44,7 @@ function Disclosure({
   const [open, setOpen] = useState(defaultOpen)
   const canOpen = Boolean(body)
   return (
-    <div className="mb-[8px] overflow-hidden rounded-[3px] border border-line bg-surface">
+    <div className="mb-[8px] overflow-hidden rounded-card border border-line bg-surface">
       <button
         type="button"
         onClick={() => canOpen && setOpen(!open)}
@@ -230,7 +230,7 @@ function ToolRun({ tools }: { tools: ToolBlock[] }) {
         type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-[8px] rounded-[3px] px-[2px] py-[3px] text-left font-mono text-[12px] text-ink-faint hover:text-ink-dim"
+        className="flex w-full items-center gap-[8px] rounded-control px-[2px] py-[3px] text-left font-mono text-[12px] text-ink-faint hover:text-ink-dim"
       >
         <Caret open={open} />
         <span>{summarise(tools)}</span>
@@ -292,7 +292,7 @@ function renderBlock(
                         type="button"
                         onClick={() => redo.onEdit!(b.text)}
                         title="Put this back in the composer to rephrase"
-                        className="rounded-[3px] px-[6px] py-[2px] font-mono text-[10.5px] text-ink-faint hover:bg-elevated hover:text-ink"
+                        className="rounded-control px-[6px] py-[2px] font-mono text-[10.5px] text-ink-faint hover:bg-elevated hover:text-ink"
                       >
                         edit
                       </button>
@@ -302,7 +302,7 @@ function renderBlock(
                         type="button"
                         onClick={() => redo.onRetry!(b.text)}
                         title="Ask this again"
-                        className="rounded-[3px] px-[6px] py-[2px] font-mono text-[10.5px] text-ink-faint hover:bg-elevated hover:text-ink"
+                        className="rounded-control px-[6px] py-[2px] font-mono text-[10.5px] text-ink-faint hover:bg-elevated hover:text-ink"
                       >
                         retry
                       </button>

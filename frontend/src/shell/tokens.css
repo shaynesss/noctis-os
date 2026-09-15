@@ -61,6 +61,11 @@
      grid's empty cells could vanish. The glass stays in the ground. */
   --color-surface: rgba(22, 22, 22, 0.72);
   --color-elevated: rgba(28, 28, 28, 0.84);
+  /* The overlays that float above the page -- launcher, palette, reader.
+     Opaque: on `surface` the page's own text read through the sheet, and
+     even at 0.95 a bright line beneath stayed legible. A sheet floats over
+     the page, not the desktop, so there is no glass to lose. */
+  --color-sheet: #181818;
   --color-line: #2a2a2a;
   --color-line-soft: #212121;
 
@@ -80,6 +85,16 @@
 
   --font-mono: "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* corners -- one scale for the whole shell (2026-09-15; before this,
+     nine different radii between 1px and 6px, chosen per element).
+     `rounded-card` on anything that is a panel of content, `rounded-sheet`
+     on the overlays that float above the page, `rounded-control` on
+     anything you press or type into. Marks (cells, dots, bars) keep their
+     own tiny radii: at 7px wide a 6px corner is a circle. */
+  --radius-card: 8px;
+  --radius-sheet: 12px;
+  --radius-control: 6px;
 }
 
 :root {
@@ -115,8 +130,11 @@ body {
 
 /* Focus has to stay visible on a surface this dark, and the default ring
  * disappears against #0f0f0f. */
+/* One pixel of the accent, not two: a ⌘K or ⌘T focuses its field from a
+   keystroke, which counts as focus-visible, and a 2px ring on every open
+   read as an error state around the search box. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
   outline-offset: 1px;
 }
 

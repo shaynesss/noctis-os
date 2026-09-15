@@ -72,7 +72,7 @@ export function Artifacts({
             disabled={!vault}
             onClick={() => vault && onOpen(vault)}
             title={`${a.path}${a.writes > 1 ? ` · ${a.writes} writes` : ''}`}
-            className={`flex items-center gap-[6px] rounded-[4px] border border-line px-[8px] py-[3px] font-mono text-[11px] transition-colors ${
+            className={`flex items-center gap-[6px] rounded-control border border-line px-[8px] py-[3px] font-mono text-[11px] transition-colors ${
               vault
                 ? 'cursor-pointer text-ink-dim hover:bg-elevated hover:text-ink'
                 : 'cursor-default text-ink-faint'
