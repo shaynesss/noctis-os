@@ -541,7 +541,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
   const [dirtyOpen, setDirtyOpen] = useState(!folded)
   const [commitsOpen, setCommitsOpen] = useState(!folded)
   const [recordOpen, setRecordOpen] = useState(false)
-  const [githubOpen, setGithubOpen] = useState(true)
+  const [githubOpen, setGithubOpen] = useState(false)
   const local = r.commits.filter((c) => !c.pushed).length
   const rec = r.notes
   const recLocal = rec ? rec.commits.filter((c) => !c.pushed).length : 0
@@ -608,7 +608,8 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         <Fold title="Record" meta="not a job's project" open={false} onToggle={() => undefined} empty />
       )}
 
-      <Fold title="GitHub" open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>
+      <Fold title="GitHub" meta={r.slug ? r.slug : `not available: ${r.github_reason ?? 'unknown'}`}
+            open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>
         {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
       </Fold>
     </section>

@@ -126,7 +126,7 @@ describe('Repo view', () => {
 
   it('says why there is no GitHub half when the remote is not there', () => {
     const t = text({ slug: null, github_reason: 'no remote named origin' })
-    expect(t).toContain('Not available: no remote named origin')
+    expect(t).toContain('not available: no remote named origin')
     expect(t).toContain('Commits')
   })
 })
