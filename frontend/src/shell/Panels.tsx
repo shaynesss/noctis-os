@@ -8,8 +8,8 @@
  * what is waiting on you.
  */
 import { useEffect, useRef, useState } from 'react'
-import { BorderBeam } from 'border-beam'
 import { Unreachable } from './Async'
+import { Pools, type PoolTone } from './Pools'
 import { post, put } from './engine'
 import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
@@ -135,23 +135,13 @@ function Card({ children }: { children: React.ReactNode }) {
 }
 
 /** The border beam, as libraries.dev/beam has it at "Pulse · Pulse Outside ·
- *  Mono": soft light pooling at points around the edge and blooming outward,
- *  breathing rather than travelling. The library's own component, because
- *  two hand-written versions (a pulse, then a rotating arc) both read as
- *  something else -- the motion lives in its JS, not in a stylesheet that
- *  can be copied. Under it, a `.halo`: one even glow the card's shape, so
- *  the edges between the library's seven pools are not dark and the pulse
- *  encompasses the card. The pools stay mono everywhere; `tone` colours the
- *  halo -- silver for a card no character owns, Faber's red for a build.
- *  (The library's `sunset` was tried for Faber and spilt yellow.) */
-export function Beam({ tone = 'silver', children }: { tone?: 'silver' | 'faber'; children: React.ReactNode }) {
-  return (
-    <div className="halo" style={{ '--halo': tone === 'faber' ? 'var(--color-faber)' : '#c9c9c9' } as React.CSSProperties}>
-      <BorderBeam size="pulse-outside" colorVariant="mono" theme="dark" staticColors strength={0.6}>
-        {children}
-      </BorderBeam>
-    </div>
-  )
+ *  Mono": soft light pooling at points round the edge and blooming outward,
+ *  breathing rather than travelling. `Pools` is that mechanism ported, with
+ *  the pools laid out evenly so a card five times wider than the library's
+ *  demo has no dark stretch of edge. Silver for a card no character owns,
+ *  Faber's red for a build. `radius` must match the card's own. */
+export function Beam({ tone = 'silver', radius = 3, children }: { tone?: PoolTone; radius?: number; children: React.ReactNode }) {
+  return <Pools tone={tone} radius={radius} strength={0.5}>{children}</Pools>
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -629,7 +619,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
   // -- Faber's build, so Faber's warmth -- and silver for every other
   // repository, the vault included.
   return (
-    <Beam tone={rec ? 'faber' : 'silver'}>
+    <Beam tone={rec ? 'faber' : 'silver'} radius={4}>
     <section className="flex flex-col rounded-[4px] border border-line bg-surface">
       <div className="flex items-baseline gap-[10px] px-4 py-[10px]">
         <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{r.name}</span>

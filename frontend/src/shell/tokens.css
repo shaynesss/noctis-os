@@ -148,31 +148,6 @@ body {
   background: transparent;
 }
 
-/* The halo under the border beam: one soft, even glow the card's own shape,
- * a few pixels outside its edge, breathing on the beam's cycle. The
- * library's pulse pools light at seven points and leaves the edges between
- * them dark; this fills them so the pulse encompasses the card. Faint by
- * design -- it is the floor the pools rise from, not a second effect. */
-.halo {
-  position: relative;
-  isolation: isolate;
-  --halo: #c9c9c9;
-}
-.halo::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: 6px;
-  pointer-events: none;
-  box-shadow: 0 0 22px 5px color-mix(in srgb, var(--halo) 14%, transparent);
-  animation: halo-breathe 2.3s ease-in-out infinite;
-}
-@keyframes halo-breathe {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 1; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
