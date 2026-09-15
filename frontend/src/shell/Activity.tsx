@@ -15,6 +15,7 @@
 
 import { buildGrid } from './grid'
 import { Unreachable } from './Async'
+import { Beam } from './Panels'
 
 /** The heading, shared by the grid and by the two states that replace it, so
  *  the section does not vanish entirely while it is unavailable. */
@@ -88,7 +89,7 @@ export function Activity(
 
   return (
     <Frame>
-      <div className="beam beam-2 rounded-[3px] border border-line bg-surface px-4 py-[14px]">
+      <Beam><div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
         <div className="mb-[14px] flex items-baseline gap-2">
           <b className="text-[14px] font-semibold text-ink tabular-nums">{total}</b>
           <span className="font-mono text-[10.5px] text-ink-faint">sessions in the last year</span>
@@ -126,7 +127,7 @@ export function Activity(
             </div>
           </div>
         </div>
-      </div>
+      </div></Beam>
     </Frame>
   )
 }

@@ -8,6 +8,7 @@
  * what is waiting on you.
  */
 import { useEffect, useRef, useState } from 'react'
+import { BorderBeam } from 'border-beam'
 import { Unreachable } from './Async'
 import { post, put } from './engine'
 import { useFetched } from './useFetched'
@@ -131,6 +132,23 @@ export function Heading({ children, className = '' }: { children: React.ReactNod
 
 function Card({ children }: { children: React.ReactNode }) {
   return <div className="rounded-[3px] border border-line bg-surface">{children}</div>
+}
+
+/** The border beam, as libraries.dev/beam has it at "Pulse · Pulse Outside ·
+ *  Mono": soft light pooling at points around the edge and blooming outward,
+ *  breathing rather than travelling. The library's own component, because
+ *  two hand-written versions (a pulse, then a rotating arc) both read as
+ *  something else -- the motion lives in its JS, not in a stylesheet that
+ *  can be copied. `tone` is silver for a card no character owns and Faber's
+ *  warmth for a build: the palettes are the library's four, and `sunset`
+ *  held still is the nearest to Faber's red. */
+export function Beam({ tone = 'silver', children }: { tone?: 'silver' | 'faber'; children: React.ReactNode }) {
+  return (
+    <BorderBeam size="pulse-outside" colorVariant={tone === 'faber' ? 'sunset' : 'mono'} theme="dark"
+                staticColors strength={0.85}>
+      {children}
+    </BorderBeam>
+  )
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -605,11 +623,11 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
   const rec = r.notes
   const recLocal = rec ? rec.commits.filter((c) => !c.pushed).length : 0
   // The beam is the character's when the repository is a dev job's project
-  // -- Faber's build, so Faber's red -- and the star's silver for every
-  // other repository, the vault included.
+  // -- Faber's build, so Faber's warmth -- and silver for every other
+  // repository, the vault included.
   return (
-    <section className="beam flex flex-col rounded-[4px] border border-line bg-surface"
-             style={{ '--beam': rec ? 'var(--color-faber)' : 'var(--color-silver)' } as React.CSSProperties}>
+    <Beam tone={rec ? 'faber' : 'silver'}>
+    <section className="flex flex-col rounded-[4px] border border-line bg-surface">
       <div className="flex items-baseline gap-[10px] px-4 py-[10px]">
         <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{r.name}</span>
         <span className="font-mono text-[11px] text-ink-faint">· {r.branch ?? 'detached'}</span>
@@ -676,6 +694,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
       </Fold>
     </section>
+    </Beam>
   )
 }
 

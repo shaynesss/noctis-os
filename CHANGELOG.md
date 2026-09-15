@@ -11,20 +11,24 @@ scheduler, which is the only feature left in the build order.
 
 ### Border beam on the cards (2026-09-15)
 
-- **Stats cards and Repo modules carry a border beam** after
-  libraries.dev/beam at its pulse-outside · mono setting: an arc of light
-  travels round the card's border once every 1.96s with a soft glow
-  bleeding off it outward. Built the way the reference builds it, read from
-  its CSS rather than its screenshot: a conic-gradient arc whose start angle
-  is a registered `@property` spun linearly; a 1px ring made by masking a
-  padded pseudo-element to its own padding box; the glow a second, wider,
-  blurred copy outside the edge. Pure CSS, no library. `--beam` sets the
-  colour: the star's silver (`--color-silver`, the Logo gradient's mid-stop)
-  on Stats and on every repository, **Faber's red on a repository that is a
-  dev job's project** — the build glows in its builder's colour. Cards on
-  one page start at different points of the circuit. A first cut pulsed in
-  and out instead of travelling, and read as a card being selected over and
-  over; it lasted one look.
+- **Stats cards and Repo modules carry a border beam** — the `border-beam`
+  package (MIT, React-only, no dependencies) at libraries.dev/beam's
+  "pulse outside · mono" setting: soft light pooling at points around the
+  edge and blooming outward, breathing, never travelling. Silver on every
+  card; **a repository that is a dev job's project takes the `sunset`
+  palette held still** — the library's four palettes have no Faber red and
+  warm orange-red is the nearest. Two hand-written versions preceded it in
+  the same afternoon, a pulse and then a rotating arc, both built from the
+  reference's screenshot and hero examples rather than the playground at
+  those settings; both read as something else. The motion lives in the
+  library's JavaScript, not in a stylesheet that can be copied, which is why
+  the package rather than a port. Declared in the spec's Design Brief.
+- **Lifetime tokens as one stacked bar.** The four kinds — input, output,
+  cache read, cache write — as shares of one total on a single bar, greys
+  darkest to lightest, with a dot-and-figure legend beneath, in place of
+  four bars on four scales. Cache reads are three thousand times the input,
+  so the small kinds are slivers with a 2px floor; the legend carries the
+  numbers the bar cannot.
 
 ### The Inbox absorbs the Brief: a digest, computed, no scheduler (2026-09-15)
 

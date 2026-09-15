@@ -20,7 +20,7 @@ import { del, get, post, type HistoryTranscript, type Stats as StatsPayload, typ
 import { Launcher, type LaunchRequest } from './Launcher'
 import { Palette } from './Palette'
 import {
-  Digest, Inbox, ListPriceFact, Settings,
+  Beam, Digest, Inbox, ListPriceFact, Settings,
   type BillingPayload, type DigestPayload, type InboxPayload, type RepoPayload, type RepoTerminal, Repo,
 } from './Panels'
 import { Reader } from './Reader'
@@ -576,7 +576,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
         </h2>
 
         {windows ? (
-          <div className="beam mb-[10px] rounded-[3px] border border-line bg-surface px-4 pb-[6px] pt-1">
+          <Beam><div className="mb-[10px] rounded-[3px] border border-line bg-surface px-4 pb-[6px] pt-1">
             {windows.map((w, i) => (
               <div
                 key={w.label}
@@ -596,7 +596,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
                 </div>
               </div>
             ))}
-          </div>
+          </div></Beam>
         ) : (
           <div className="mb-[10px] rounded-[3px] border border-line bg-surface px-4 py-[13px] text-[12.5px] text-ink-dim">
             A session reports the rolling windows once it has spoken to the API. Run one and they appear here.
@@ -616,7 +616,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
             Loading…
           </div>
         ) : (
-          <div className="beam beam-3 rounded-[3px] border border-line bg-surface px-4 py-[14px]">
+          <Beam><div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
             <div className="mb-4 flex items-baseline gap-[9px]">
               <b className="font-mono text-[29px] font-bold tabular-nums tracking-[-0.02em] text-ink">
                 {fmt(
@@ -630,30 +630,18 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
                 {fmt(stats.lifetime.turns)} turns
               </span>
             </div>
-            <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-[14px] gap-y-[9px] font-mono text-[11.5px]">
-              {(() => {
-                // The four bars compare with each other, so they share one
-                // scale rather than each inventing its own.
-                const max = Math.max(
-                  stats.lifetime.input, stats.lifetime.output,
-                  stats.lifetime.cached, stats.lifetime.cache_write,
-                )
-                return (
-                  <>
-                    <Row label="input" value={stats.lifetime.input} max={max} tone="var(--color-ink-dim)" />
-                    <Row label="output" value={stats.lifetime.output} max={max} tone="var(--color-faber)" />
-                    <Row label="cache read" value={stats.lifetime.cached} max={max} tone="var(--color-good)" />
-                    <Row label="cache write" value={stats.lifetime.cache_write} max={max} tone="var(--color-noctua)" />
-                  </>
-                )
-              })()}
-            </div>
+            <Stacked parts={[
+              { label: 'input', value: stats.lifetime.input, tone: '#d6d6d6' },
+              { label: 'output', value: stats.lifetime.output, tone: '#a3a3a3' },
+              { label: 'cache read', value: stats.lifetime.cached, tone: '#6f6f6f' },
+              { label: 'cache write', value: stats.lifetime.cache_write, tone: '#4a4a4a' },
+            ]} />
             {/* One number, no tiers. Read from the CLI's own transcripts, so
                 it counts every session on this machine, not only the ones
                 Noctis hosted -- and the background tier that used to be
                 split out here was 0.178% of the total. */}
             <ListPrice turns={stats.lifetime.turns} />
-          </div>
+          </div></Beam>
         )}
       </div>
     </div>
@@ -668,25 +656,33 @@ function resetIn(epoch: number): string {
   return `in ${h}h ${mins % 60}m`
 }
 
-/* One token count with a bar, relative to the largest value beside it --
- * the only comparison it can honestly make. */
-function Row({ label, value, max, tone }: {
-  label: string
-  value: number
-  max: number
-  tone: string
-}) {
-  const pct = max > 0 ? Math.max(0.5, (value / max) * 100) : 0
+/* The four token kinds as one stacked bar -- each a share of the same
+ * total, which is the only comparison that puts them on one line -- with a
+ * dot-and-figure legend under it. Greys, darkest to lightest, in the order
+ * the legend reads. Cache reads are three thousand times the input, so the
+ * small kinds are slivers: each keeps a 2px minimum so it exists on the bar
+ * at all, and the legend carries the number the bar cannot. */
+function Stacked({ parts }: { parts: { label: string; value: number; tone: string }[] }) {
+  const total = parts.reduce((s, p) => s + p.value, 0)
   return (
-    <>
-      <span className="text-ink-dim">{label}</span>
-      <span className="h-[5px] min-w-[60px] overflow-hidden rounded-sm border border-line bg-ground">
-        <span className="block h-full" style={{ width: `${pct}%`, background: tone }} />
-      </span>
-      <span className="text-right tabular-nums text-ink" title={value.toLocaleString()}>
-        {compact(value)}
-      </span>
-    </>
+    <div className="font-mono text-[11.5px]">
+      <div className="flex h-[7px] overflow-hidden rounded-[3px] bg-line">
+        {parts.map((p) => (
+          <span key={p.label} title={`${p.label} ${p.value.toLocaleString()}`}
+                className="block h-full min-w-[2px]"
+                style={{ flex: `${total > 0 ? p.value / total : 0} 0 0`, background: p.tone }} />
+        ))}
+      </div>
+      <div className="mt-[9px] flex flex-wrap gap-x-[16px] gap-y-[4px]">
+        {parts.map((p) => (
+          <span key={p.label} className="flex items-center gap-[6px] text-ink-dim">
+            <span className="h-[7px] w-[7px] rounded-full" style={{ background: p.tone }} />
+            {p.label}{' '}
+            <span className="tabular-nums text-ink" title={p.value.toLocaleString()}>{compact(p.value)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
   )
 }
 

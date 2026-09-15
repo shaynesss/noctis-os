@@ -75,10 +75,6 @@
   /* semantic, kept distinct from the accents */
   --color-good: #3fa463;
 
-  /* the star's silver -- the mid-stop of the Logo's gradient; what a card
-     glows with when no character owns it */
-  --color-silver: #c9c9c9;
-
   --font-mono: "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -147,71 +143,6 @@ body {
 }
 ::-webkit-scrollbar-track {
   background: transparent;
-}
-
-/* Border beam, after libraries.dev/beam (pulse outside · mono): an arc of
- * light that travels round the card's border once every 1.96s, with a soft
- * glow bleeding off it. Nothing breathes -- the first version pulsed, and
- * read as a card being selected over and over.
- *
- * How it is built, taken from the reference's own CSS: the arc is a
- * conic-gradient whose start angle is a registered custom property, spun
- * 0→360° linearly; the ring is a pseudo-element with 1px of padding masked
- * to its own padding box, so only the border shows; the glow is a second
- * copy, wider and blurred, sitting a few pixels outside the edge so it
- * emanates outward. `--beam` is the colour -- the star's silver unless a
- * character owns the card. The arc is dim on purpose: the reference peaks
- * at 0.75 white on a 1px line and its glow at a quarter of that. */
-@property --beam-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-.beam {
-  position: relative;
-  --beam: var(--color-silver);
-}
-.beam::before,
-.beam::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: conic-gradient(
-    from var(--beam-angle),
-    transparent 0%, transparent 54%,
-    color-mix(in srgb, var(--beam) 6%, transparent) 57%,
-    color-mix(in srgb, var(--beam) 20%, transparent) 60%,
-    color-mix(in srgb, var(--beam) 42%, transparent) 63%,
-    color-mix(in srgb, var(--beam) 55%, transparent) 66%,
-    color-mix(in srgb, var(--beam) 42%, transparent) 69%,
-    color-mix(in srgb, var(--beam) 20%, transparent) 72%,
-    color-mix(in srgb, var(--beam) 6%, transparent) 75%,
-    transparent 78%
-  );
-  /* Keep only the ring: paint everything, subtract the content box. */
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box exclude, linear-gradient(#fff 0 0);
-  animation: beam-spin 1.96s linear infinite;
-  /* Cards on one page start at different points of the circuit, so three
-     arcs do not sweep the same edge at the same moment. */
-  animation-delay: var(--beam-phase, 0s);
-}
-/* The glow: the same arc, six pixels outside the edge, blurred so it
-   emanates rather than draws a second line. */
-.beam::before {
-  inset: -7px;
-  padding: 7px;
-  filter: blur(8px);
-  opacity: 0.55;
-}
-.beam-2 { --beam-phase: -0.65s; }
-.beam-3 { --beam-phase: -1.31s; }
-@keyframes beam-spin {
-  to { --beam-angle: 360deg; }
 }
 
 @media (prefers-reduced-motion: reduce) {
