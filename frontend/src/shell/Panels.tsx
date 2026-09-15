@@ -139,15 +139,18 @@ function Card({ children }: { children: React.ReactNode }) {
  *  breathing rather than travelling. The library's own component, because
  *  two hand-written versions (a pulse, then a rotating arc) both read as
  *  something else -- the motion lives in its JS, not in a stylesheet that
- *  can be copied. `tone` is silver for a card no character owns and Faber's
- *  warmth for a build: the palettes are the library's four, and `sunset`
- *  held still is the nearest to Faber's red. */
+ *  can be copied. Under it, a `.halo`: one even glow the card's shape, so
+ *  the edges between the library's seven pools are not dark and the pulse
+ *  encompasses the card. The pools stay mono everywhere; `tone` colours the
+ *  halo -- silver for a card no character owns, Faber's red for a build.
+ *  (The library's `sunset` was tried for Faber and spilt yellow.) */
 export function Beam({ tone = 'silver', children }: { tone?: 'silver' | 'faber'; children: React.ReactNode }) {
   return (
-    <BorderBeam size="pulse-outside" colorVariant={tone === 'faber' ? 'sunset' : 'mono'} theme="dark"
-                staticColors strength={0.85}>
-      {children}
-    </BorderBeam>
+    <div className="halo" style={{ '--halo': tone === 'faber' ? 'var(--color-faber)' : '#c9c9c9' } as React.CSSProperties}>
+      <BorderBeam size="pulse-outside" colorVariant="mono" theme="dark" staticColors strength={0.6}>
+        {children}
+      </BorderBeam>
+    </div>
   )
 }
 

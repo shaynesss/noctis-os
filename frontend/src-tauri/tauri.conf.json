@@ -29,7 +29,8 @@
         "windowEffects": {
           "effects": [
             "hudWindow"
-          ]
+          ],
+          "state": "active"
         },
         "backgroundThrottling": "disabled",
         "dragDropEnabled": false

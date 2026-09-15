@@ -23,6 +23,21 @@ scheduler, which is the only feature left in the build order.
   those settings; both read as something else. The motion lives in the
   library's JavaScript, not in a stylesheet that can be copied, which is why
   the package rather than a port. Declared in the spec's Design Brief.
+- **The pulse encompasses the card.** The library pools light at seven
+  points and leaves the edges between them dark, so under it sits a `.halo`:
+  one even glow the card's own shape, a few pixels outside its edge,
+  breathing on the same 2.3s cycle, faint by design — the floor the pools
+  rise from. The pools stay mono everywhere; the halo carries the colour,
+  silver or Faber's red for a build (the library's `sunset` spilt yellow and
+  is dropped).
+- **Glass, heavier.** Surface `0.55 → 0.72`, elevated `0.70 → 0.84`: a
+  card's contents read differently over a light desktop and a dark one, and
+  the Activity grid's empty cells could vanish. The empty cell is now a
+  fixed step above the card (`rgba(255,255,255,.06)`) rather than an opaque
+  near-black. The vibrancy is pinned to its active appearance
+  (`windowEffects.state: "active"`), so the window no longer washes to grey
+  when it is not in front — that was macOS's inactive material, not a bug in
+  the shell. Takes effect on the next launch.
 - **Lifetime tokens as one stacked bar.** The four kinds — input, output,
   cache read, cache write — as shares of one total on a single bar, greys
   darkest to lightest, with a dot-and-figure legend beneath, in place of

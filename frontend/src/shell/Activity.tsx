@@ -30,7 +30,10 @@ function Frame({ children }: { children: React.ReactNode }) {
   )
 }
 
-const LEVELS = ['#171717', '#4a1710', '#8a2410', '#c22d11', '#e53311']
+// The empty cell is a fixed step *above* the card, not a fixed colour: the
+// card is glass, so an opaque near-black cell sat darker than the surface
+// on a light desktop and vanished into it on a dark one.
+const LEVELS = ['rgba(255, 255, 255, 0.06)', '#4a1710', '#8a2410', '#c22d11', '#e53311']
 /** Count to swatch. The ramp is Faber red because the grid measures work,
  *  and work is what Faber is; the empty cell is the page's own surface so
  *  quiet days recede rather than reading as a value. */
