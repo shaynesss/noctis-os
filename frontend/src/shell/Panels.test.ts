@@ -2,7 +2,7 @@
  * counts, held to the string. (The digest these came from is gone; the
  * line lives on in Settings' Maintenance section.) */
 import { describe, expect, it } from 'vitest'
-import { nightshiftLine, sinceLabel } from './Panels'
+import { nightshiftLine, reflow, sinceLabel } from './Panels'
 
 describe('nightshiftLine', () => {
   const at = new Date(2026, 8, 15, 3, 0).toISOString()
@@ -29,5 +29,21 @@ describe('sinceLabel', () => {
   it('a missing date says what the window really was', () => {
     expect(sinceLabel(null, now)).toBe('the last day')
     expect(sinceLabel('not a date', now)).toBe('the last day')
+  })
+})
+
+describe('reflow', () => {
+  it('joins the lines of a paragraph and keeps the blank lines between paragraphs', () => {
+    const body = 'Bodies show in the\nRepo view, newest expanded; the parser pads\nthe trailing field.\n\nLeaves the view as the landing page.\nNext: push from the Repo tab.\n'
+    expect(reflow(body)).toEqual([
+      'Bodies show in the Repo view, newest expanded; the parser pads the trailing field.',
+      'Leaves the view as the landing page. Next: push from the Repo tab.',
+    ])
+  })
+  it('keeps the lines of a list', () => {
+    expect(reflow('- one\n- two\n\n1. first\n2. second')).toEqual(['- one\n- two', '1. first\n2. second'])
+  })
+  it('returns nothing for an empty body', () => {
+    expect(reflow('  \n')).toEqual([])
   })
 })

@@ -517,12 +517,12 @@ function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
 /* Ten commits fit; the other ten scroll. A subject wraps rather than
  * truncates: a line you cannot finish reading is a line you did not read.
  *
- * The body is the record (2026-09-15): the newest commit opens with its
- * body showing, because its last paragraph is where the work was left --
- * the two lines you actually want on opening a project. Any other commit
- * opens on click. A commit with no body says so, quietly. */
+ * The body is the record (2026-09-15): a click on a commit opens its body,
+ * another closes it, and nothing opens on its own -- the newest opened by
+ * default for an evening and pushed Record and GitHub off the bottom of
+ * the module. A commit with no body says so, quietly. */
 function CommitList({ commits, paths }: { commits: RepoInfo['commits']; paths?: string[] }) {
-  const [open, setOpen] = useState<Set<string>>(() => new Set(commits[0] ? [commits[0].full] : []))
+  const [open, setOpen] = useState<Set<string>>(() => new Set())
   if (commits.length === 0) {
     return <div className="border-t border-line px-4 py-[9px] text-[12px] text-ink-faint">
       {paths ? `no commits touch ${paths.join(' or ')} yet` : 'no commits yet'}
@@ -550,7 +550,7 @@ function CommitList({ commits, paths }: { commits: RepoInfo['commits']; paths?: 
             {shown && (
               <div className="px-4 pb-[10px] pl-[52px] font-mono text-[11.5px] leading-[1.6] text-ink-dim">
                 {c.body
-                  ? <pre className="m-0 whitespace-pre-wrap break-words font-mono">{c.body}</pre>
+                  ? reflow(c.body).map((p, i) => <p key={i} className={`m-0 whitespace-pre-wrap break-words${i ? ' mt-[9px]' : ''}`}>{p}</p>)
                   : <span className="text-ink-faint">no body — a subject alone; the record starts with the next commit</span>}
               </div>
             )}
@@ -559,6 +559,20 @@ function CommitList({ commits, paths }: { commits: RepoInfo['commits']; paths?: 
       })}
     </div>
   )
+}
+
+/** A commit body arrives hard-wrapped at seventy-two columns, git's own
+ * convention, and the module wraps it again at its width -- so a word sat
+ * alone on a line wherever the two disagreed. Blank lines are paragraph
+ * breaks and stay; the breaks inside a paragraph are the author's editor,
+ * not their meaning, and are joined. A paragraph that is a list (every
+ * line a bullet, a number, or indented) keeps its lines. */
+export function reflow(body: string): string[] {
+  const structured = (l: string) => /^(\s+|[-*•] |\d+[.)] )/.test(l)
+  return body.replace(/\r\n/g, '\n').trim().split(/\n[ \t]*\n+/).map((para) => {
+    const lines = para.split('\n')
+    return lines.every(structured) ? lines.map((l) => l.trimEnd()).join('\n') : lines.map((l) => l.trim()).join(' ')
+  }).filter(Boolean)
 }
 
 const Legend = () => (

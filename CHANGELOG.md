@@ -13,8 +13,10 @@ scheduler, which is the only feature left in the build order.
 
 - **Repo is the landing view; the Inbox tab is gone.** A commit's body is
   the record of where a piece of work was left, so opening a project is
-  reading where you stopped. The newest commit opens expanded under its
-  module, any other on click; a bodiless one says so. The rail is
+  reading where you stopped. A click opens a commit's body, another
+  closes it (the newest opened on its own for one evening and pushed the
+  folds below it off screen); paragraphs are reflowed from git's
+  seventy-two-column wrap; a bodiless commit says so. The rail is
   Terminal · Repo · Stats · Settings. The Inbox digest built this morning
   — and the Brief before it — were summaries of what the commits already
   said; both are deleted, with the sittings file and the presence
