@@ -162,8 +162,11 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
           rail's edge. The strip's empty space drags the window: the title
           bar is an overlay with nothing in it, so this is the top edge you
           would reach for. */}
+      {/* Tabs centred in the strip (2026-09-15), the directory pinned to the
+          right edge outside the centring so it cannot push the tabs off
+          centre. */}
       <div data-tauri-drag-region
-           className="flex h-[var(--head-band)] shrink-0 items-center gap-[2px] border-b border-line px-[8px] font-mono text-[11px]"
+           className="relative flex h-[var(--head-band)] shrink-0 items-center justify-center gap-[2px] border-b border-line px-[8px] font-mono text-[11px]"
            onDragOver={(e) => { if (dragging.current) e.preventDefault() }}
            onDrop={(e) => {
              e.preventDefault()
@@ -201,7 +204,7 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
         >
           +
         </button>
-        {shown && <span className="ml-auto text-ink-faint">{shortenHome(shown.cwd)}</span>}
+        {shown && <span className="absolute right-[12px] text-ink-faint">{shortenHome(shown.cwd)}</span>}
       </div>
 
       {slots.length === 0 && (

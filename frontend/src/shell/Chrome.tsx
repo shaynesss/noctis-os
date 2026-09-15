@@ -1,5 +1,5 @@
 /* Rail, title strip, status bar, characters — the shell around the terminals. */
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Logo } from './Logo'
 import { CHARACTERS, MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
@@ -25,6 +25,23 @@ export function Rail({ view, onView, badges }: {
    *  weeks, which is a badge that says nothing. */
   badges?: Partial<Record<string, number>>
 }) {
+  /* One highlight for the whole list, not one per row (2026-09-15, after
+   * Bencho's selection list): a rounded pill that slides to the row under
+   * the pointer and settles back on the active row when the pointer
+   * leaves. Its position is measured from the rows themselves, so a badge
+   * or a longer label never puts it off. */
+  const [hover, setHover] = useState<string | null>(null)
+  const rows = useRef<Record<string, HTMLButtonElement | null>>({})
+  const list = useRef<HTMLDivElement>(null)
+  const [pill, setPill] = useState<{ top: number; height: number } | null>(null)
+  // Measured after layout, not during render: on the first pass the row
+  // refs are empty, and a pill computed then would not appear until the
+  // first hover.
+  useLayoutEffect(() => {
+    const target = rows.current[hover ?? view]
+    setPill(target ? { top: target.offsetTop, height: target.offsetHeight } : null)
+  }, [hover, view])
+
   // pt-7 clears the macOS traffic lights, which titleBarStyle:"Overlay"
   // floats over the content at the top-left. They cannot be moved to the
   // right on macOS, so the rail moves out from under them instead.
@@ -43,32 +60,41 @@ export function Rail({ view, onView, badges }: {
 
       <div className="h-[10px] shrink-0" />
 
-      {RAIL.map((item) => {
-        const active = view === item.id
-        return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onView(item.id)}
-            aria-current={active}
-            className={`flex w-full items-center gap-[9px] border-l-2 px-[12px] py-[7px] text-left text-[12.5px] ${
-              active
-                ? 'border-l-[var(--accent)] bg-elevated text-ink'
-                : 'border-l-transparent text-ink-dim hover:bg-elevated hover:text-ink'
-            }`}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden className="h-[15px] w-[15px] shrink-0" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 }}>
-              <path d={item.d} />
-            </svg>
-            {item.label}
-            {badges?.[item.id] ? (
-              <span className="ml-auto rounded-full bg-maint px-[6px] font-mono text-[10px] font-bold text-ground">
-                {badges[item.id]}
-              </span>
-            ) : null}
-          </button>
-        )
-      })}
+      <div ref={list} className="relative flex flex-col gap-[2px] px-[10px]" onMouseLeave={() => setHover(null)}>
+        {pill && (
+          <div aria-hidden
+               className="pointer-events-none absolute left-[10px] right-[10px] rounded-control bg-elevated"
+               style={{ top: pill.top, height: pill.height,
+                        transition: 'top 220ms cubic-bezier(0.2, 0.8, 0.2, 1), height 220ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />
+        )}
+        {RAIL.map((item) => {
+          const active = view === item.id
+          const lit = active || hover === item.id
+          return (
+            <button
+              key={item.id}
+              ref={(el) => { rows.current[item.id] = el }}
+              type="button"
+              onClick={() => onView(item.id)}
+              onMouseEnter={() => setHover(item.id)}
+              aria-current={active}
+              className={`relative flex w-full items-center justify-center gap-[9px] rounded-control px-[12px] py-[7px] text-[12.5px] transition-colors duration-150 ${
+                lit ? 'text-ink' : 'text-ink-dim'
+              }`}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden className="h-[15px] w-[15px] shrink-0" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 }}>
+                <path d={item.d} />
+              </svg>
+              {item.label}
+              {badges?.[item.id] ? (
+                <span className="rounded-full bg-maint px-[6px] font-mono text-[10px] font-bold text-ground">
+                  {badges[item.id]}
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
     </nav>
   )
 }
@@ -286,18 +312,18 @@ export function BottomBar({
        rail's title band's height; this is the status band's, and the cell,
        the readings and the characters share it. */
     <div className="flex h-[var(--status-band)] shrink-0 items-center border-t border-line">
-      {/* Rail-width cell, always present. It was previously only rendered in
-          the narrow layout, so the permission hint vanished on a wide window
-          -- the same "hidden rather than moved" mistake as before. */}
-      <div className="flex h-full w-[160px] shrink-0 items-center gap-[7px] border-r border-line px-[12px] font-mono text-[11px] text-ink-faint">
-        <Kbd>⌘T</Kbd> new · <Kbd>⌘K</Kbd> search
-      </div>
+      {/* The bar runs the window's full width now (2026-09-15): the rail-width
+          cell that held the two key hints made the bar read as two bars, and
+          the hints belong with the other glanceable things on the right. */}
       <div className="flex min-w-0 flex-1 items-center gap-4 px-[14px]">
         <div className="flex min-w-0 overflow-hidden">
           <StatusBar limits={limits} state={state} />
         </div>
         {children}
-        <div className="ml-auto flex shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-[18px]">
+          <span className="flex items-center gap-[7px] font-mono text-[11px] text-ink-faint">
+            <Kbd>⌘T</Kbd> new · <Kbd>⌘K</Kbd> search
+          </span>
           <CharacterStrip open={open} live={state.live} />
         </div>
       </div>
