@@ -24,9 +24,10 @@ export interface Window {
 export interface Stats {
   lifetime: {
     input: number; output: number; cached: number; cache_write: number; turns: number
-    since: string | null; aux_input: number; aux_output: number
+    since: string | null
+    /** API list price of those turns -- never a charge -- and how many of them it covers. */
+    list_cost: number; priced_turns: number
   }
-  by_mode: { mode: string; input: number; output: number; turns: number }[]
   activity: { day: string; sessions: number }[]
 }
 

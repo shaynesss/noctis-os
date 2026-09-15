@@ -9,6 +9,24 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Stats: the list price covers every turn, and the page centres (2026-09-15)
+
+- **$2,427 across 8,090 turns, not $102 across 120.** The list-price line
+  was summed from the store's `list_cost_usd`, which only the retired `-p`
+  engine ever filled — 120 turns carried a figure and every transcript-indexed
+  turn since was written at zero. It is now priced from tokens, per model,
+  by `orchestrator/pricing.py`, over the same transcripts the token counts
+  are summed from, so cost and counts are one population. Rates were checked
+  against the engine's own 120 figures: they reproduce to the cent at the
+  1-hour cache-write rate (2× input) and miss by a third at the 5-minute one,
+  which is how the TTL the CLI uses was settled. `priced_turns` now counts
+  turns whose model the table knows; the line says `N of M turns` only when
+  they differ. The recorder writes the same price into its rows at index
+  time, so the two never disagree.
+- **Centred like Repo.** The page sits in the middle of a window taller than
+  it and scrolls from the top of one that is not. The figure groups its
+  thousands like the total above it.
+
 ### The Repo tab: one module per repository (2026-09-15)
 
 - **A repository is one box.** Name and branch on the lid, its terminals and

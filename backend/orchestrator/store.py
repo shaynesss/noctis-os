@@ -23,6 +23,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from orchestrator import pricing
+
 
 from typing import TYPE_CHECKING
 
@@ -335,14 +337,19 @@ class ConversationStore:
             )
         for t in conv.turns:
             # One raw count, no split: aux_* are written as zero, which is what
-            # they become once the migration retires them.
+            # they become once the migration retires them. The list price is
+            # the table's, so a row here agrees with the transcript figure
+            # Stats quotes; a model the table does not know is stored at zero.
             self.db.execute(
                 "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
                 " cached_tokens, cache_write_tokens, aux_input_tokens, aux_output_tokens,"
                 " duration_ms, list_cost_usd, created_at)"
-                " VALUES (?,?,?,?,?,?,?,0,0,0,0,?)",
+                " VALUES (?,?,?,?,?,?,?,0,0,0,?,?)",
                 (row_id, mode, t.model, t.input_tokens, t.output_tokens,
-                 t.cached_tokens, t.cache_write_tokens, conv.ended_at or _now()),
+                 t.cached_tokens, t.cache_write_tokens,
+                 pricing.list_price(t.model, t.input_tokens, t.output_tokens,
+                                    t.cached_tokens, t.cache_write_tokens) or 0.0,
+                 conv.ended_at or _now()),
             )
         self.db.commit()
 
@@ -482,7 +489,6 @@ class ConversationStore:
             "       COALESCE(SUM(cached_tokens),0) AS cached,"
             "       COALESCE(SUM(cache_write_tokens),0) AS cache_write,"
             "       COALESCE(SUM(list_cost_usd),0) AS list_cost,"
-            "       SUM(CASE WHEN list_cost_usd > 0 THEN 1 ELSE 0 END) AS priced_turns,"
             "       COUNT(*) AS turns,"
             "       MIN(created_at) AS since FROM usage").fetchone()
 

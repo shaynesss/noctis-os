@@ -542,8 +542,11 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
     : null
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      {/* Centred the same way the Repo view is: auto vertical margins in a
+          flex column sit the page in the middle when it is shorter than the
+          window and let it scroll from the top when it is not. */}
+      <div className="mx-auto my-auto w-full max-w-[840px] px-8 pb-8 pt-7">
         <h2 className="m-0 mb-[14px] font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           Usage
         </h2>

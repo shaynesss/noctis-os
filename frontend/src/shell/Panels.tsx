@@ -750,22 +750,24 @@ export function ListPriceFact({
 }) {
   if (data.list_cost <= 0 || data.priced_turns === 0) return null
 
-  /* The figure only covers turns recorded since the engine's per-turn cost
-   * was stored; earlier ones carry a zero. Sitting under token counts that
-   * span every turn, it read about 20x low against its own tokens — two
-   * measurements of different populations printed as one fact. So when the
-   * coverage is partial it says so, rather than quietly implying it is the
-   * total. */
+  /* Priced from the same transcripts the token counts come from, so the
+   * figure normally covers every turn above it. It falls short only by
+   * turns whose model the price table does not know -- and then it says
+   * so, rather than quietly implying it is the total. (It once covered 120
+   * of 8,000 turns and read 20x low against its own tokens.) */
   const partial = data.priced_turns < totalTurns
 
   return (
     <div className="mt-[13px] flex flex-wrap items-baseline gap-x-[7px] gap-y-[3px] border-t border-line pt-[11px] font-mono text-[11.5px]">
       <span className="text-ink-faint">
         on the API,{' '}
-        {partial ? `the last ${data.priced_turns.toLocaleString()} of ${totalTurns.toLocaleString()} turns` : 'this'}{' '}
+        {partial ? `${data.priced_turns.toLocaleString()} of ${totalTurns.toLocaleString()} turns` : 'this'}{' '}
         would have been
       </span>
-      <span className="tabular-nums text-ink">${data.list_cost.toFixed(2)}</span>
+      {/* Grouped like the token count above it: $2,427.05, not $2427.05. */}
+      <span className="tabular-nums text-ink">
+        ${data.list_cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      </span>
       {/* Short, because a long disclaimer under a number makes the number
           itself look disputed. */}
       <span className="text-ink-faint">· the subscription covered it</span>

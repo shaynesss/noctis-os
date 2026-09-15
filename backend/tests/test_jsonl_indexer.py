@@ -169,3 +169,55 @@ def test_scan_usage_agrees_with_read_to_the_token(tmp_path):
     assert (u.input_tokens, u.output_tokens, u.cached_tokens, u.cache_write_tokens) == \
         (sum(t.input_tokens for t in c.turns), sum(t.output_tokens for t in c.turns),
          sum(t.cached_tokens for t in c.turns), sum(t.cache_write_tokens for t in c.turns))
+
+
+# ------------------------------------------------------------------ pricing
+
+def test_a_turn_is_priced_at_list_from_its_own_model():
+    """Four rates per model, cache writes at the hour TTL the CLI uses. The
+    figures are the ones the `-p` engine reported for its own turns: 71
+    output and 28,533 cache-write tokens on Opus 5 came back as $0.2871, and
+    that is what the table gives."""
+    from orchestrator import pricing
+    assert round(pricing.list_price("claude-opus-5", 2, 71, 0, 28_533), 4) == 0.2871
+    # Sonnet 5: 227 out, 37,645 cache reads, 86 written -- the engine said $0.0101.
+    assert round(pricing.list_price("claude-sonnet-5", 2, 227, 37_645, 86), 4) == 0.0101
+    # Fable 5.1 reads its cache at a quarter of the usual tenth.
+    assert pricing.list_price("claude-fable-5-1", 0, 0, 4_000_000, 0) == 1.0
+
+
+def test_a_dated_model_id_prices_as_its_family():
+    from orchestrator import pricing
+    assert pricing.rates("claude-haiku-4-5-20251001") == pricing.rates("claude-haiku-4-5")
+
+
+def test_an_unknown_model_is_a_gap_unless_it_spent_nothing():
+    """`<synthetic>` rows carry every count at zero: priced, at zero, rather
+    than reported as turns the figure does not cover."""
+    from orchestrator import pricing
+    assert pricing.list_price("<synthetic>", 0, 0, 0, 0) == 0.0
+    assert pricing.list_price("claude-mystery-9", 1, 0, 0, 0) is None
+
+
+def test_scan_usage_prices_each_turn_and_counts_the_ones_it_cannot(tmp_path):
+    p = _write(tmp_path, [
+        _assistant(text="a", usage={"input_tokens": 1_000_000}),               # Opus 5: $5
+        {"type": "assistant", "message": {"role": "assistant", "model": "who",
+                                          "content": [], "usage": {"output_tokens": 1}}},
+    ])
+    u = jsonl.scan_usage(p)
+    assert (u.turns, u.unpriced_turns, u.list_cost) == (2, 1, 5.0)
+
+
+def test_the_recorder_row_carries_the_same_price(tmp_path):
+    """Indexing a transcript writes the table's price into `list_cost_usd`,
+    so a row in the store and the figure Stats quotes never disagree."""
+    from orchestrator.store import ConversationStore
+    p = _write(tmp_path, [{"type": "user", "timestamp": "2026-09-14T00:00:00Z", "cwd": "/x",
+                           "message": {"role": "user", "content": "hi"}},
+                          _assistant(text="a", usage={"input_tokens": 1_000_000},
+                                     timestamp="2026-09-14T00:00:01Z")])
+    store = ConversationStore(tmp_path / "h.db")
+    store.ingest(jsonl.read(p), "faber")
+    assert store.lifetime_tokens()["list_cost"] == 5.0
+    store.close()

@@ -318,15 +318,13 @@ def stats() -> dict:
             "cache_write": disk["cache_write"],
             "turns": disk["turns"],
             "since": disk["since"][:10] if disk["since"] else life["since"],
-            # One number, no tiers. Kept as fields so an older shell reading
-            # them still renders; always zero, and gone with the next shell.
-            "aux_input": 0,
-            "aux_output": 0,
-            # API list price for everything run so far. Named list_cost, not
+            # API list price for everything run so far, priced from the same
+            # transcripts the counts above come from. Named list_cost, not
             # cost or spend, because it is what these turns WOULD have cost
             # on the API and not what anything charged — the subscription's
-            # marginal cost per turn is zero. See events.Usage.
-            "list_cost": round(life["list_cost"], 2),
+            # marginal cost per turn is zero. See orchestrator.pricing.
+            "list_cost": disk["list_cost"],
+            "priced_turns": disk["priced_turns"],
         },
         # Sessions per day for the contribution grid. Only days with activity
         # are returned; the grid fills the gaps, which keeps the payload

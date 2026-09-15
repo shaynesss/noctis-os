@@ -287,29 +287,27 @@ def billing() -> dict:
     engine's own rate-limit reporting, and it is the only signal here that
     should ever raise an alarm.
     """
-    from orchestrator.store import ConversationStore
+    from orchestrator import jsonl
 
-    store = ConversationStore()
-    try:
-        life = store.lifetime_tokens()
-        return {
-            "list_cost": round(life["list_cost"], 2),
-            "turns": life["turns"],
-            # How many of those turns the figure actually covers. Turns
-            # recorded before the column existed carry a zero, so a cost
-            # summed over them and token counts summed over all of them are
-            # measurements of different populations -- and printing the two
-            # side by side made the cost read ~20x low against its own
-            # tokens. The UI needs this to say what it is quoting.
-            "priced_turns": life["priced_turns"] or 0,
-            "since": life["since"],
-            # Stated rather than implied, so the UI has no excuse to render
-            # the figure above as a bill.
-            "charged": False,
-            "basis": "api-list-price",
-        }
-    finally:
-        store.close()
+    # The same transcripts Stats' token counts are summed from, so the two
+    # are measurements of one population. Read from the store, the cost
+    # covered only the 120 turns the `-p` engine had priced, and printed
+    # under counts spanning every turn it read ~20x low against its own
+    # tokens.
+    life = jsonl.lifetime_tokens_cached()
+    return {
+        "list_cost": life["list_cost"],
+        "turns": life["turns"],
+        # How many of those turns the figure covers: all of them, less any
+        # whose model the price table does not know. The UI says so when
+        # the two differ rather than quietly implying a total.
+        "priced_turns": life["priced_turns"],
+        "since": life["since"][:10] if life["since"] else None,
+        # Stated rather than implied, so the UI has no excuse to render
+        # the figure above as a bill.
+        "charged": False,
+        "basis": "api-list-price",
+    }
 
 
 @router.get("/recent-dirs")

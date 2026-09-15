@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator, NamedTuple
 
+from orchestrator import pricing
+
 PROJECTS = Path.home() / ".claude" / "projects"
 
 
@@ -114,6 +116,11 @@ class Usage:
     cached_tokens: int = 0
     cache_write_tokens: int = 0
     started_at: str = ""
+    # API list price of the turns above, and how many of them it could not
+    # price -- a model the table in `pricing` does not know. Kept beside the
+    # tokens so the two are always measured over the same turns.
+    list_cost: float = 0.0
+    unpriced_turns: int = 0
 
     @property
     def lifetime(self) -> int:
@@ -136,12 +143,22 @@ def scan_usage(path: Path) -> Usage:
         if ts := r.get("timestamp"):
             if not u.started_at or ts < u.started_at:
                 u.started_at = ts
-        if usage := (r.get("message") or {}).get("usage"):
+        msg = r.get("message") or {}
+        if usage := msg.get("usage"):
             u.turns += 1
-            u.input_tokens += int(usage.get("input_tokens", 0))
-            u.output_tokens += int(usage.get("output_tokens", 0))
-            u.cached_tokens += int(usage.get("cache_read_input_tokens", 0))
-            u.cache_write_tokens += int(usage.get("cache_creation_input_tokens", 0))
+            inp = int(usage.get("input_tokens", 0))
+            out = int(usage.get("output_tokens", 0))
+            cached = int(usage.get("cache_read_input_tokens", 0))
+            wrote = int(usage.get("cache_creation_input_tokens", 0))
+            u.input_tokens += inp
+            u.output_tokens += out
+            u.cached_tokens += cached
+            u.cache_write_tokens += wrote
+            price = pricing.list_price(msg.get("model", ""), inp, out, cached, wrote)
+            if price is None:
+                u.unpriced_turns += 1
+            else:
+                u.list_cost += price
     return u
 
 
@@ -232,16 +249,24 @@ def read(path: Path) -> Conversation:
     return c
 
 
-def lifetime_tokens() -> dict[str, int]:
+def lifetime_tokens() -> dict[str, Any]:
     """One raw number across every transcript on disk, plus what it came from.
 
     This is what the Stats page's lifetime figure becomes: read from the CLI's
     own files rather than from rows Noctis had to be present to write. It
     therefore counts sessions started in a terminal or in VS Code too, which
     the current figure silently misses.
+
+    The list price rides along, summed over exactly these turns. It used to
+    come from the store, where only the 120 turns the `-p` engine had priced
+    carried a figure -- so a cost over 120 turns sat under token counts over
+    eight thousand, and read twenty times low against its own tokens.
+    `priced_turns` says how many of `turns` the figure covers; it is short
+    only by turns whose model the price table does not know.
     """
-    total = turns = sessions = 0
+    total = turns = sessions = unpriced = 0
     inp = out = cached = cache_write = 0
+    cost = 0.0
     since = ""
     for p in PROJECTS.glob("**/*.jsonl"):
         u = scan_usage(p)
@@ -256,11 +281,14 @@ def lifetime_tokens() -> dict[str, int]:
         out += u.output_tokens
         cached += u.cached_tokens
         cache_write += u.cache_write_tokens
+        cost += u.list_cost
+        unpriced += u.unpriced_turns
         if u.started_at and (not since or u.started_at < since):
             since = u.started_at
     return {"tokens": total, "turns": turns, "sessions": sessions,
             "input": inp, "output": out, "cached": cached,
-            "cache_write": cache_write, "since": since}
+            "cache_write": cache_write, "since": since,
+            "list_cost": round(cost, 2), "priced_turns": turns - unpriced}
 
 
 # ------------------------------------------------------------ beside the recorder

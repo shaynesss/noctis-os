@@ -21,13 +21,13 @@ def client(monkeypatch):
 AUTH = {"Authorization": "Bearer test-token"}
 
 
-def _usage(store, sid, *, input=0, output=0, cached=0, cache_write=0, list_cost=0.0):
+def _usage(store, sid, *, input=0, output=0, cached=0, cache_write=0):
     """One usage row, the shape the transcript indexer writes."""
     store.db.execute(
         "INSERT INTO usage (session_id, mode, model, input_tokens, output_tokens,"
-        " cached_tokens, cache_write_tokens, duration_ms, list_cost_usd, created_at)"
-        " VALUES (?,?,?,?,?,?,?,1,?,?)",
-        (sid, "faber", "m", input, output, cached, cache_write, list_cost,
+        " cached_tokens, cache_write_tokens, duration_ms, created_at)"
+        " VALUES (?,?,?,?,?,?,?,1,?)",
+        (sid, "faber", "m", input, output, cached, cache_write,
          "2026-09-13T10:00:00+00:00"))
     store.db.commit()
 
@@ -139,7 +139,7 @@ def test_stats_route_shape(client):
     assert set(body) == {"lifetime", "activity", "transcripts", "diff"}
     assert set(body["transcripts"]) >= {"tokens", "turns", "sessions", "input", "output", "cached", "cache_write", "since"}
     assert set(body["diff"]) == {"compared", "agree", "rows"}
-    assert set(body["lifetime"]) >= {"input", "output", "cached", "turns", "aux_input"}
+    assert set(body["lifetime"]) >= {"input", "output", "cached", "turns", "list_cost", "priced_turns"}
 
 
 def test_stats_requires_auth(client):
@@ -474,22 +474,38 @@ def test_recent_dirs_ignores_sessions_with_no_directory(tmp_path):
     store.close()
 
 
-def test_billing_reports_how_many_turns_its_figure_covers(tmp_path, monkeypatch, client):
-    """Token totals span every turn; the cost only spans turns recorded since
-    the column existed. Printed side by side without saying so, the cost read
-    about 20x low against its own tokens."""
-    from orchestrator.store import ConversationStore
+def test_billing_prices_the_same_turns_the_token_counts_span(tmp_path, monkeypatch, client):
+    """The cost and the token counts are read from the same transcripts, so
+    the figure covers every turn -- less only those whose model the price
+    table does not know, and it says how many. Summed from the store it
+    covered the 120 turns the `-p` engine had priced, under counts spanning
+    eight thousand, and read 20x low against its own tokens."""
+    import json
+    from orchestrator import jsonl
 
-    store = ConversationStore(tmp_path / "h.db")
-    sid = store.open_session("faber", cwd="/tmp")
-    # One priced turn and one from before the column existed.
-    _usage(store, sid, input=10, output=10, list_cost=0.5)
-    _usage(store, sid, input=10, output=10)
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    monkeypatch.setattr(jsonl, "_lifetime_cache", None)
+    rows = [
+        {"type": "assistant", "timestamp": "2026-09-14T00:00:00Z",
+         "message": {"role": "assistant", "model": "claude-opus-5", "content": [],
+                     "usage": {"input_tokens": 1_000_000, "output_tokens": 0}}},
+        {"type": "assistant", "timestamp": "2026-09-14T00:01:00Z",
+         "message": {"role": "assistant", "model": "claude-mystery-9", "content": [],
+                     "usage": {"input_tokens": 5, "output_tokens": 5}}},
+    ]
+    (tmp_path / "p").mkdir()
+    (tmp_path / "p" / "s.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
 
-    life = store.lifetime_tokens()
-    assert life["turns"] == 2
-    assert life["priced_turns"] == 1        # the figure covers half of them
-    store.close()
+    body = client.get("/v2/billing", headers=AUTH).json()
+    assert body["turns"] == 2
+    assert body["priced_turns"] == 1            # the unknown model is the gap
+    assert body["list_cost"] == 5.0             # a million Opus 5 input tokens
+    assert body["charged"] is False
+    assert body["since"] == "2026-09-14"
+
+    # Stats quotes the same two numbers from the same pass.
+    life = client.get("/v2/sessions/stats", headers=AUTH).json()["lifetime"]
+    assert (life["list_cost"], life["priced_turns"], life["turns"]) == (5.0, 1, 2)
 
 
 # ------------------------------------------------------------- prompts
