@@ -11,15 +11,20 @@ scheduler, which is the only feature left in the build order.
 
 ### Border beam on the cards (2026-09-15)
 
-- **Stats cards and Repo modules glow.** A "pulse outside, mono" border
-  beam — a tight ring at the edge and a wide soft halo beyond it, breathing
-  half a cycle apart so the light reads as moving outward. Pure CSS, no
-  library: two pseudo-elements with fixed box-shadows whose only animated
-  property is opacity, so the compositor does the work and the card never
-  repaints. `--beam` sets the colour: the star's silver (`--color-silver`,
-  the Logo gradient's mid-stop) on Stats and on every repository, **Faber's
-  red on a repository that is a dev job's project** — the build glows in
-  its builder's colour. Reduced-motion users get the static ring.
+- **Stats cards and Repo modules carry a border beam** after
+  libraries.dev/beam at its pulse-outside · mono setting: an arc of light
+  travels round the card's border once every 1.96s with a soft glow
+  bleeding off it outward. Built the way the reference builds it, read from
+  its CSS rather than its screenshot: a conic-gradient arc whose start angle
+  is a registered `@property` spun linearly; a 1px ring made by masking a
+  padded pseudo-element to its own padding box; the glow a second, wider,
+  blurred copy outside the edge. Pure CSS, no library. `--beam` sets the
+  colour: the star's silver (`--color-silver`, the Logo gradient's mid-stop)
+  on Stats and on every repository, **Faber's red on a repository that is a
+  dev job's project** — the build glows in its builder's colour. Cards on
+  one page start at different points of the circuit. A first cut pulsed in
+  and out instead of travelling, and read as a card being selected over and
+  over; it lasted one look.
 
 ### The Inbox absorbs the Brief: a digest, computed, no scheduler (2026-09-15)
 

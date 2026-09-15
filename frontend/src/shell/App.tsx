@@ -616,7 +616,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
             Loading…
           </div>
         ) : (
-          <div className="beam rounded-[3px] border border-line bg-surface px-4 py-[14px]">
+          <div className="beam beam-3 rounded-[3px] border border-line bg-surface px-4 py-[14px]">
             <div className="mb-4 flex items-baseline gap-[9px]">
               <b className="font-mono text-[29px] font-bold tabular-nums tracking-[-0.02em] text-ink">
                 {fmt(
