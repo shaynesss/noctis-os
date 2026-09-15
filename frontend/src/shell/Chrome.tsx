@@ -96,7 +96,7 @@ export function TitleStrip() {
 }
 
 /* ---------------------------------------------------- status + characters */
-function Meter({ pct, tone = 'var(--color-sig-5)' }: { pct: number; tone?: string }) {
+function Meter({ pct, tone = 'var(--sig-meter)' }: { pct: number; tone?: string }) {
   return (
     <span className="mx-[3px] inline-block h-1 w-[30px] overflow-hidden rounded-sm bg-line align-[1px]">
       <span className="block h-full" style={{ width: `${pct}%`, background: tone }} />
@@ -232,7 +232,7 @@ export function StatusBar({ limits, state }: { limits?: LiveLimits | null; state
       <div className="flex min-w-0 items-center whitespace-nowrap">
         {/* A dash, not 0%: unknown and empty are different, and an invented
             0% reads as a conversation with room to spare. */}
-        <Seg className={ctx === null ? '' : 'text-[var(--color-sig-6)]'}>
+        <Seg className={ctx === null ? '' : 'text-[var(--sig-text)]'}>
           ctx {ctx === null ? '—' : <><Meter pct={ctx} /> {ctx}%</>}
         </Seg>
         <Seg>

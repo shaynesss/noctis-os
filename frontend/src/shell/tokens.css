@@ -100,7 +100,26 @@
   --color-sig-4: #9c3f53;
   --color-sig-5: #bd5a6e;
   --color-sig-6: #de778a;
-  --color-sig: var(--color-sig-4);
+
+  /* Which step is the base is one choice, made here and nowhere else: the
+     readings reference roles, not steps. Two candidates were tried on
+     2026-09-15 -- the spoke's "Light" (#9c3f53, steps 4/5/6) and its
+     "Primary" (#501c27, steps 2/3/4). This block is the Primary mapping;
+     the Light one is the same with every step two higher. */
+  --color-sig: var(--color-sig-2);
+  --sig-fill: var(--color-sig-2);       /* a bar under 60% */
+  --sig-fill-hot: var(--color-sig-3);   /* 60–85% */
+  --sig-fill-max: var(--color-sig-4);   /* past 85% */
+  --sig-text: var(--color-sig-4);       /* a percentage beside a bar */
+  --sig-meter: var(--color-sig-3);      /* the status bar's meters */
+  --sig-ramp-1: var(--color-sig-1);     /* activity: one session … */
+  --sig-ramp-2: var(--color-sig-2);
+  --sig-ramp-3: var(--color-sig-3);
+  --sig-ramp-4: var(--color-sig-4);     /* … four or more */
+  --sig-share-1: var(--color-sig-4);    /* token bar, first share … */
+  --sig-share-2: var(--color-sig-3);
+  --sig-share-3: var(--color-sig-2);
+  --sig-share-4: var(--color-sig-1);    /* … last */
 
   --font-mono: "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;

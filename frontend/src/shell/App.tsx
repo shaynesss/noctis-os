@@ -558,7 +558,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
   // The signature, brightening as a window fills: the reading's own hue at
   // three steps rather than a traffic light. A fuller bar is a brighter
   // bar, which is the warning, without borrowing a character's colour.
-  const bar = (pct: number) => (pct < 60 ? 'var(--color-sig-4)' : pct < 85 ? 'var(--color-sig-5)' : 'var(--color-sig-6)')
+  const bar = (pct: number) => (pct < 60 ? 'var(--sig-fill)' : pct < 85 ? 'var(--sig-fill-hot)' : 'var(--sig-fill-max)')
 
   const windows = limits
     ? [
@@ -595,7 +595,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
                 <div className="h-[6px] overflow-hidden rounded-sm border border-line bg-ground">
                   <div className="h-full rounded-sm" style={{ width: `${w.pct}%`, background: bar(w.pct) }} />
                 </div>
-                <div className="text-right font-mono text-[12px] tabular-nums" style={{ color: bar(w.pct) }}>
+                <div className="text-right font-mono text-[12px] tabular-nums" style={{ color: 'var(--sig-text)' }}>
                   {w.pct}%
                 </div>
               </div>
@@ -635,10 +635,10 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
               </span>
             </div>
             <Stacked parts={[
-              { label: 'input', value: stats.lifetime.input, tone: 'var(--color-sig-6)' },
-              { label: 'output', value: stats.lifetime.output, tone: 'var(--color-sig-5)' },
-              { label: 'cache read', value: stats.lifetime.cached, tone: 'var(--color-sig-4)' },
-              { label: 'cache write', value: stats.lifetime.cache_write, tone: 'var(--color-sig-3)' },
+              { label: 'input', value: stats.lifetime.input, tone: 'var(--sig-share-1)' },
+              { label: 'output', value: stats.lifetime.output, tone: 'var(--sig-share-2)' },
+              { label: 'cache read', value: stats.lifetime.cached, tone: 'var(--sig-share-3)' },
+              { label: 'cache write', value: stats.lifetime.cache_write, tone: 'var(--sig-share-4)' },
             ]} />
             {/* One number, no tiers. Read from the CLI's own transcripts, so
                 it counts every session on this machine, not only the ones

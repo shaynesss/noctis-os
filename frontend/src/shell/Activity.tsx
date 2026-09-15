@@ -33,7 +33,7 @@ function Frame({ children }: { children: React.ReactNode }) {
 // The empty cell is a fixed step *above* the card, not a fixed colour: the
 // card is glass, so an opaque near-black cell sat darker than the surface
 // on a light desktop and vanished into it on a dark one.
-const LEVELS = ['rgba(255, 255, 255, 0.06)', 'var(--color-sig-2)', 'var(--color-sig-3)', 'var(--color-sig-4)', 'var(--color-sig-6)']
+const LEVELS = ['rgba(255, 255, 255, 0.06)', 'var(--sig-ramp-1)', 'var(--sig-ramp-2)', 'var(--sig-ramp-3)', 'var(--sig-ramp-4)']
 /** Count to swatch. The ramp is the signature (2026-09-15; it was Faber
  *  red, which made a day's count read as a Faber thing rather than a
  *  reading); the empty cell is a step above the page's own surface so
