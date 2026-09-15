@@ -108,8 +108,8 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
   }
 
   // The strip's one sliding highlight, as the rail's: it follows the
-  // pointer and rests on the showing tab. The showing tab is also ringed in
-  // the signature, so which one you are on survives the pill leaving it.
+  // pointer and rests on the showing tab. The pill is the signature, so it
+  // is the active mark as well as the hover; the tab carries no ring.
   const strip = usePill(shown?.id ?? null)
 
   const tab = (s: Slot, grouped: boolean) => {
@@ -127,7 +127,7 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
         onDrop={dropOn(s)}
         onMouseEnter={() => strip.enter(s.id)}
         className={`group relative flex h-[26px] cursor-default items-center gap-[7px] rounded-control px-[9px] transition-colors duration-150 ${
-          on ? 'text-ink shadow-[inset_0_0_0_1px_var(--color-sig)]' : inSplit || strip.hover === s.id ? 'text-ink' : 'text-ink-dim'
+          on || inSplit || strip.hover === s.id ? 'text-ink' : 'text-ink-dim'
         }`}
       >
         <button type="button" onClick={() => onSelect(s.id)} className="flex items-center gap-[7px]">

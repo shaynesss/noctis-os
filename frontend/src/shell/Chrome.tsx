@@ -47,9 +47,16 @@ export function usePill(active: string | null) {
 }
 export function Pill({ at }: { at: PillRect | null }) {
   if (!at) return null
+  // The signature, not the elevated grey (2026-09-15): the same pill is the
+  // hover highlight while it moves and the active mark where it rests, so
+  // one colour does both and nothing else has to say "you are here". A
+  // tint rather than the solid hue, so the label stays ink on it.
   return (
-    <div aria-hidden className="pointer-events-none absolute rounded-control bg-elevated"
-         style={{ ...at, transition: 'top 220ms cubic-bezier(0.2, 0.8, 0.2, 1), left 220ms cubic-bezier(0.2, 0.8, 0.2, 1), width 220ms cubic-bezier(0.2, 0.8, 0.2, 1), height 220ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />
+    <div aria-hidden className="pointer-events-none absolute rounded-control"
+         style={{ ...at,
+                  background: 'color-mix(in srgb, var(--color-sig) 34%, transparent)',
+                  boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-sig) 45%, transparent)',
+                  transition: 'top 220ms cubic-bezier(0.2, 0.8, 0.2, 1), left 220ms cubic-bezier(0.2, 0.8, 0.2, 1), width 220ms cubic-bezier(0.2, 0.8, 0.2, 1), height 220ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />
   )
 }
 
