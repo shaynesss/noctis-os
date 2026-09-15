@@ -75,6 +75,10 @@
   /* semantic, kept distinct from the accents */
   --color-good: #3fa463;
 
+  /* the star's silver -- the mid-stop of the Logo's gradient; what a card
+     glows with when no character owns it */
+  --color-silver: #c9c9c9;
+
   --font-mono: "Cascadia Code", "JetBrains Mono", ui-monospace, Menlo, monospace;
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -143,6 +147,40 @@ body {
 }
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Border beam -- "pulse outside, mono": a glow that breathes outward from a
+ * card's edge in one colour. Two rings on pseudo-elements, a tight one at
+ * the border and a wide soft one beyond it, each a fixed box-shadow whose
+ * only animated property is opacity, half a cycle apart -- so the light
+ * reads as moving outward while the compositor does all the work and the
+ * card itself never repaints. `--beam` is the colour; the star's silver
+ * unless a character owns the card. */
+.beam {
+  position: relative;
+  --beam: var(--color-silver);
+}
+.beam::before,
+.beam::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: beam-pulse 1.96s ease-in-out infinite;
+}
+.beam::before {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--beam) 32%, transparent),
+              0 0 10px 1px color-mix(in srgb, var(--beam) 16%, transparent);
+}
+.beam::after {
+  inset: -4px;
+  box-shadow: 0 0 22px 6px color-mix(in srgb, var(--beam) 12%, transparent);
+  animation-delay: -0.98s;
+}
+@keyframes beam-pulse {
+  0%, 100% { opacity: 0.15; }
+  50% { opacity: 1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

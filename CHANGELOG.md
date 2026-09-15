@@ -9,6 +9,18 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Border beam on the cards (2026-09-15)
+
+- **Stats cards and Repo modules glow.** A "pulse outside, mono" border
+  beam — a tight ring at the edge and a wide soft halo beyond it, breathing
+  half a cycle apart so the light reads as moving outward. Pure CSS, no
+  library: two pseudo-elements with fixed box-shadows whose only animated
+  property is opacity, so the compositor does the work and the card never
+  repaints. `--beam` sets the colour: the star's silver (`--color-silver`,
+  the Logo gradient's mid-stop) on Stats and on every repository, **Faber's
+  red on a repository that is a dev job's project** — the build glows in
+  its builder's colour. Reduced-motion users get the static ring.
+
 ### The Inbox absorbs the Brief: a digest, computed, no scheduler (2026-09-15)
 
 - **One tab for what arrives.** The Brief tab is gone and the Inbox moves to

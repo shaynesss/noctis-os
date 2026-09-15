@@ -604,8 +604,12 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
   const local = r.commits.filter((c) => !c.pushed).length
   const rec = r.notes
   const recLocal = rec ? rec.commits.filter((c) => !c.pushed).length : 0
+  // The beam is the character's when the repository is a dev job's project
+  // -- Faber's build, so Faber's red -- and the star's silver for every
+  // other repository, the vault included.
   return (
-    <section className="flex flex-col rounded-[4px] border border-line bg-surface">
+    <section className="beam flex flex-col rounded-[4px] border border-line bg-surface"
+             style={{ '--beam': rec ? 'var(--color-faber)' : 'var(--color-silver)' } as React.CSSProperties}>
       <div className="flex items-baseline gap-[10px] px-4 py-[10px]">
         <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{r.name}</span>
         <span className="font-mono text-[11px] text-ink-faint">· {r.branch ?? 'detached'}</span>

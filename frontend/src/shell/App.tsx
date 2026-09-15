@@ -576,7 +576,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
         </h2>
 
         {windows ? (
-          <div className="mb-[10px] rounded-[3px] border border-line bg-surface px-4 pb-[6px] pt-1">
+          <div className="beam mb-[10px] rounded-[3px] border border-line bg-surface px-4 pb-[6px] pt-1">
             {windows.map((w, i) => (
               <div
                 key={w.label}
@@ -616,7 +616,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
             Loading…
           </div>
         ) : (
-          <div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
+          <div className="beam rounded-[3px] border border-line bg-surface px-4 py-[14px]">
             <div className="mb-4 flex items-baseline gap-[9px]">
               <b className="font-mono text-[29px] font-bold tabular-nums tracking-[-0.02em] text-ink">
                 {fmt(

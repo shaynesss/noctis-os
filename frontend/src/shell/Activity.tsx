@@ -88,7 +88,7 @@ export function Activity(
 
   return (
     <Frame>
-      <div className="rounded-[3px] border border-line bg-surface px-4 py-[14px]">
+      <div className="beam rounded-[3px] border border-line bg-surface px-4 py-[14px]">
         <div className="mb-[14px] flex items-baseline gap-2">
           <b className="text-[14px] font-semibold text-ink tabular-nums">{total}</b>
           <span className="font-mono text-[10.5px] text-ink-faint">sessions in the last year</span>
