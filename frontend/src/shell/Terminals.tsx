@@ -220,25 +220,29 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
           when it is not in the first row -- rather than a gap over a
           coloured ground, because the ground is translucent and a gap's
           colour would show through every pane. */}
-      {/* Each terminal is a card like everything else on the glass (2026-09-15):
-          the same corners, border and surface as a Stats card or a Repo
-          module, with the ground showing in the gaps. Before this the
-          terminals were one flat slab divided by rules, the one view that
-          did not look like the rest of the app. With more than one showing,
-          the focused card's border takes the mode's accent. */}
-      <div className="grid min-h-0 flex-1 gap-[10px] p-[10px]"
+      {/* The terminals stay a slab divided by rules, not cards: they were
+          made cards for an afternoon (2026-09-15) and it looked wrong -- a
+          terminal is the work surface, not a panel on it. */}
+      <div className="grid min-h-0 flex-1"
            style={{
              gridTemplateColumns: `repeat(${gridColumns(visible.length)}, minmax(0, 1fr))`,
              gridAutoRows: 'minmax(0, 1fr)',
            }}>
         {slots.map((s) => {
           const at = visible.indexOf(s.id)
+          const cols = gridColumns(visible.length)
           const focused = s.id === shown?.id
           return (
             <div key={s.id}
-                 style={{ display: at < 0 ? 'none' : 'flex', borderColor: visible.length > 1 && focused ? accent : undefined }}
-                 className="min-h-0 min-w-0 flex-col overflow-hidden rounded-card border border-line bg-surface"
+                 style={{ display: at < 0 ? 'none' : 'flex' }}
+                 className={`min-h-0 min-w-0 flex-col ${at % cols > 0 ? 'border-l border-line' : ''} ${at >= cols ? 'border-t border-line' : ''}`}
                  onMouseDown={() => { if (at >= 0 && !focused) onSelect(s.id) }}>
+              {/* Which column has the keyboard, when there is more than one:
+                  a rule in the mode's accent along its top, nothing on the
+                  others. */}
+              {visible.length > 1 && (
+                <div className="h-[2px] shrink-0" style={{ background: focused ? accent : 'transparent' }} />
+              )}
               <div className="min-h-0 flex-1">
                 <Terminal id={s.id} mode={s.mode} cwd={s.cwd} accent={accent}
                           resumeId={s.resumeId} prompt={s.prompt} />

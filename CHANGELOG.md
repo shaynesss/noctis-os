@@ -16,11 +16,9 @@ scheduler, which is the only feature left in the build order.
   panel of content, `rounded-sheet` (12px) on the overlays, `rounded-control`
   (6px) on anything you press or type into. Marks — cells, dots, bars —
   keep their tiny radii, because at 7px wide a 6px corner is a circle.
-- **The terminals are cards too.** They were the one view that did not look
-  like the rest of the app: a flat slab divided by rules. Each terminal now
-  sits in the same card as a Stats card or a Repo module — corners, border,
-  surface — with the ground showing in the gaps, and when several show the
-  focused one's border takes the mode's accent instead of a strip on top.
+- **The terminals stay a slab.** They were made cards for an afternoon and
+  it looked wrong — a terminal is the work surface, not a panel on it. Back
+  to the rules between panes and the accent strip on the focused one.
 - **Every view centres itself** when shorter than the window, not just Repo
   and Stats; Inbox and Settings used to start at the top.
 - **Sheets are opaque.** The launcher, palette and reader sat on `surface`
@@ -30,13 +28,20 @@ scheduler, which is the only feature left in the build order.
 - **The focus ring is one pixel** of the accent at 70%, not two solid: ⌘K
   and ⌘T focus their field from a keystroke, which counts as focus-visible,
   and the old ring read as an error state around the search box.
-- **The pools are ours.** `Pools.tsx` is border-beam's pulse-outside ported
-  (MIT), with thirteen pools laid out evenly — five along the top, four
-  along the bottom, two up each side, a glow in each corner — each 1.6× the
-  library's so neighbours' tails meet and the edge carries one band of
-  light with brighter passages. Same three layers, same 30fps oscillators,
-  one loop for every card, each at its own phase. Silver, or Faber's red for
-  a build. The package and the halo are gone.
+- **The pools are ours, and cheap.** `Pools.tsx` is border-beam's
+  pulse-outside rebuilt (MIT): thirteen pools at even intervals — five
+  along the top, four along the bottom, two up each side — at the library's
+  own size, so each stays a distinct pool with dark edge between it and the
+  next (a wider cut where the pools merged into one band was refused). Every
+  pool is unique: its periods, drift, swing and phase come from its own
+  seed. And the frame is cheap: the library paints all the pools into one
+  stacked-gradient background and moves them by rewriting custom
+  properties, re-rasterising three full-card gradients thirty times a
+  second and blurring two — on a 1240px card that stalled the interface.
+  Each pool is now its own element, painted once, moved by `transform` and
+  `opacity` alone, its softness in the gradient rather than a filter. Stats
+  measures at a locked 16.7ms per frame with zero frames over 33ms. The
+  package and the halo are gone; silver, or Faber's red for a build.
 
 ### Border beam on the cards (2026-09-15)
 
