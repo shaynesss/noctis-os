@@ -528,5 +528,15 @@ export function Terminal({
 
   // `data-terminal` is what the shell's key handler looks for to decide that
   // a keystroke belongs to the CLI rather than to the app.
-  return <div ref={host} data-terminal className="h-full w-full overflow-hidden px-[10px] py-[8px]" />
+  //
+  // The padding sits on a wrapper, not on the element xterm fits to.
+  // FitAddon sizes rows from its parent's border-box height and subtracts
+  // only xterm's own padding, so 8px above and below on the host fitted one
+  // row too many and the bottom row was cut at the status bar -- hidden
+  // while the bar painted its own ground, plain once the bar became glass.
+  return (
+    <div className="h-full w-full overflow-hidden px-[10px] py-[8px]">
+      <div ref={host} data-terminal className="h-full w-full overflow-hidden" />
+    </div>
+  )
 }
