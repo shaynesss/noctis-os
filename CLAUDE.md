@@ -44,9 +44,9 @@ Hook-driven action-feed logs (high-churn, ephemeral) are **not** vault content �
 - **No mode ever rewrites its own or another mode's live methodology file** — lessons accumulate freely, methodology only changes through Custos's staged, evidence-backed diffs.
 - **Deterministic-where-possible:** date math, staleness checks, health checks, git commits are backend code, never left to session judgment.
 
-## Build order (locked, and complete but for one piece)
+## Build order (locked, and complete)
 
-git for the vault → mode folders (methodology + lessons + state + agents) → backend → frontend → telemetry → nightshift. All built; v2 is the daily driver. The one unbuilt piece is the `launchd`-on-wake scheduler for the brief. A session that reads this should not conclude the frontend is still to be scaffolded — a Faber probe did exactly that on 2026-09-15 from the previous wording.
+git for the vault → mode folders (methodology + lessons + state + agents) → backend → frontend → telemetry → nightshift. All built; v2 is the daily driver. The `launchd`-on-wake scheduler that was the last item is no longer needed: the Inbox digest replaced the morning brief on 2026-09-15 and is computed when opened. A session that reads this should not conclude the frontend is still to be scaffolded — a Faber probe did exactly that on 2026-09-15 from the previous wording.
 
 ## Design tooling
 
@@ -56,4 +56,4 @@ Tailwind 4 is wired with the `@` alias; Impeccable is registered as **Product** 
 
 **v2 hosts sessions; it does not launch them elsewhere.** A session is the real interactive `claude` in a pseudo-terminal the shell owns (`src-tauri/src/pty.rs`), rendered by xterm.js in the app's own palette. A mode's identity travels in the argv (`--append-system-prompt`, `--agents`, `--settings`, `--add-dir`) — **no `CLAUDE_CONFIG_DIR` anywhere**, so every session inherits the real `~/.claude` and the plugins, skills, subagents, MCP servers and permissions installed there. `backend/interactive.py` builds that argv; it knows nothing about terminals, and the Rust side knows nothing about modes.
 
-The `-p` orchestrator that streamed `stream-json` into an in-app transcript (2026-09-11 → 09-13) is deleted, as are v1's launch surfaces before it. `one_shot` in `engine.py` is the one `-p` left — a script, for recap and the brief. Full detail: `DOCUMENTATION.md` §2 and §22 here; the spec's EDD and `PTY-MIGRATION.md` in the vault's `wiki/Noctis OS/`.
+The `-p` orchestrator that streamed `stream-json` into an in-app transcript (2026-09-11 → 09-13) is deleted, as are v1's launch surfaces before it. `one_shot` in `engine.py` is the one `-p` left — a script, for the session recap. Full detail: `DOCUMENTATION.md` §2 and §22 here; the spec's EDD and `PTY-MIGRATION.md` in the vault's `wiki/Noctis OS/`.

@@ -1,13 +1,13 @@
-"""Brief, Inbox and Settings — the three rail panels that are not Chat.
+"""Inbox, Repo and Settings — the rail panels that are not a terminal.
 
 These read; they do not launch. Anything that starts a session goes through
 `sessions_v2.py`, so a panel cannot become a second, quieter way to spend the
 5h window.
 
-The brief and worklist are *generated* by the scheduler (spec build order,
-item 6), which does not exist yet. This serves them as absent rather than
-faking content: a panel that invents a morning brief is worse than one that
-says the generator has not run, because the invented one gets believed.
+Nothing here is generated ahead of time. The digest at the top of the Inbox
+is computed when the panel opens (`digest.py`); the morning brief it replaced
+was a file a scheduler was meant to write, and the scheduler never existed,
+so the file told you about a Thursday for five days.
 """
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+import digest
 import vault_io
 from prompts.render import render
 from jobs import MAINTENANCE, MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
@@ -42,28 +43,31 @@ def _safe_frontmatter(path: str) -> dict | None:
         return None
 
 
-BRIEF_PATH = "brief/today.md"
-WORKLIST_PATH = "worklist.md"
-
-
-@router.get("/brief")
-def brief() -> dict:
-    """Today's brief and the durable worklist, as written in the vault.
-
-    `generated` is false when the file is simply not there. The distinction
-    matters: an empty brief and an unwritten one mean different things, and
-    only one of them is a problem worth chasing.
-    """
-    def read(path: str) -> str | None:
-        return vault_io.read_file(path) if vault_io.file_exists(path) else None
-
-    brief_md = read(BRIEF_PATH)
-    worklist_md = read(WORKLIST_PATH)
-    return {
-        "brief": {"generated": brief_md is not None, "markdown": brief_md, "path": BRIEF_PATH},
-        "worklist": {"generated": worklist_md is not None, "markdown": worklist_md,
-                     "path": WORKLIST_PATH},
+@router.get("/digest")
+def digest_view() -> dict:
+    """What happened across Noctis since you were last here, and what is
+    next -- the card at the top of the Inbox. Counts, composed into
+    sentences by the shell; see `digest.py` for why there is no file, no
+    scheduler and no prose call."""
+    facts = digest.gather(_git)
+    proposals = [i for i in _proposals() if i["kind"] == "proposal"]
+    flagged = _flagged_jobs()
+    facts["inbox"] = {
+        "waiting": len(proposals),
+        "flagged": len(flagged),
+        # Staged after the previous sitting ended: what *arrived*, as against
+        # what has been sitting there. Both are worth knowing; only one is news.
+        "arrived": sum(1 for p in proposals if facts["since"] and p["at"] and p["at"] > facts["since"]),
     }
+    return facts
+
+
+@router.post("/digest/here")
+def digest_here() -> dict:
+    """A presence heartbeat from the shell: you are at the app now. Thirty
+    minutes without one ends a sitting, and the next digest reads from
+    here."""
+    return digest.here()
 
 
 def _flagged_jobs() -> list[dict]:
@@ -243,20 +247,6 @@ def _proposals() -> list[dict]:
             },
         })
     return items
-
-
-@router.post("/brief/generate")
-async def generate_brief() -> dict:
-    """Write today's brief now.
-
-    The scheduler calls this each morning; the Brief panel offers it so you
-    can refresh after changing something rather than waiting until tomorrow
-    to see the effect. It costs one cheap-tier call.
-    """
-    from brief.generate import build, write
-
-    markdown = await build()
-    return {"path": write(markdown), "bytes": len(markdown)}
 
 
 @router.get("/inbox")
@@ -1021,28 +1011,3 @@ def decide(item_id: str, decision: str) -> dict:
             "applied_to": applied, "closed_job": closed, "committed": committed}
 
 
-class WorklistUpdate(BaseModel):
-    # Required, with no default. It defaulted to "", which meant a request
-    # that simply omitted the field truncated the worklist and returned 200 --
-    # silent data loss on the one file here that is hand-kept rather than
-    # derived, and so the only one that cannot be regenerated. Clearing it on
-    # purpose still works: `{"markdown": ""}` says so, and `{}` no longer
-    # says anything at all.
-    markdown: str
-
-
-@router.put("/worklist")
-def save_worklist(body: WorklistUpdate) -> dict:
-    """Write the worklist.
-
-    The one file here that is yours rather than derived — a hand-kept note of
-    what to get done, not generated from mode state, because a generated one
-    is the job list again under a second name and the two would disagree the
-    moment either drifted.
-
-    A fixed path, so nothing about it is caller-controlled: this writes into
-    the vault, and the only safe version of that is a route that can write
-    exactly one file.
-    """
-    vault_io.write_file(WORKLIST_PATH, body.markdown)
-    return {"path": WORKLIST_PATH, "bytes": len(body.markdown)}

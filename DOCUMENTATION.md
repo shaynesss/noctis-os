@@ -54,7 +54,7 @@ Built by `backend/interactive.py`, served by `GET /v2/sessions/interactive-args?
 
 **Finding the binary.** PATH first, then `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.claude/local`, in both `engine.py` and `pty.rs`; `NOCTIS_CLAUDE_BIN` overrides. `launchd` starts processes with a bare `PATH` containing no Homebrew.
 
-**`one_shot` is the one place `-p` remains** (`engine.py`): the brief's prose calls it, on the cheap tier, with every tool refused and `--output-format json`. A scripting mode used for a script — and a script leaves nothing behind: `--no-session-persistence`, so no transcript lands under `~/.claude/projects/` for the indexer to file as a conversation (twenty-seven recaps had been filed as `general` sessions before this was noticed), and `--setting-sources user`, so the repo's own `.claude/settings.local.json` hooks — baked `--mode dev` — do not fire a `dev` SessionEnd for every recap. `--bare` would do both and more, but it refuses OAuth, so it cannot run on the subscription.
+**`one_shot` is the one place `-p` remains** (`engine.py`): the session recap calls it, on the cheap tier, with every tool refused and `--output-format json`. A scripting mode used for a script — and a script leaves nothing behind: `--no-session-persistence`, so no transcript lands under `~/.claude/projects/` for the indexer to file as a conversation (twenty-seven recaps had been filed as `general` sessions before this was noticed), and `--setting-sources user`, so the repo's own `.claude/settings.local.json` hooks — baked `--mode dev` — do not fire a `dev` SessionEnd for every recap. `--bare` would do both and more, but it refuses OAuth, so it cannot run on the subscription.
 
 ---
 
@@ -154,7 +154,7 @@ The budget matters because an orchestrated workload re-sends its context every t
 | `vault_search` | Ranked BM25 over the vault |
 | `history_search` | The same over conversation history |
 | `job_context` | A job's full record |
-| `worklist` | The hand-kept worklist |
+| `worklist` | What is in flight across every mode, from each mode's `state.md` (the name predates the digest; it never read a worklist file) |
 | `propose` | Stage a proposal into the maintenance inbox — **not pre-approved** |
 | `permission_prompt` | Internal. Named by `--permission-prompt-tool`; surfaces a request in the app. |
 
@@ -220,8 +220,6 @@ second-brain/
 ├── maintenance/        audit.md · schedule.md · agents/   (infrastructure, not a mode)
 ├── wiki/               durable reasoning
 ├── design-lodge/       design assets + quick-capture inbox
-├── brief/today.md      day-scoped, replaced each morning
-├── worklist.md         durable, hand-kept
 └── log.md · index.md   serialized-writer files
 ```
 
@@ -254,7 +252,7 @@ Default location `backend/data/`, overridable with `NOCTIS_DATA_DIR`.
 
 React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `main.tsx` imports it and nothing else.
 
-**Rail:** Brief · Terminal · Repo · Stats · Inbox · Settings. **Repo** is the repositories the open terminals are in, one group per repository, the showing terminal's first — `GET /v2/repos?cwd=…&cwd=…`, one `cwd` per terminal, grouped by `git rev-parse --show-toplevel` so two Faber sessions on one project are one group naming both terminals (`faber · 1`, `faber · 3`, the strip's own labels) and a session on another project is a second; directories in no repository come back under `outside`. With more than one repository the modules lay out like the terminals — a row up to three, a grid after — and each module's commits start folded; alone, a repository's are open. Ten commits show and the rest scroll; subjects wrap rather than truncate. Each repository is one bordered module: name and branch on the lid, its terminals, where it stands, then Uncommitted, Commits, Record and GitHub as folds inside the same border. The GitHub half is its own read — `GET /v2/repos/github?slug=owner/name`, three `gh` calls run at once, cached a minute per slug, failures not cached — so the local half is on screen before the network answers. Links leave the app through the shell's `open_url` command (macOS `open`, http(s) only), because the webview ignores `target="_blank"`. Each commit carries the mark of whose work it is, never a trailer: a repository that is a dev job's `project_path` is Faber's, so all its commits are; a repository no job owns (the vault) is attributed by time from the history store — the session live in that directory, else any session live at the moment, most recently started winning — and a commit outside every span has no mark. Per group: branch, upstream, ahead/behind, dirty files, the last twenty commits with the unpushed ones marked, and, through `gh` when signed in and the remote is on GitHub, open pull requests with a one-word check state and open issues; GitHub failing leaves the local half intact with a reason. For a repository that is a dev job's project, a **Record** section shows the vault side — the job's `notes_path` (`wiki/<Project>/`) and job folder, read from the vault's repository with only the commits and uncommitted files touching those paths — with its own push, so both commit paths of one piece of work are one view. A session never pushes; the view has the push button instead — `POST /v2/repos/push` runs `git push` as the machine's git identity (yours), reads every outgoing message first and refuses on an attribution line (`Co-Authored-By`, `Claude-Session`, "Generated with Claude Code"), and asks for `force` as a second click when origin holds commits the branch does not, running it as `--force-with-lease`.
+**Rail:** Inbox · Terminal · Repo · Stats · Settings. **Inbox** is first because it is what you open the app to read: everything that arrived while you were away. At its top the **digest** — `GET /v2/digest` — says what happened across Noctis since you were last here and what is next: sessions run since, by character with their titles; each repository's commits since, commits not on the upstream and files uncommitted (the vault, then every dev job's `project_path`); proposals that arrived; the freshest open job per character; jobs untouched fourteen days and owed a decision. Every line is a count the shell turns into a sentence (`digestLines`, tested to the string) — no file, no scheduler, no model. "Since you were last here" is the end of the previous *sitting*: the shell posts `POST /v2/digest/here` on open and once a minute while the window is focused and something was typed or clicked in the last two minutes, and thirty minutes without a heartbeat ends a sitting (`backend/data/sittings.json`), so the digest holds still while you are here and moves on when you come back; before any sitting has ended it reads the last day. Below the digest, **waiting on you**: the proposals and flagged jobs, with the same accept/reject as before. The digest replaced the Brief tab on 2026-09-15 — a vault file a scheduler was meant to rewrite each morning with a model-written paragraph on top; the scheduler was never built, so the file said "Thursday 10 September" for five days, and the paragraph was the one sentence in the app nothing could check. The hand-kept worklist went with it. **Repo** is the repositories the open terminals are in, one group per repository, the showing terminal's first — `GET /v2/repos?cwd=…&cwd=…`, one `cwd` per terminal, grouped by `git rev-parse --show-toplevel` so two Faber sessions on one project are one group naming both terminals (`faber · 1`, `faber · 3`, the strip's own labels) and a session on another project is a second; directories in no repository come back under `outside`. With more than one repository the modules lay out like the terminals — a row up to three, a grid after — and each module's commits start folded; alone, a repository's are open. Ten commits show and the rest scroll; subjects wrap rather than truncate. Each repository is one bordered module: name and branch on the lid, its terminals, where it stands, then Uncommitted, Commits, Record and GitHub as folds inside the same border. The GitHub half is its own read — `GET /v2/repos/github?slug=owner/name`, three `gh` calls run at once, cached a minute per slug, failures not cached — so the local half is on screen before the network answers. Links leave the app through the shell's `open_url` command (macOS `open`, http(s) only), because the webview ignores `target="_blank"`. Each commit carries the mark of whose work it is, never a trailer: a repository that is a dev job's `project_path` is Faber's, so all its commits are; a repository no job owns (the vault) is attributed by time from the history store — the session live in that directory, else any session live at the moment, most recently started winning — and a commit outside every span has no mark. Per group: branch, upstream, ahead/behind, dirty files, the last twenty commits with the unpushed ones marked, and, through `gh` when signed in and the remote is on GitHub, open pull requests with a one-word check state and open issues; GitHub failing leaves the local half intact with a reason. For a repository that is a dev job's project, a **Record** section shows the vault side — the job's `notes_path` (`wiki/<Project>/`) and job folder, read from the vault's repository with only the commits and uncommitted files touching those paths — with its own push, so both commit paths of one piece of work are one view. A session never pushes; the view has the push button instead — `POST /v2/repos/push` runs `git push` as the machine's git identity (yours), reads every outgoing message first and refuses on an attribution line (`Co-Authored-By`, `Claude-Session`, "Generated with Claude Code"), and asks for `force` as a second click when origin holds commits the branch does not, running it as `--force-with-lease`.
 
 **Transcript blocks** are how a *history* transcript renders (read-only, from the store); a live session is the CLI's own TUI in a terminal. The block kinds:
 
@@ -293,15 +291,11 @@ Runtime logs live in `backend/runtime/` — high-churn, ephemeral, gitignored. *
 
 ---
 
-## 12. Maintenance and the scheduler
+## 12. Maintenance
 
-**`launchd`, fires on wake.** Morning brief · vault auto-commit and push (secret-scan first) · maintenance. Exits if already run today.
+**Nothing runs on a schedule.** The `launchd`-on-wake job the spec once listed carried three things: the morning brief, a vault auto-commit and push, and maintenance. The brief no longer exists — the Inbox digest (§10) is computed when opened, so nothing needs writing ahead of time. A vault auto-push is against the push rule (pushing is yours, from the Repo tab). Maintenance runs when invoked, `python -m nightshift.runner`. If a scheduled maintenance run is ever wanted, Settings' Schedule card is where its switch goes; until then the card says so.
 
 **Audit → Propose → Apply, propose-never-commit.** Every proposal is accepted or rejected by hand, from the Inbox. `POST /v2/inbox/{id}/accept` applies the diff *before* archiving — all hunks or none — then honours the proposal's markers (a lessons cursor to advance, a job to close), drops the entry from `maintenance/state.md`'s index and commits the vault; a diff that no longer applies is a 409 with the reason and the item stays, visibly stale. `reject` archives, drops the entry and commits. The listing joins each file with its index entry (description, rationale, confidence) and derives from the diff what accepting does — which file, how many places — so the row states the consequence before the argument; `full` carries rationale, diff, evidence and confidence for the read.
-
-**The brief is generated in two halves.** Facts are counted in Python — open jobs, ages, inbox, where the last session got to. The prose is written by a cheap-tier session from those facts and nothing else, which is what makes it read like a person rather than assembled fields. One paragraph, three sentences at most. **If the prose call fails the brief still renders**, because the rows are the part that must not be missing.
-
-**The worklist is hand-kept**, not generated. A generated worklist is the job list under a second name, and the two would disagree the moment one drifted. It is also the only thing here that is *yours* rather than derived. Editable in place through `PUT /worklist`.
 
 **Per-item fault isolation:** each item's advance step is wrapped, so one failing call logs and continues rather than aborting the run and dropping every other independent item.
 
@@ -426,7 +420,7 @@ Two variables are required. Everything else has a working default.
 | `NOCTIS_DATA_DIR` | no | `backend/data/` | SQLite history and the search index. |
 | `NOCTIS_HISTORY_DB` | no | derived | Explicit DB path for the MCP server, which runs as its own process. |
 | `NOCTIS_BACKEND` | no | `http://127.0.0.1:8000` | Where the MCP server reaches the backend. |
-| `NOCTIS_RECAP_MODEL` | no | `claude-haiku-4-5` | Model for `one_shot` — the brief's prose. |
+| `NOCTIS_RECAP_MODEL` | no | `claude-haiku-4-5` | Model for `one_shot` — the session recap. |
 | `NIGHTSHIFT_DISTILLER_MODEL` | no | `claude-haiku-4-5` | Model for overnight lessons distillation. |
 | `NOCTIS_SCRATCH_ROOT` | no | `~/Developer` | Where Plan-stage scratch directories go before a project is named. |
 
@@ -475,11 +469,11 @@ make test        # pytest + tsc -b + vitest
 ## 21. Known gaps
 
 **Outstanding:**
-- The `launchd`-on-wake scheduler — the only feature left in the build order. `brief/generate.py` writes the brief; nothing fires it, and the vault auto-commit/push job does not exist.
+- Nothing in the build order. The `launchd` scheduler that was its last item is no longer needed: the digest is computed on open, a vault auto-push is against the push rule, and maintenance runs when invoked.
 
 **Known and accepted:**
 - Effort is not yet passed at spawn (`interactive-args` does not take it); the CLI's default applies until it is.
-- The brief page renders whatever `brief/today.md` last held, with no staleness indicator. `POST /v2/brief/generate` exists and nothing in the shell calls it, so a brief only refreshes when something asks — which today is nothing. The scheduler is the fix; until it lands, a stale brief looks exactly like a current one.
+- The digest's "since you were last here" is presence-based: a sitting ends thirty minutes after the last heartbeat, and the first look on a fresh install reads the last day. Leaving the app focused with a video playing and the mouse still counts as away, which is right; typing into another app over the Noctis window counts as here for two minutes, which is wrong and harmless.
 - Whitespace-only text counts as speech — judging quality would be the guesswork §5 replaced.
 - `seven_day_opus` is in the CLI binary and absent from an observed Haiku run. Unverified.
 

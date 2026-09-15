@@ -9,6 +9,36 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The Inbox absorbs the Brief: a digest, computed, no scheduler (2026-09-15)
+
+- **One tab for what arrives.** The Brief tab is gone and the Inbox moves to
+  the top of the rail, opening with a **digest** — what happened across
+  Noctis since you were last here and what is next — and then what is
+  waiting on you. The digest's lines are counts turned into sentences:
+  sessions run since, by character with their titles; each repository's
+  commits since, commits not pushed, files uncommitted (the vault, then every
+  dev job's project); proposals that arrived; jobs untouched fourteen days
+  and owed a decision; the freshest open job per character. `GET /v2/digest`
+  supplies the counts, `digestLines` composes the sentences and is tested to
+  the string. No file, no scheduler, no model.
+- **Why.** The brief was a vault file a `launchd` job was meant to rewrite
+  each morning, with a model-written paragraph over the facts. The job was
+  never built, so the card said "Thursday 10 September" for five days; and
+  the paragraph was the one sentence in the app nothing could check — its
+  prompt was twenty lines of warnings about the mistakes it made anyway. The
+  facts it summarised already existed live elsewhere in the app.
+- **"Since you were last here" is a sitting, not a clock.** The shell posts
+  `POST /v2/digest/here` on open and once a minute while the window is
+  focused and something was typed or clicked in the last two minutes; thirty
+  minutes without one ends a sitting, and the digest reads from the previous
+  sitting's end — so it holds still while you are here and moves on when you
+  come back. First look: the last day.
+- **Removed:** `brief/generate.py` and its prose prompt, `GET /v2/brief`,
+  `POST /v2/brief/generate`, `PUT /v2/worklist`, the Worklist textarea, the
+  vault's `brief/today.md` and `worklist.md`, and the scheduler from the
+  build order — nothing left needs one. The MCP `worklist` tool stays: it
+  reads each mode's `state.md` and never read the file.
+
 ### Stats: the list price covers every turn, and the page centres (2026-09-15)
 
 - **$2,427 across 8,090 turns, not $102 across 120.** The list-price line

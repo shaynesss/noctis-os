@@ -70,17 +70,13 @@ Per repository: branch, ahead/behind, uncommitted files, the last twenty commits
 
 The engine's rolling **5-hour and 7-day windows** — the real currency on a subscription; no dollar figure is ever shown as spend — lifetime tokens by kind, a year of activity, and the **history of every session on this machine**, indexed from the transcripts the CLI writes itself. Open a past transcript, search it, or resume it into a terminal. `⌘K` searches history across all modes from anywhere.
 
-### Brief
-
-The morning brief and an editable worklist. The brief is generated over facts computed in Python — what is flagged, what is waiting, what went stale — with the prose written on top of those facts rather than instead of them. The scheduler that writes it on wake is the one unbuilt piece of the build order; until then the page says so and names the file it is waiting for.
-
 ### Inbox
 
-Maintenance's proposals and flagged jobs, as packages: the sender's sprite, what the change is, what accepting does, the full rationale, evidence and a red/green diff on demand. **Accepting applies the diff** — all hunks or none — archives the proposal, and commits the vault; rejecting archives it. Maintenance itself never edits a methodology; the person accepting is the edit.
+Everything that arrived while you were away, first in the rail because it is what you open the app to read. At the top, the **digest**: what happened across Noctis since you were last here and what is next — which characters ran sessions and on what, which repositories moved and how many commits are not pushed, what arrived overnight, which job is owed a decision — every line a count turned into a sentence, computed when the tab opens, no model in the loop. "Since you were last here" is the end of your previous sitting, which the app knows from your own presence rather than a clock. Below it, **waiting on you**: Maintenance's proposals and flagged jobs, as packages — the sender's sprite, what the change is, what accepting does, the full rationale, evidence and a red/green diff on demand. **Accepting applies the diff** — all hunks or none — archives the proposal, and commits the vault; rejecting archives it. Maintenance itself never edits a methodology; the person accepting is the edit.
 
 ### Settings
 
-The prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault, with a regression suite that checks a change still produces the right mode. And the scheduler's switches, once it exists.
+The prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault, with a regression suite that checks a change still produces the right mode.
 
 ## Architecture
 

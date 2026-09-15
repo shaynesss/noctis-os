@@ -25,7 +25,7 @@ describe('get', () => {
     // A refused connection, which is what a restarting backend usually gives.
     const out = await withFetch(
       (() => Promise.reject(new TypeError('Load failed'))) as unknown as typeof fetch,
-      () => get('/v2/brief'),
+      () => get('/v2/inbox'),
     )
     expect(out).toBeNull()
   })
@@ -36,7 +36,7 @@ describe('get', () => {
     // so the caller cannot distinguish slow from never.
     const out = await withFetch(
       (() => Promise.reject(new DOMException('timed out', 'TimeoutError'))) as unknown as typeof fetch,
-      () => get('/v2/brief'),
+      () => get('/v2/inbox'),
     )
     expect(out).toBeNull()
   })
@@ -44,7 +44,7 @@ describe('get', () => {
   it('returns null on a non-ok response rather than throwing', async () => {
     const out = await withFetch(
       (() => Promise.resolve(new Response('nope', { status: 500 }))) as unknown as typeof fetch,
-      () => get('/v2/brief'),
+      () => get('/v2/inbox'),
     )
     expect(out).toBeNull()
   })
@@ -56,7 +56,7 @@ describe('get', () => {
         seen = init
         return Promise.resolve(new Response('{}', { status: 200 }))
       }) as unknown as typeof fetch,
-      () => get('/v2/brief'),
+      () => get('/v2/inbox'),
     )
     expect(seen?.signal).toBeInstanceOf(AbortSignal)
   })

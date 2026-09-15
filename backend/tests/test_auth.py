@@ -2,29 +2,29 @@ from auth import ALLOWED_ORIGIN, TAURI_ORIGIN
 
 
 def test_missing_token_rejected(client):
-    response = client.get("/v2/brief")
+    response = client.get("/v2/inbox")
     assert response.status_code == 401
 
 
 def test_wrong_token_rejected(client):
-    response = client.get("/v2/brief", headers={"Authorization": "Bearer wrong"})
+    response = client.get("/v2/inbox", headers={"Authorization": "Bearer wrong"})
     assert response.status_code == 401
 
 
 def test_correct_token_accepted(client, auth_headers):
-    response = client.get("/v2/brief", headers=auth_headers)
+    response = client.get("/v2/inbox", headers=auth_headers)
     assert response.status_code == 200
 
 
 def test_disallowed_origin_rejected(client, auth_headers):
     headers = {**auth_headers, "Origin": "http://evil.example"}
-    response = client.get("/v2/brief", headers=headers)
+    response = client.get("/v2/inbox", headers=headers)
     assert response.status_code == 403
 
 
 def test_allowed_origin_accepted(client, auth_headers):
     headers = {**auth_headers, "Origin": ALLOWED_ORIGIN}
-    response = client.get("/v2/brief", headers=headers)
+    response = client.get("/v2/inbox", headers=headers)
     assert response.status_code == 200
 
 
@@ -63,10 +63,10 @@ def test_packaged_app_origin_is_accepted(auth_headers, client):
     """Tauri serves the bundled frontend from tauri://localhost, not from the
     dev server's port. Allowing only the dev origin ships an app that cannot
     reach its own backend -- and it passes every test in development."""
-    r = client.get("/v2/brief", headers={**auth_headers, "Origin": TAURI_ORIGIN})
+    r = client.get("/v2/inbox", headers={**auth_headers, "Origin": TAURI_ORIGIN})
     assert r.status_code != 403
 
 
 def test_an_unrelated_origin_is_still_refused(auth_headers, client):
-    r = client.get("/v2/brief", headers={**auth_headers, "Origin": "http://evil.example"})
+    r = client.get("/v2/inbox", headers={**auth_headers, "Origin": "http://evil.example"})
     assert r.status_code == 403
