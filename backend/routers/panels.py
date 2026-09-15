@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -404,14 +405,15 @@ def repos(cwd: list[str] = Query(min_length=1)) -> dict:
     }
 
 
-def _commits(root: Path, n: int, paths: list[str] | None, unpushed: set[str]) -> list[dict]:
+def _commits(root: Path, n: int, paths: list[str] | None, unpushed: set[str], rev: str | None = None) -> list[dict]:
     """The last `n` commits, newest first, each with its body: the body is
     the record -- where a piece of work left things -- and the view shows
     it, so a subject-only log would be a list of titles with the memory
     cut off. Records are split on a separator git will not print in a
-    message, since a body has newlines of its own."""
+    message, since a body has newlines of its own. `rev` starts the walk
+    at a given commit instead of HEAD."""
     log = _git(root, "log", "-n", str(n), "--format=%H%x1f%h%x1f%s%x1f%ct%x1f%b%x1e",
-               *(["--", *paths] if paths else [])) or ""
+               *([rev] if rev else []), *(["--", *paths] if paths else [])) or ""
     commits = []
     for record in log.split("\x1e"):
         # Python's strip() counts \x1f as whitespace, so `_git` has already
@@ -472,11 +474,11 @@ def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
         "remote": remote_url, "slug": slug, "github_reason": reason,
     }
     if paths is None:
-        out["notes"] = _project_notes(root)
+        out["notes"] = _project_notes(root, commits[0]["at"] if commits else None)
     return out
 
 
-def _project_notes(root: Path) -> dict | None:
+def _project_notes(root: Path, project_newest_at: int | None = None) -> dict | None:
     """The vault side of a project: commits and uncommitted files under the
     job's notes folder and job folder, read from the vault's repository.
 
@@ -485,6 +487,14 @@ def _project_notes(root: Path) -> dict | None:
     group. Shown under it, with its own push, so both halves of one piece
     of work are one view. None for a repository no dev job owns, and for
     the vault itself.
+
+    Presented by file, not by commit (2026-09-15): the vault's own module
+    already lists its commits chronologically, and a second chronological
+    list under the project was the same twenty rows twice. What only this
+    fold can say is whether the *writing* about the project is current --
+    one row per record file with the commit that last touched it, and how
+    far the record trails the code (`trails`). The commits stay in the
+    payload for the figures.
     """
     import jobs
     slug = jobs.find_job_for_cwd("faber", root)
@@ -533,7 +543,103 @@ def _project_notes(root: Path) -> dict | None:
     notes["commits"] = merged[:20]
     notes["paths"] = paths
     notes["cwds"] = []
+    notes["files"] = _record_files(vault, paths, merged, notes["dirty"], unpushed)
+    notes["trails"] = _record_trails(project_newest_at, merged)
     return notes
+
+
+def _record_files(vault: Path, paths: list[str], commits: list[dict], dirty: list[str], unpushed: set[str]) -> list[dict]:
+    """One row per file of the record: every tracked file under the notes
+    paths, the shared record files a session-attributed commit touched, and
+    any uncommitted file under the notes paths. Each with the commit that
+    last touched it, so the row reads "SPEC.md, edited 5h ago by Faber,
+    pushed". A file never committed carries no commit and says so.
+
+    The shared files are the ones dev.md's Vault scope names as a build
+    session's writes outside its notes folder: the root `log.md` and
+    anything under `modes/` (the job context, the lesson, the state). Not
+    every file a session commit touched -- a session inside the project
+    that spends an hour tidying the whole vault commits thirty pages that
+    are not this project's record, and the first cut listed them all.
+    Files a commit deleted are not rows: the record is what exists.
+
+    Newest touch first; never-committed files before everything, because
+    they are the ones a session is working on right now.
+    """
+    # One walk of recent history with the names each commit touched, newest
+    # first. It answers both questions below -- which files a session
+    # commit touched, and which commit last touched each file -- where a
+    # `git show` per session commit and a `git log` per file cost 1.6s on
+    # the landing page. A commit or file older than the walk falls back to
+    # its own lookup.
+    touched_by: dict[str, list[str]] = {}
+    walk = _git(vault, "log", "-n", "400", "--format=%x1e%H", "--name-only") or ""
+    for block in walk.split("\x1e"):
+        lines = [l for l in block.splitlines() if l.strip()]
+        if lines:
+            touched_by[lines[0].strip()] = lines[1:]
+    tracked = set((_git(vault, "ls-files") or "").splitlines())
+    files: dict[str, None] = {}
+    if paths:
+        for f in (_git(vault, "ls-files", "--", *paths) or "").splitlines():
+            if f:
+                files[f] = None
+    shared = lambda f: f == "log.md" or f.startswith("modes/")  # noqa: E731
+    for c in commits:
+        if c.get("via") == "session":
+            names = touched_by.get(c["full"])
+            if names is None:
+                names = (_git(vault, "show", "--name-only", "--format=", c["full"]) or "").splitlines()
+            for f in names:
+                if f and f in tracked and shared(f):
+                    files.setdefault(f, None)
+    for f in dirty:
+        files.setdefault(f, None)
+    by_full = {c["full"]: c for c in commits}
+    keep = ("sha", "full", "subject", "body", "at", "pushed", "mode", "by", "via")
+    last_sha: dict[str, str] = {}
+    for sha, names in touched_by.items():
+        for f in names:
+            if f in files and f not in last_sha:
+                last_sha[f] = sha
+    fetched: dict[str, dict] = {}
+    rows = []
+    for f in files:
+        sha = last_sha.get(f)
+        if sha is None:
+            last = _commits(vault, 1, [f], unpushed)
+            c = last[0] if last else None
+        elif sha in by_full:
+            c = by_full[sha]
+        else:
+            if sha not in fetched:
+                one = _commits(vault, 1, None, unpushed, rev=sha)
+                fetched[sha] = one[0] if one else None
+            c = fetched[sha]
+        if c is not None:
+            if c["full"] not in by_full and "mode" not in c:
+                _mark_commit_modes(vault, [c])
+            c = {k: c.get(k) for k in keep}
+        rows.append({"path": f, "dirty": f in dirty, "commit": c})
+    rows.sort(key=lambda r: -(r["commit"]["at"] if r["commit"] else 2**62))
+    return rows
+
+
+def _record_trails(project_newest_at: int | None, commits: list[dict]) -> dict | None:
+    """How far the record trails the code, in seconds: the newest project
+    commit against the newest record commit. Positive means the code moved
+    after the record last did -- the one fact no commit list shows, and the
+    gap the 2026-09-11 lesson found when the record fell a hundred commits
+    behind with nothing flagging it. None when either side has no commit.
+    """
+    if project_newest_at is None or not commits:
+        return None
+    record_at = commits[0]["at"]
+    return {"project_at": project_newest_at, "record_at": record_at, "behind": project_newest_at - record_at}
+
+
+# full sha -> (looked up at, session row or None). See _mark_commit_modes.
+_AUTHOR_CACHE: dict[str, tuple[float, dict | None]] = {}
 
 
 def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
@@ -575,8 +681,21 @@ def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
     store = ConversationStore()
     try:
         unresolved = []
+        now = time.time()
         for c in commits:
-            row = store.session_for_commit(c["subject"])
+            # A commit's author never changes once a transcript claims it,
+            # and the lookup is a LIKE over every tool call ever indexed --
+            # 25ms a commit, a hundred commits a view, on the landing page,
+            # every poll. Hits are kept for the process's life; a miss is
+            # retried after a minute, since the transcript that made the
+            # commit may simply not be indexed yet.
+            hit = _AUTHOR_CACHE.get(c["full"])
+            if hit is not None and (hit[1] is not None or now - hit[0] < 60):
+                row = hit[1]
+            else:
+                found = store.session_for_commit(c["subject"])
+                row = dict(found) if found is not None else None
+                _AUTHOR_CACHE[c["full"]] = (now, row)
             if row is None:
                 unresolved.append(c)
                 continue
@@ -993,8 +1112,10 @@ def mode_dirs() -> dict:
     is the session's to establish -- a continuation names one, a new build
     has none yet and Setup renames its scratch directory -- so defaulting
     to the last repo used pre-decided that for it. The projects directory
-    is `PROJECTS_DIR` when set, `~/Developer` when that exists, else the
-    parent of the last project used, else home.
+    is `PROJECTS_DIR` when set, `~/Developer/projects` when that exists
+    (the 2026-08-29 layout: projects in `projects/`, archived ones under
+    `projects/archive/`, Noctis itself at the root as the system), else
+    `~/Developer`, else the parent of the last project used, else home.
     """
     from orchestrator.store import ConversationStore
 
@@ -1007,6 +1128,8 @@ def mode_dirs() -> dict:
 
     home = Path.home()
     projects = os.environ.get("PROJECTS_DIR")
+    if not projects and (home / "Developer" / "projects").is_dir():
+        projects = str(home / "Developer" / "projects")
     if not projects and (home / "Developer").is_dir():
         projects = str(home / "Developer")
     if not projects:

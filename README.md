@@ -8,7 +8,7 @@
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />
   <img alt="status" src="https://img.shields.io/badge/v2-daily%20driver-orange.svg" />
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS-black.svg" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-325%20%2B%2075-brightgreen.svg" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-303%20%2B%2076-brightgreen.svg" />
 </p>
 
 ---
@@ -64,7 +64,7 @@ The repositories the open terminals are in, one group per repository, the showin
 
 **The commit log is the memory.** Per repository: branch, ahead/behind, uncommitted files, and the last twenty commits — click one for its body, click again to close it. A commit's body is the record of where that piece of work was left (every session's commits end with *where this leaves things* and *what comes next*), so opening a project is reading where you stopped; there is no separate brief. A red dot is "not on GitHub", a green one "on GitHub", and each commit wears the sprite of **whose work it was** — by evidence: the session whose transcript ran the commit, whatever tab happened to be open; a session filed from inside a dev job's project is Faber's. GitHub's half — open pull requests with a one-word check state, open issues — loads after the local half so the view never waits on the network.
 
-For a dev job's project, a **Record** fold shows the other half of the same work: the vault's commits made from inside this project (the log entry, the lesson, the job context a build session writes as it goes) together with any touching its notes folder — with the same figures and the same push button as the project, pointed at the vault.
+For a dev job's project, a **Record** fold shows the other half of the same work, by file: every file of the project's vault record — the notes folder (`wiki/<Project>/`), the job context, and the shared files a session inside this project last touched (the log entry, the lesson) — each with the commit that last wrote it, a never-committed file first, and one sentence saying how far the record trails the code. The same figures and the same push button as the project, pointed at the vault.
 
 **The push is a button, and it is yours.** A session never pushes (`git push` is denied to hosted sessions; the prompt sends every other one here). The button runs `git push` as your own git identity, reads every outgoing commit first and refuses if any carries an attribution trailer or — for commits dated after 2026-09-17 — has no body, and asks separately before a force push when the histories disagree.
 

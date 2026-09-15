@@ -9,6 +9,27 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The record by file, and the vault by folder (2026-09-15, night)
+
+- **The Record fold reads by file, not by commit.** One row per record file
+  — the notes folder, the job context, and the shared files a session inside
+  the project last touched — with the commit that last wrote it, a
+  never-committed file first, a click opening the commit's body, and one
+  sentence above saying how far the record trails the code (newest project
+  commit against newest record commit; under an hour is current). The
+  second commit list under the project was the vault module's rows twice.
+  `_record_files` and `_record_trails` in `routers/panels.py`; `files` and
+  `trails` on the `notes` payload.
+- **Faber starts in `~/Developer/projects`** when it exists (`PROJECTS_DIR`
+  still wins), matching the 2026-08-29 layout the fallback had missed.
+- **Vault side, same night** (`second-brain` `e5b81bb`): two dev jobs pointed
+  at directories that had moved and carried no `notes_path`, so their
+  Record folds had nothing to show — fixed; three flat project pages moved
+  into folders; four maintenance proposals staged (the folder-per-project
+  rule replacing "flat until search is slow", whose trigger cannot fire
+  under BM25 retrieval); the precedence model corrected in all four of its
+  asserted-in files; a lint run after two months.
+
 ### The commit log is the memory (2026-09-15, evening)
 
 - **Repo is the landing view; the Inbox tab is gone.** A commit's body is

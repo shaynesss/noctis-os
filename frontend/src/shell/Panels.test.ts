@@ -2,7 +2,7 @@
  * counts, held to the string. (The digest these came from is gone; the
  * line lives on in Settings' Maintenance section.) */
 import { describe, expect, it } from 'vitest'
-import { nightshiftLine, reflow, sinceLabel } from './Panels'
+import { nightshiftLine, reflow, sinceLabel, trailsLine } from './Panels'
 
 describe('nightshiftLine', () => {
   const at = new Date(2026, 8, 15, 3, 0).toISOString()
@@ -45,5 +45,19 @@ describe('reflow', () => {
   })
   it('returns nothing for an empty body', () => {
     expect(reflow('  \n')).toEqual([])
+  })
+})
+
+describe('trailsLine', () => {
+  it('says the record is current when the vault was written after the code, or within the hour', () => {
+    expect(trailsLine({ project_at: 1000, record_at: 2000, behind: -1000 })).toMatch(/current/)
+    expect(trailsLine({ project_at: 5000, record_at: 2000, behind: 3000 })).toMatch(/current/)
+  })
+  it('says how far the record trails the code in hours, then days', () => {
+    expect(trailsLine({ project_at: 0, record_at: 0, behind: 5 * 3600 })).toBe('The record is 5h behind the code — the newest project commit has no vault entry after it.')
+    expect(trailsLine({ project_at: 0, record_at: 0, behind: 72 * 3600 })).toMatch(/3d behind/)
+  })
+  it('says so when there is no record at all', () => {
+    expect(trailsLine(null)).toMatch(/No record commits yet/)
   })
 })

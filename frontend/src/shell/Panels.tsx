@@ -77,9 +77,15 @@ export interface RepoInfo {
   /** The open terminals' directories that resolve to this repository. */
   cwds: string[]
   /** For a dev job's project: the vault side -- the job's notes folder and
-   *  job folder, read as their own repository state. */
-  notes?: (RepoInfo & { paths: string[] }) | null
+   *  job folder, read as their own repository state. `files` is the record
+   *  by file (2026-09-15): each with the commit that last touched it, or
+   *  none for a file never committed; `trails` is how far the newest
+   *  record commit sits behind the newest project commit, in seconds. */
+  notes?: (RepoInfo & { paths: string[]; files: RecordFile[]; trails: RecordTrails | null }) | null
 }
+
+export interface RecordFile { path: string; dirty: boolean; commit: RepoInfo['commits'][number] | null }
+export interface RecordTrails { project_at: number; record_at: number; behind: number }
 
 export interface GithubInfo {
   slug: string
@@ -644,7 +650,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
       </Fold>
 
       {rec ? (
-        <Fold title="Record" meta={`${rec.name} · ${rec.paths[0]} · ${recLocal ? `${recLocal} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}`}`}
+        <Fold title="Record" meta={`${rec.name} · ${rec.paths[0]} · ${plural(rec.files.length, 'file')}${recLocal ? ` · ${recLocal} not on GitHub` : ''}`}
               open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}>
           {/* The same figures and the same button the project has, pointed
               at the vault (2026-09-15): the record is the other half of the
@@ -667,10 +673,12 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
             </span>
             <PushButton r={rec} onPushed={onChanged} />
           </div>
-          {rec.dirty.map((f) => (
-            <div key={f} className="border-t border-line px-4 py-[6px] font-mono text-[11.5px] text-ink-dim">{f}</div>
-          ))}
-          <CommitList commits={rec.commits} paths={rec.paths} />
+          {/* By file, not by commit (2026-09-15): the vault's own module
+              lists the commits; this fold says whether the writing about
+              the project is current -- one row per record file, and how
+              far the record trails the code. */}
+          <div className="border-t border-line px-4 py-[8px] text-[12px] leading-[1.5] text-ink-dim">{trailsLine(rec.trails)}</div>
+          <FileList files={rec.files} />
         </Fold>
       ) : (
         <Fold title="Record" meta="not a job's project" open={false} onToggle={() => undefined} empty />
@@ -742,6 +750,64 @@ export function GithubCard({ gh, reason, pending = false }: { gh: GithubInfo | n
 
 /** What to do next, from the numbers -- the sentence a person new to git
  *  needs and a person used to it can skim past. */
+/** How far the record trails the code, as a sentence. Positive `behind` is
+ * the newest project commit sitting after the newest record commit; the
+ * record is current when the vault was written to last. Under an hour is
+ * "current" too -- a session commits code and then its log entry, and the
+ * minutes between are not a record falling behind. */
+export function trailsLine(t: RecordTrails | null): string {
+  if (!t) return 'No record commits yet — nothing in the vault says where this project stands.'
+  if (t.behind < 3600) return 'The record is current: the vault was written to after the newest code commit.'
+  const h = Math.floor(t.behind / 3600)
+  const span = h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`
+  return `The record is ${span} behind the code — the newest project commit has no vault entry after it.`
+}
+
+/** One row per record file: the dot and sprite of the commit that last
+ * touched it, the path, that commit's subject, and when. A click opens the
+ * commit's body, another closes it. A file never committed says so and
+ * comes first: it is the one being worked on now. */
+function FileList({ files }: { files: RecordFile[] }) {
+  const [open, setOpen] = useState<Set<string>>(() => new Set())
+  if (files.length === 0) {
+    return <div className="border-t border-line px-4 py-[9px] text-[12px] text-ink-faint">no record files yet — Setup creates the notes folder</div>
+  }
+  const toggle = (p: string) => setOpen((o) => { const n = new Set(o); if (n.has(p)) n.delete(p); else n.add(p); return n })
+  return (
+    <div className="max-h-[420px] overflow-y-auto">
+      {files.map((f) => {
+        const c = f.commit
+        const shown = open.has(f.path)
+        return (
+          <div key={f.path} className="border-t border-line">
+            <button type="button" onClick={() => c && toggle(f.path)} disabled={!c}
+                    className="flex w-full items-baseline gap-[10px] px-4 py-[7px] text-left font-mono text-[11.5px] enabled:hover:bg-elevated/40">
+              <span className="w-[8px] shrink-0 text-center" title={!c ? 'never committed' : c.pushed ? 'on GitHub' : 'not on GitHub yet'}
+                    style={{ color: !c ? 'var(--color-ink-faint)' : c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>{c ? '●' : '○'}</span>
+              <span className="grid w-[14px] shrink-0 place-items-center self-center">
+                {c?.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
+              </span>
+              <span className="min-w-0 shrink-0 text-ink">{f.path}</span>
+              <span className="min-w-0 flex-1 truncate text-ink-faint">{c ? c.subject : 'never committed'}</span>
+              {f.dirty && <span className="shrink-0 text-[10px] text-ink-faint" title="changed on disk and not committed">uncommitted</span>}
+              {c?.via === 'session' && <span className="shrink-0 text-[10px] text-ink-faint" title="a shared file; here because a session inside this project last touched it">from here</span>}
+              <span className="shrink-0 text-ink-faint">{c ? ago(c.at) : ''}</span>
+            </button>
+            {shown && c && (
+              <div className="px-4 pb-[10px] pl-[52px] font-mono text-[11.5px] leading-[1.6] text-ink-dim">
+                <div className="mb-[6px] text-ink-faint">{c.sha} · {c.subject}</div>
+                {c.body
+                  ? reflow(c.body).map((p, i) => <p key={i} className={`m-0 whitespace-pre-wrap break-words${i ? ' mt-[9px]' : ''}`}>{p}</p>)
+                  : <span className="text-ink-faint">no body — a subject alone; the record starts with the next commit</span>}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function nextStep(r: RepoInfo): string {
   if (!r.upstream) return 'This branch has no upstream. Publish puts it on origin.'
   const parts: string[] = []

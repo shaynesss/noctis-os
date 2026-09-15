@@ -369,3 +369,53 @@ def test_a_transcripts_mode_comes_from_its_directory_when_noctis_did_not_launch_
     assert jsonl.mode_for_cwd(str(project / "backend")) == "faber", "a subdirectory of the project is the project"
     assert jsonl.mode_for_cwd(str(tmp_path / "elsewhere")) == "general"
     assert jsonl.mode_for_cwd(None) == "general"
+
+
+def test_the_record_reads_by_file_and_says_how_far_it_trails_the_code(tmp_path, monkeypatch, client, auth_headers):
+    """The vault's own module already lists its commits; a second list under
+    the project was the same rows twice. The Record answers a question the
+    commit list cannot: is the writing about this project current? One row
+    per record file with the commit that last touched it -- a file a session
+    commit touched counts even outside the notes paths, an uncommitted file
+    counts with no commit -- and the gap between the newest project commit
+    and the newest record commit."""
+    import time
+    from orchestrator.store import ConversationStore
+    project = _repo(tmp_path, "proj")
+    vault = _repo(tmp_path, "vault")
+    (vault / "wiki" / "Proj").mkdir(parents=True)
+    (vault / "wiki" / "Proj" / "SPEC.md").write_text("spec"); (vault / "wiki" / "Proj" / "Overview.md").write_text("overview")
+    (vault / "log.md").write_text("log")
+    subprocess.run(["git", "add", "-A"], cwd=vault, check=True); _commit(vault, "spec and overview written")
+    (vault / "log.md").write_text("log 2"); subprocess.run(["git", "add", "-A"], cwd=vault, check=True)
+    _commit(vault, "Log: the build session's own entry")
+    (vault / "wiki" / "Proj" / "BRIEF.md").write_text("not committed yet")
+    # The project's newest commit comes after every record commit.
+    time.sleep(1.1)
+    _commit(project, "code moved on after the record")
+    store = ConversationStore(tmp_path / "h.db")
+    _session_with_commit(store, "general", str(project / "backend"), "Log: the build session's own entry")
+    store.close()
+    original_init = ConversationStore.__init__
+    monkeypatch.setattr(ConversationStore, "__init__", lambda self, path=None: original_init(self, tmp_path / "h.db"))
+    monkeypatch.setattr(ConversationStore, "sessions_in", lambda self, r: [])
+    monkeypatch.setattr(ConversationStore, "sessions_all", lambda self: [])
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    monkeypatch.setattr(panels.vault_io, "get_vault_path", lambda: vault)
+    monkeypatch.setattr("jobs.find_job_for_cwd", lambda mode, cwd: "proj" if Path(str(cwd)).resolve() == project.resolve() else None)
+    monkeypatch.setattr("jobs.job_notes_paths", lambda mode, slug: ["wiki/Proj"])
+    r = _one(client, auth_headers, project)
+    n = r["notes"]
+    rows = {f["path"]: f for f in n["files"]}
+    assert set(rows) == {"wiki/Proj/SPEC.md", "wiki/Proj/Overview.md", "wiki/Proj/BRIEF.md", "log.md"}, rows.keys()
+    assert rows["log.md"]["commit"]["subject"] == "Log: the build session's own entry" and rows["log.md"]["commit"]["via"] == "session", \
+        "a file the build session touched is the record even outside the notes paths"
+    assert rows["log.md"]["commit"]["mode"] == "faber"
+    assert rows["wiki/Proj/SPEC.md"]["commit"]["subject"] == "spec and overview written"
+    assert rows["wiki/Proj/BRIEF.md"]["commit"] is None and rows["wiki/Proj/BRIEF.md"]["dirty"] is True, "never committed, and says so"
+    assert [f["path"] for f in n["files"]][0] == "wiki/Proj/BRIEF.md", "the file being worked on now comes first"
+    t = n["trails"]
+    assert t["behind"] >= 1 and t["project_at"] == r["commits"][0]["at"] and t["record_at"] == n["commits"][0]["at"], t
+    # The vault as its own repository carries no record of its own.
+    assert _one(client, auth_headers, vault)["notes"] is None

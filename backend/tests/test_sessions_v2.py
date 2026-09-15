@@ -694,7 +694,7 @@ def test_vault_modes_start_at_the_vault_root_not_their_own_folder(client, monkey
         assert not dirs[mode].endswith(("learn", "research", "maintenance"))
 
 
-def test_faber_starts_in_the_projects_directory_and_general_at_the_vault(client, monkeypatch):
+def test_faber_starts_in_the_projects_directory_and_general_at_the_vault(client, monkeypatch, tmp_path):
     """Which project a build session is for is the session's to establish --
     a continuation names one, a new build has none yet -- so Faber starts
     one level up, in the projects directory, not in whichever repo was used
@@ -710,9 +710,15 @@ def test_faber_starts_in_the_projects_directory_and_general_at_the_vault(client,
     assert dirs["faber"] == "/repo"
     assert dirs["general"] == "/vault"
 
-    # Without a declared projects directory (and no ~/Developer), the parent
-    # of the last project used is the best available answer.
+    # Without a declared projects directory, ~/Developer/projects wins over
+    # ~/Developer when it exists -- the 2026-08-29 layout.
     monkeypatch.delenv("PROJECTS_DIR")
+    home = tmp_path / "home"; (home / "Developer" / "projects").mkdir(parents=True)
+    monkeypatch.setattr(panels.Path, "home", classmethod(lambda cls: home))
+    assert client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]["faber"] == str(home / "Developer" / "projects")
+
+    # And with neither (no ~/Developer at all), the parent of the last
+    # project used is the best available answer.
     monkeypatch.setattr(panels.Path, "home", classmethod(lambda cls: Path("/nowhere")))
     dirs = client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]
     assert dirs["faber"] == "/repo"
