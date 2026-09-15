@@ -121,7 +121,7 @@ def _isolated_history_db(tmp_path_factory, monkeypatch):
     from routers import search as search_mod
     from routers import sessions_v2 as sv2
 
-    # For the routers that construct a store per call (panels, digest).
+    # For the routers that construct a store per call (panels).
     monkeypatch.setattr(store_mod, "DATA_DIR", data / "data")
     # And for the two that built theirs at import, against the live file.
     monkeypatch.setattr(sv2, "_store", store_mod.ConversationStore(data / "history.db"))

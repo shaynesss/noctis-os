@@ -254,3 +254,118 @@ def test_a_detached_head_is_not_a_branch_called_head(tmp_path, monkeypatch, clie
     monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
     monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
     assert _one(client, auth_headers, root)["branch"] is None
+
+
+# ------------------------------------------------- attribution by evidence
+
+def _session_with_commit(store, mode: str, cwd: str, subject: str) -> int:
+    """A session whose transcript ran `git commit -m <subject>`: what the
+    indexer files for a tool call, meta carrying the arguments."""
+    sid = store.open_session(mode, cwd=cwd)
+    store.db.execute("INSERT INTO messages (session_id, role, content, meta, created_at) VALUES (?,?,?,?,?)",
+                     (sid, "tool", "Bash", '{"id": "t1", "args": {"command": "git commit -q -m \\"' + subject + '\\""}}',
+                      "2026-09-15T10:00:00+00:00"))
+    store.db.commit()
+    return sid
+
+
+def test_a_commit_is_credited_to_the_session_whose_transcript_made_it(tmp_path, monkeypatch, client, auth_headers):
+    """Evidence beats proximity. A Noctua tab was live in the vault all
+    afternoon while a VS Code session in the project made thirty commits
+    to it; every one was marked Noctua. The transcript that ran the commit
+    is its author -- and a General-filed session in a dev job's project is
+    Faber's."""
+    from datetime import datetime, timedelta, timezone
+    from orchestrator.store import ConversationStore
+    root = _repo(tmp_path)
+    project = tmp_path / "noctis-os"; project.mkdir()
+    _commit(root, "Log: something long enough to look up")
+    store = ConversationStore(tmp_path / "h.db")
+    _session_with_commit(store, "general", str(project / "backend"), "Log: something long enough to look up")
+    store.close()
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    original_init = ConversationStore.__init__
+    monkeypatch.setattr(ConversationStore, "__init__", lambda self, path=None: original_init(self, tmp_path / "h.db"))
+    monkeypatch.setattr("jobs.find_job_for_cwd", lambda mode, cwd: "noctis-os" if Path(str(cwd)).resolve() == project.resolve() else None)
+    now = datetime.now(timezone.utc)
+    iso = lambda d: d.isoformat().replace("+00:00", "Z")  # noqa: E731
+    # A Noctua tab live in this very directory the whole time -- the old
+    # rule's answer. It must lose to the transcript.
+    monkeypatch.setattr(ConversationStore, "sessions_in", lambda self, r: [
+        {"mode": "noctua", "cwd": str(root), "started_at": iso(now - timedelta(hours=2)), "ended_at": None}])
+    monkeypatch.setattr(ConversationStore, "sessions_all", lambda self: [])
+    commits = _one(client, auth_headers, root)["commits"]
+    by = {c["subject"]: c for c in commits}
+    assert by["Log: something long enough to look up"]["mode"] == "faber", "the VS Code session, in the project, is Faber's"
+    assert by["Log: something long enough to look up"]["by"]["cwd"] == str(project / "backend")
+    assert by["first"]["mode"] == "noctua", "'first' is too short to look up; the clock still decides that one"
+
+
+def test_the_record_claims_vault_commits_made_from_inside_the_project(tmp_path, monkeypatch, client, auth_headers):
+    """The path rule alone hid the log entry and the lesson a build session
+    writes as it goes -- shared files, not under the notes paths. A vault
+    commit whose author session was inside the project is the project's
+    record too."""
+    from orchestrator.store import ConversationStore
+    project = _repo(tmp_path, "proj")
+    vault = _repo(tmp_path, "vault")
+    (vault / "wiki" / "Proj").mkdir(parents=True); (vault / "wiki" / "Proj" / "SPEC.md").write_text("spec")
+    (vault / "log.md").write_text("log")
+    subprocess.run(["git", "add", "-A"], cwd=vault, check=True); _commit(vault, "spec written for the project")
+    (vault / "log.md").write_text("log 2"); subprocess.run(["git", "add", "-A"], cwd=vault, check=True)
+    _commit(vault, "Log: the build session's own entry")
+    (vault / "log.md").write_text("log 3"); subprocess.run(["git", "add", "-A"], cwd=vault, check=True)
+    _commit(vault, "Log: written by Noctua elsewhere")
+    store = ConversationStore(tmp_path / "h.db")
+    _session_with_commit(store, "general", str(project / "backend"), "Log: the build session's own entry")
+    _session_with_commit(store, "noctua", str(vault), "Log: written by Noctua elsewhere")
+    store.close()
+    original_init = ConversationStore.__init__
+    monkeypatch.setattr(ConversationStore, "__init__", lambda self, path=None: original_init(self, tmp_path / "h.db"))
+    monkeypatch.setattr(ConversationStore, "sessions_in", lambda self, r: [])
+    monkeypatch.setattr(ConversationStore, "sessions_all", lambda self: [])
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    monkeypatch.setattr(panels.vault_io, "get_vault_path", lambda: vault)
+    monkeypatch.setattr("jobs.find_job_for_cwd", lambda mode, cwd: "proj" if Path(str(cwd)).resolve() == project.resolve() else None)
+    monkeypatch.setattr("jobs.job_notes_paths", lambda mode, slug: ["wiki/Proj"])
+    n = _one(client, auth_headers, project)["notes"]
+    got = [(c["subject"], c["via"], c["mode"]) for c in n["commits"]]
+    assert got == [
+        ("Log: the build session's own entry", "session", "faber"),   # from inside the project: the record
+        ("spec written for the project", "path", None),               # touches the notes: the record, by hand
+    ], got
+    assert all(c["subject"] != "Log: written by Noctua elsewhere" for c in n["commits"]), "Noctua's vault work is not this project's"
+
+
+def test_the_push_refuses_a_bodiless_commit_made_after_the_rule(tmp_path, monkeypatch, client, auth_headers):
+    """A commit is the record. One with no body, dated after the rule, stops
+    the push; one from before the rule does not -- the rule cannot reach
+    back."""
+    import os
+    root = _with_origin(tmp_path)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    _commit(root, "old style, no body")                                  # dated now, before the rule
+    r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+    assert r.status_code == 200, r.json()
+    env = {**os.environ, "GIT_AUTHOR_DATE": "2026-09-20T10:00:00+00:00", "GIT_COMMITTER_DATE": "2026-09-20T10:00:00+00:00"}
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "new, and bare"], cwd=root, check=True, env=env)
+    r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+    assert r.status_code == 409 and "no body" in r.json()["detail"] and "nothing was pushed" in r.json()["detail"]
+    assert subprocess.run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() == "1"
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend",
+                    "-m", "new, with its record\n\nLeaves the widget half wired.\nNext: wire the other half."], cwd=root, check=True, env=env)
+    assert client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers).status_code == 200
+    body = _one(client, auth_headers, root)["commits"][0]
+    assert body["body"].startswith("Leaves the widget") and body["body"].endswith("Next: wire the other half.")
+
+
+def test_a_transcripts_mode_comes_from_its_directory_when_noctis_did_not_launch_it(tmp_path, monkeypatch):
+    from orchestrator import jsonl
+    project = tmp_path / "noctis-os"; (project / "backend").mkdir(parents=True)
+    monkeypatch.setattr("jobs.find_job_for_cwd", lambda mode, cwd: "noctis-os" if Path(str(cwd)).resolve() == project.resolve() else None)
+    monkeypatch.setattr("pathlib.Path.home", classmethod(lambda cls: tmp_path))
+    assert jsonl.mode_for_cwd(str(project / "backend")) == "faber", "a subdirectory of the project is the project"
+    assert jsonl.mode_for_cwd(str(tmp_path / "elsewhere")) == "general"
+    assert jsonl.mode_for_cwd(None) == "general"

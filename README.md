@@ -44,7 +44,7 @@ A mode is passed into a session in its argv — never inherited from a config fi
 
 ## The app, tab by tab
 
-The window is a rail of six tabs beside a terminal area. Each tab is a view over state that already exists — the CLI's own transcripts, the vault, git, GitHub — never a second copy of it.
+The window is a rail of four tabs beside a terminal area, and it opens on **Repo**. Each tab is a view over state that already exists — the CLI's own transcripts, the vault, git, GitHub — never a second copy of it.
 
 ### Terminal
 
@@ -62,21 +62,19 @@ The real interactive `claude`, hosted in a pseudo-terminal and drawn in the app'
 
 The repositories the open terminals are in, one group per repository, the showing terminal's first — two Faber sessions on one project are one group naming both terminals; a session on another project is a second column.
 
-Per repository: branch, ahead/behind, uncommitted files, the last twenty commits with a red dot for "not on GitHub" and a green one for "on GitHub", and each commit wearing the sprite of **whose work it was** — a dev job's project is Faber's, so its commits are; elsewhere the session live at the time. GitHub's half — open pull requests with a one-word check state, open issues — loads after the local half so the view never waits on the network.
+**The commit log is the memory.** Per repository: branch, ahead/behind, uncommitted files, and the last twenty commits — the newest open with its body showing, any other on click. A commit's body is the record of where that piece of work was left (every session's commits end with *where this leaves things* and *what comes next*), so opening a project is reading where you stopped; there is no separate brief. A red dot is "not on GitHub", a green one "on GitHub", and each commit wears the sprite of **whose work it was** — by evidence: the session whose transcript ran the commit, whatever tab happened to be open; a session filed from inside a dev job's project is Faber's. GitHub's half — open pull requests with a one-word check state, open issues — loads after the local half so the view never waits on the network.
 
-**The push is a button, and it is yours.** A session never pushes (`git push` is denied to hosted sessions; the prompt sends every other one here). The button runs `git push` as your own git identity, reads every outgoing commit message first and refuses if any carries an attribution trailer, and asks separately before a force push when the histories disagree.
+For a dev job's project, a **Record** fold shows the other half of the same work: the vault's commits made from inside this project (the log entry, the lesson, the job context a build session writes as it goes) together with any touching its notes folder — with the same figures and the same push button as the project, pointed at the vault.
+
+**The push is a button, and it is yours.** A session never pushes (`git push` is denied to hosted sessions; the prompt sends every other one here). The button runs `git push` as your own git identity, reads every outgoing commit first and refuses if any carries an attribution trailer or — for commits dated after 2026-09-17 — has no body, and asks separately before a force push when the histories disagree.
 
 ### Stats
 
 The engine's rolling **5-hour and 7-day windows** — the real currency on a subscription; no dollar figure is ever shown as spend — lifetime tokens by kind, a year of activity, and the **history of every session on this machine**, indexed from the transcripts the CLI writes itself. Open a past transcript, search it, or resume it into a terminal. `⌘K` searches history across all modes from anywhere.
 
-### Inbox
-
-Everything that arrived while you were away, first in the rail because it is what you open the app to read. At the top, the **digest**: what happened across Noctis since you were last here and what is next — which characters ran sessions and on what, which repositories moved and how many commits are not pushed, what arrived overnight, which job is owed a decision — every line a count turned into a sentence, computed when the tab opens, no model in the loop. "Since you were last here" is the end of your previous sitting, which the app knows from your own presence rather than a clock. Below it, **waiting on you**: Maintenance's proposals and flagged jobs, as packages — the sender's sprite, what the change is, what accepting does, the full rationale, evidence and a red/green diff on demand. **Accepting applies the diff** — all hunks or none — archives the proposal, and commits the vault; rejecting archives it. Maintenance itself never edits a methodology; the person accepting is the edit.
-
 ### Settings
 
-The prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault (saved uncommitted; the Repo tab commits them). Beside them, the **regression suite**: thirteen cases, each a mode, a prompt and a deterministic assertion guarding one rule — the attribution rule, the Confusion Protocol, plan-before-code, mode identity. Run from the card, scoped to what an edit can affect: an overlay runs its mode's cases, `system.md` runs all of them, and the cost in sessions is stated before the click. Each case keeps its last result against the prompt it ran on, so a result the prompt has since moved past shows as stale rather than as a pass; a failing case reruns once before it counts.
+Three things that are true until you change them. **Maintenance:** nightshift's last run — nightly at 03:00, said as one sentence with how many nights in a row have ended the same way — and the proposals it staged, as packages: the sender's sprite, what the change is, what accepting does, the full rationale, evidence and a red/green diff on demand. **Accepting applies the diff** — all hunks or none — archives the proposal, and commits the vault; rejecting archives it. Maintenance itself never edits a methodology; the person accepting is the edit. A job gone stale becomes a proposal here too, which is how loose ends come back round. **Prompts:** the prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault (saved uncommitted; the Repo tab commits them). Beside them, the **regression suite**: thirteen cases, each a mode, a prompt and a deterministic assertion guarding one rule — the attribution rule, the Confusion Protocol, plan-before-code, mode identity. Run from the card, scoped to what an edit can affect: an overlay runs its mode's cases, `system.md` runs all of them, and the cost in sessions is stated before the click. Each case keeps its last result against the prompt it ran on, so a result the prompt has since moved past shows as stale rather than as a pass; a failing case reruns once before it counts.
 
 ## Architecture
 
@@ -167,7 +165,7 @@ for a file-watching reloader, which are alternatives rather than layers.
 
 **Two reachable directories:** the launched project, and `VAULT_PATH`. The engine sandboxes file access to those.
 
-**It writes to your vault** — lessons, job contexts, staged proposals. Keep the vault in git so you can see and revert. Accepting an inbox proposal commits the vault; nothing else does.
+**It writes to your vault** — lessons, job contexts, staged proposals. Keep the vault in git so you can see and revert. Accepting a proposal (Settings → Maintenance) commits the vault; nothing else does.
 
 **And outside it:** `backend/data/` (SQLite) and `backend/runtime/` (action logs), both gitignored.
 

@@ -5,12 +5,12 @@ The runner ran every night from 2026-08-05 and failed every night until
 so: each item's failure was caught, printed to a log nobody opens, and the
 run ended "quiet night, nothing staged", which reads as success. This file
 is the answer. Every run writes one entry -- when, what staged, what failed
-and why -- and the Inbox digest reads the newest, so a failing night is the
-first line of the page you open every morning, and a run of them is a
-count.
+and why -- and Settings' Maintenance section reads the newest, so a failing
+night is a sentence in the app rather than a line in a log, and a run of
+them is a count.
 
-Kept in `backend/data/` beside the history store and the sittings file:
-machine state, gitignored, reload-excluded.
+Kept in `backend/data/` beside the history store: machine state,
+gitignored, reload-excluded.
 """
 from __future__ import annotations
 

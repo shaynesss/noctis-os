@@ -20,8 +20,8 @@ import { del, get, post, type HistoryTranscript, type Stats as StatsPayload, typ
 import { Launcher, type LaunchRequest } from './Launcher'
 import { Palette } from './Palette'
 import {
-  Beam, Digest, Inbox, ListPriceFact, Settings,
-  type BillingPayload, type DigestPayload, type InboxPayload, type RepoPayload, type RepoTerminal, Repo,
+  Beam, ListPriceFact, Settings,
+  type BillingPayload, type InboxPayload, type RepoPayload, type RepoTerminal, Repo,
 } from './Panels'
 import { Reader } from './Reader'
 import { Terminals, newSlot, shortenHome, type Slot } from './Terminals'
@@ -54,7 +54,9 @@ export function ungroupSingles(slots: Slot[]): Slot[] {
 }
 
 export function App() {
-  const [view, setView] = useState('terminal')
+  // The app opens on Repo (2026-09-15): the commit log is where a piece of
+  // work was left, so it is what you open the app to read.
+  const [view, setView] = useState('repo')
 
   /* The arrangement. Seeded from what was open last time, each entry
    * carrying the engine session id its terminal reported, so it comes back
@@ -178,26 +180,6 @@ export function App() {
     const id = setInterval(read, 30_000)
     return () => { alive = false; clearInterval(id) }
   }, [inboxTick])
-
-  /* Presence, for the digest's "since you were last here". A heartbeat on
-   * open and then once a minute while you are actually here -- the window
-   * focused and something typed or clicked in the last two minutes. An app
-   * left open overnight must not count as a night spent reading it, which
-   * a heartbeat gated only on the window being open would say. The backend
-   * turns thirty minutes without one into the end of a sitting. */
-  useEffect(() => {
-    let lastInput = Date.now()
-    const touched = () => { lastInput = Date.now() }
-    for (const ev of ['keydown', 'pointerdown', 'wheel'] as const) window.addEventListener(ev, touched, { passive: true })
-    void post('/v2/digest/here', {})
-    const id = setInterval(() => {
-      if (document.hasFocus() && Date.now() - lastInput < 120_000) void post('/v2/digest/here', {})
-    }, 60_000)
-    return () => {
-      clearInterval(id)
-      for (const ev of ['keydown', 'pointerdown', 'wheel'] as const) window.removeEventListener(ev, touched)
-    }
-  }, [])
 
   /* Strays from before a reload.
    *
@@ -380,10 +362,10 @@ export function App() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <Rail view={view} onView={setView} badges={{ inbox: inboxCount }} />
+        <Rail view={view} onView={setView} badges={{ settings: inboxCount }} />
 
         <div className="flex min-w-0 flex-1 flex-col">
-          {view !== 'terminal' && <Pane view={view} limits={limits} terminals={terminals} onInboxDecided={() => setInboxTick((t) => t + 1)} onView={setView} />}
+          {view !== 'terminal' && <Pane view={view} limits={limits} terminals={terminals} onInboxDecided={() => setInboxTick((t) => t + 1)} />}
           {/* Always mounted, shown only on its rail item: a terminal's
               session dies with its component, so it cannot live inside a
               conditional the way the panels do. */}
@@ -499,15 +481,13 @@ function HistoryView({ transcript, full, onResume, onClose, onOpenDoc }: {
   )
 }
 
-function Pane({ view, limits, terminals, onInboxDecided, onView }: {
+function Pane({ view, limits, terminals, onInboxDecided }: {
   view: string
   limits?: { five_hour: Window; seven_day: Window } | null
   /** The open terminals and where each is: what the Repo view groups. */
   terminals: RepoTerminal[]
-  /** A proposal was just accepted or rejected here; the rail's badge re-reads. */
+  /** A proposal was just accepted or rejected in Settings; the rail's badge re-reads. */
   onInboxDecided?: () => void
-  /** The digest's "push from Repo" is a button to the Repo view. */
-  onView?: (view: string) => void
 }) {
   // Re-read when the set of directories changes, not when a terminal is
   // merely selected -- and after a push from the view itself.
@@ -522,11 +502,7 @@ function Pane({ view, limits, terminals, onInboxDecided, onView }: {
           wide one. */}
       <div className={`mx-auto my-auto w-full px-8 pb-8 pt-7 ${view === 'repo' ? 'max-w-[1240px]' : 'max-w-[840px]'}`}>
         {view === 'repo' && <Fetched<RepoPayload> key={`${cwds}#${repoTick}`} path={`/v2/repos?${cwds}`} what="the repositories" render={(d) => <Repo data={d} terminals={terminals} onChanged={() => setRepoTick((t) => t + 1)} />} />}
-        {/* Two reads, so a slow git pass for the digest never holds up the
-            decisions below it, and an unreachable one says so in its place. */}
-        {view === 'inbox' && <Fetched<DigestPayload> path="/v2/digest" what="the digest" render={(d) => <Digest data={d} onView={onView} />} />}
-        {view === 'inbox' && <Fetched<InboxPayload> path="/v2/inbox" what="the inbox" render={(d) => <Inbox data={d} onDecided={onInboxDecided} />} />}
-        {view === 'settings' && <Settings />}
+        {view === 'settings' && <Settings onDecided={onInboxDecided} />}
       </div>
     </div>
   )

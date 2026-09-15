@@ -492,6 +492,27 @@ class ConversationStore:
             "       COUNT(*) AS turns,"
             "       MIN(created_at) AS since FROM usage").fetchone()
 
+    def session_for_commit(self, subject: str) -> sqlite3.Row | None:
+        """The session whose transcript made a commit: the one whose tool
+        calls contain the commit's subject line. Evidence, where the Repo
+        view used to guess from who was live at the time -- and guessed a
+        Noctua tab into thirty of Faber's vault commits on 2026-09-15.
+
+        Tool calls are filed with their arguments in `meta`, so a `git
+        commit -m` carries its message there; the first session to contain
+        the subject is the author. Subjects shorter than twelve characters
+        are not looked up: "wip" would match everything.
+        """
+        subject = subject.strip()
+        if len(subject) < 12:
+            return None
+        needle = "%" + subject.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        return self.db.execute(
+            "SELECT s.id, s.mode, s.cwd, s.started_at FROM messages m"
+            " JOIN sessions s ON s.id = m.session_id"
+            " WHERE m.role = 'tool' AND m.meta LIKE ? ESCAPE '\\'"
+            " ORDER BY m.id LIMIT 1", (needle,)).fetchone()
+
     def sessions_in(self, root: str) -> list[sqlite3.Row]:
         """Sessions that ran in a repository -- at its root or anywhere
         inside it -- with their mode and when they ran. What the Repo view

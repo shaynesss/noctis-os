@@ -9,6 +9,42 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The commit log is the memory (2026-09-15, evening)
+
+- **Repo is the landing view; the Inbox tab is gone.** A commit's body is
+  the record of where a piece of work was left, so opening a project is
+  reading where you stopped. The newest commit opens expanded under its
+  module, any other on click; a bodiless one says so. The rail is
+  Terminal · Repo · Stats · Settings. The Inbox digest built this morning
+  — and the Brief before it — were summaries of what the commits already
+  said; both are deleted, with the sittings file and the presence
+  heartbeat. What *arrives* moved to Settings' new **Maintenance**
+  section: nightshift's last run as one sentence (`GET /v2/nightshift`),
+  red when broken, and the proposals with accept/reject as before. A job
+  gone stale becomes a proposal there, which closes the loop the digest's
+  "owed a decision" line used to close.
+- **Every commit says where it leaves things.** A rule in
+  `prompts/system.md`'s Git section: a body, whose last paragraph says
+  where this leaves things and what comes next. The push refuses a
+  bodiless commit dated after 2026-09-17 — the rule cannot reach back —
+  alongside the attribution check, and nothing is pushed on a refusal.
+- **Attribution by evidence.** `store.session_for_commit(subject)` finds
+  the session whose transcript ran the commit (tool calls are indexed with
+  their arguments); that session is the author, whatever tab was open.
+  A session Noctis did not launch is filed by its directory — inside a dev
+  job's project, or a subdirectory, it is Faber's — both at indexing and
+  when an already-filed General session is read back. Only unclaimed
+  commits fall to ownership, then to the clock. A Noctua tab open in the
+  vault all afternoon had been credited with thirty of Faber's commits.
+- **Record is the union.** A project's Record fold shows vault commits
+  touching its notes paths *and* vault commits made from inside the
+  project (the log, the lessons, the job context), in git's order, each
+  marked `path` or `session` — and carries the same figures and push
+  block as the project, pointed at the vault.
+- `_git`'s `strip()` was eating a trailing `\x1f` — Python counts the unit
+  separator as whitespace — which lost the newest bodiless commit from
+  every log read; the record parser pads instead.
+
 ### Nightshift on record; the regression suite scoped and run from Settings (2026-09-15)
 
 - **Every nightshift run is recorded**, and the Inbox digest reads it.

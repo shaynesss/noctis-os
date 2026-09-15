@@ -5,13 +5,12 @@ import { CHARACTERS, MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
 /* ------------------------------------------------------------------ rail */
 const RAIL = [
-  // Everything that arrived while you were away: the digest of what
-  // happened, then what is waiting on a decision. First, because it is
-  // what you open the app to read. (It absorbed the Brief tab 2026-09-15.)
-  { id: 'inbox', label: 'Inbox', d: 'M4 13h5l1 3h4l1-3h5M4 13l2-8h12l2 8v6H4z' },
   // The conversation surface: the real CLI, hosted in a pseudo-terminal.
   { id: 'terminal', label: 'Terminal', d: 'M4 4h16v16H4zM7 9l3 3-3 3M13 15h4' },
-  // The repositories the open terminals are in, grouped: local truth, GitHub beside it.
+  // The repositories the open terminals are in, one module each: the
+  // commit log is the memory of where a piece of work was left, and the
+  // app opens here. (The Inbox tab, and the Brief before it, went
+  // 2026-09-15: what arrives is in Settings' Maintenance section.)
   { id: 'repo', label: 'Repo', d: 'M6 3v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9' },
   { id: 'stats', label: 'Stats', d: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
   { id: 'settings', label: 'Settings', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 14H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z' },

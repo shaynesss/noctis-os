@@ -18,24 +18,13 @@ import { ModeMark, Pill, usePill } from './Chrome'
 import { gridColumns } from './Terminals'
 import { openExternal } from './host'
 
-/** What happened since you were last here, as counts. `since` is the end of
- *  the previous sitting, or null on a first look (then the window is the
- *  last day). */
-export interface DigestPayload {
-  date: string
-  since: string | null
-  sessions: { mode: string; count: number; titles: string[] }[]
-  repos: { name: string; branch: string | null; commits: number; ahead: number | null; dirty: number }[]
-  modes: { label: string; job: string | null; days: number | null; more: number }[]
-  owed: { name: string; days: number; mode: string }[]
-  open: number
-  on_hold: number
-  inbox: { waiting: number; flagged: number; arrived: number }
-  /** Nightshift's newest run and how many nights in a row ended the same
-   *  way; null until it has recorded one. `kind` is what happened: staged
-   *  something, quiet, partial failure, or broken (every item failed with
-   *  one error, which `error` names). */
-  nightshift: { ran_at: string; staged: number; failed: number; seen: number; error: string | null; kind: 'staged' | 'quiet' | 'partial' | 'broken'; streak: number } | null
+/** Nightshift's newest run and how many nights in a row ended the same
+ *  way; null until it has recorded one. `kind` is what happened: staged
+ *  something, quiet, partial failure, or broken (every item failed with one
+ *  error, which `error` names). */
+export interface NightshiftSummary {
+  ran_at: string; staged: number; failed: number; seen: number; error: string | null
+  kind: 'staged' | 'quiet' | 'partial' | 'broken'; streak: number
 }
 
 export interface InboxPayload {
@@ -70,9 +59,15 @@ export interface RepoInfo {
   ahead: number | null
   behind: number | null
   dirty: string[]
-  /** `mode` is the session that was live here when the commit was made --
-   *  a guess by time, and null for a commit made by hand. */
-  commits: { sha: string; subject: string; at: number; pushed: boolean; mode?: string | null }[]
+  /** `mode` is the session whose transcript made the commit -- evidence --
+   *  falling back to ownership, then to who was live at the time; null for
+   *  a commit made by hand. `body` is the record: where the work left
+   *  things. `via`, on a Record commit, says whether it is here because it
+   *  touches the notes or because its author was inside the project. */
+  commits: {
+    sha: string; full: string; subject: string; body: string; at: number; pushed: boolean
+    mode?: string | null; by?: { session: number; cwd: string | null } | null; via?: 'path' | 'session'
+  }[]
   remote: string | null
   /** `owner/name` when the remote is on GitHub; the GitHub half is read
    *  separately by slug, so the local half never waits on the network. */
@@ -171,86 +166,18 @@ export function sinceLabel(iso: string | null, now = new Date()): string {
   return `since ${DAYS[t.getDay()]} ${t.getDate()} ${MONTHS[t.getMonth()]} ${hm}`
 }
 
-/** The digest's sentences, composed from counts and nothing else. A pure
- *  function so the wording is tested rather than eyeballed: every line here
- *  is a fact turned into a clause, and the test holds the clause to the fact. */
-export function digestLines(d: DigestPayload): { happened: string[]; next: string[]; standing: string } {
-  const label = (m: string) => MODE_LABEL[m as Mode] ?? m
-  const happened: string[] = []
-  for (const s of d.sessions)
-    happened.push(`${label(s.mode)} ran ${plural(s.count, 'session')}${s.titles.length ? ` — ${s.titles.join(' · ')}` : ''}`)
-  if (!d.sessions.length) happened.push('No sessions ran.')
-
-  const moved = d.repos.filter((r) => r.commits > 0 || (r.ahead ?? 0) > 0 || r.dirty > 0)
-  for (const r of moved) {
-    const parts = [r.commits > 0 ? plural(r.commits, 'commit') : 'nothing new']
-    if ((r.ahead ?? 0) > 0) parts.push(`${r.ahead} not pushed`)
-    if (r.dirty > 0) parts.push(`${plural(r.dirty, 'file')} uncommitted`)
-    happened.push(`${r.name} · ${parts.join(', ')}`)
-  }
-  if (!moved.length) happened.push('No commits.')
-  if (d.inbox.arrived > 0) happened.push(`${plural(d.inbox.arrived, 'proposal')} arrived.`)
-
-  // The one scheduled thing, said plainly whatever it did. A run of the
-  // same outcome is counted: "broken, 3 nights running" is the line that
-  // six weeks of "quiet night" in a log never produced.
-  const n = d.nightshift
-  if (n) {
-    const at = new Date(n.ran_at)
-    const hm = Number.isNaN(at.getTime()) ? '' : ` at ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
-    const run = n.streak > 1 ? ` (${n.streak} nights running)` : ''
-    if (n.kind === 'broken') happened.push(`Nightshift failed${hm} — ${n.error}${run}`)
-    else if (n.kind === 'partial') happened.push(`Nightshift ran${hm} — ${plural(n.staged, 'proposal')} staged, ${n.failed} of ${n.seen} failed`)
-    else if (n.kind === 'staged') happened.push(`Nightshift ran${hm} — ${plural(n.staged, 'proposal')} staged`)
-    else happened.push(`Nightshift ran${hm} — nothing to stage${run}`)
-  } else happened.push('Nightshift has not recorded a run.')
-
-  const next: string[] = []
-  if (n?.kind === 'broken') next.push(`nightshift is broken — ${n.error}`)
-  const toPush = d.repos.filter((r) => (r.ahead ?? 0) > 0).map((r) => r.name)
-  if (toPush.length) next.push(`push ${toPush.join(' and ')} from Repo`)
-  if (d.inbox.waiting > 0) next.push(`${plural(d.inbox.waiting, 'proposal')} waiting below`)
-  if (d.inbox.flagged > 0) next.push(`${plural(d.inbox.flagged, 'flagged job')} below`)
-  for (const j of d.owed) next.push(`${j.name} untouched ${j.days} days — a decision is owed`)
-  if (!next.length) next.push('nothing')
-
-  const standing = d.modes
-    .map((m) => (m.job
-      ? `${m.label} · ${m.job}${m.more ? ` +${m.more}` : ''}, ${m.days === 0 ? 'touched today' : `${m.days} days`}`
-      : `${m.label} — nothing open`))
-    .concat([`${d.open} open`, `${d.on_hold} on hold`])
-    .join('  ·  ')
-  return { happened, next, standing }
-}
-
-/** What happened across Noctis since you were last here, and what is next.
- *  Sits at the top of the Inbox: it is the first thing that arrived. */
-export function Digest({ data, onView }: { data: DigestPayload; onView?: (view: string) => void }) {
-  const { happened, next, standing } = digestLines(data)
-  const pushable = data.repos.some((r) => (r.ahead ?? 0) > 0)
-  return (
-    <>
-      <Heading>{sinceLabel(data.since)} · {data.date}</Heading>
-      <Card>
-        <div className="px-4 pb-[12px] pt-[13px] text-[13px] leading-[1.75] text-ink">
-          {happened.map((l) => <div key={l}>{l}</div>)}
-        </div>
-        <div className="flex items-baseline gap-[12px] border-t border-line px-4 py-[11px] text-[13px] leading-[1.75]">
-          <span className="shrink-0 font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">next</span>
-          <div className="min-w-0 flex-1 text-ink-dim">
-            {next.map((l) => <div key={l}>{l}</div>)}
-          </div>
-          {pushable && onView && (
-            <button type="button" onClick={() => onView('repo')}
-                    className="shrink-0 rounded-control border border-line px-[10px] py-[4px] font-mono text-[11px] text-ink hover:bg-elevated">
-              Repo
-            </button>
-          )}
-        </div>
-        <div className="border-t border-line px-4 py-[8px] font-mono text-[10.5px] text-ink-faint">{standing}</div>
-      </Card>
-    </>
-  )
+/** Nightshift's newest run as one sentence, whatever it did. A run of the
+ *  same outcome is counted: "broken, 3 nights running" is the line that six
+ *  weeks of "quiet night" in a log never produced. Tested to the string. */
+export function nightshiftLine(n: NightshiftSummary | null): string {
+  if (!n) return 'Nightshift has not recorded a run.'
+  const at = new Date(n.ran_at)
+  const hm = Number.isNaN(at.getTime()) ? '' : ` at ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+  const run = n.streak > 1 ? ` (${n.streak} nights running)` : ''
+  if (n.kind === 'broken') return `Nightshift failed${hm} — ${n.error}${run}`
+  if (n.kind === 'partial') return `Nightshift ran${hm} — ${plural(n.staged, 'proposal')} staged, ${n.failed} of ${n.seen} failed`
+  if (n.kind === 'staged') return `Nightshift ran${hm} — ${plural(n.staged, 'proposal')} staged`
+  return `Nightshift ran${hm} — nothing to stage${run}`
 }
 
 /* A unified diff the conventional way: removed lines red, added lines
@@ -305,10 +232,9 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
   if (items.length === 0) {
     return (
       <>
-        <Heading className="mt-7">Waiting on you</Heading>
         <Card>
           <div className="px-4 py-[13px] text-[12.5px] text-ink-dim">
-            Nothing waiting. Proposals and flagged jobs appear here.
+            No proposals waiting. What nightshift stages, and jobs it flags, appear here.
           </div>
         </Card>
       </>
@@ -331,10 +257,9 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
 
   return (
     <>
-      <Heading className="mt-7">
-        Waiting on you · {data.counts.proposals} proposal{data.counts.proposals === 1 ? '' : 's'} ·{' '}
-        {data.counts.flagged} flagged
-      </Heading>
+      <div className="mb-[8px] font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">
+        {data.counts.proposals} proposal{data.counts.proposals === 1 ? '' : 's'} · {data.counts.flagged} flagged
+      </div>
       {/* One card per item rather than rows in one card: an item is a
           decision with its own argument under it, and a stack of those reads
           as a queue of packages, which is what it is. */}
@@ -590,27 +515,48 @@ function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
 }
 
 /* Ten commits fit; the other ten scroll. A subject wraps rather than
- * truncates: a line you cannot finish reading is a line you did not read. */
+ * truncates: a line you cannot finish reading is a line you did not read.
+ *
+ * The body is the record (2026-09-15): the newest commit opens with its
+ * body showing, because its last paragraph is where the work was left --
+ * the two lines you actually want on opening a project. Any other commit
+ * opens on click. A commit with no body says so, quietly. */
 function CommitList({ commits, paths }: { commits: RepoInfo['commits']; paths?: string[] }) {
+  const [open, setOpen] = useState<Set<string>>(() => new Set(commits[0] ? [commits[0].full] : []))
   if (commits.length === 0) {
     return <div className="border-t border-line px-4 py-[9px] text-[12px] text-ink-faint">
       {paths ? `no commits touch ${paths.join(' or ')} yet` : 'no commits yet'}
     </div>
   }
+  const toggle = (id: string) => setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n })
   return (
-    <div className="max-h-[352px] overflow-y-auto">
-      {commits.map((c) => (
-        <div key={c.sha} className="flex items-baseline gap-[10px] border-t border-line px-4 py-[7px] font-mono text-[11.5px]">
-          <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
-                style={{ color: c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>●</span>
-          <span className="grid w-[14px] shrink-0 place-items-center self-center">
-            {c.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
-          </span>
-          <span className="shrink-0 text-ink-faint">{c.sha}</span>
-          <span className="min-w-0 flex-1 whitespace-normal break-words leading-[1.45] text-ink">{c.subject}</span>
-          <span className="shrink-0 text-ink-faint">{ago(c.at)}</span>
-        </div>
-      ))}
+    <div className="max-h-[420px] overflow-y-auto">
+      {commits.map((c) => {
+        const shown = open.has(c.full)
+        return (
+          <div key={c.full} className="border-t border-line">
+            <button type="button" onClick={() => toggle(c.full)}
+                    className="flex w-full items-baseline gap-[10px] px-4 py-[7px] text-left font-mono text-[11.5px] hover:bg-elevated/40">
+              <span className="w-[8px] shrink-0 text-center" title={c.pushed ? 'on GitHub' : 'not on GitHub yet'}
+                    style={{ color: c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>●</span>
+              <span className="grid w-[14px] shrink-0 place-items-center self-center">
+                {c.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
+              </span>
+              <span className="shrink-0 text-ink-faint">{c.sha}</span>
+              <span className="min-w-0 flex-1 whitespace-normal break-words leading-[1.45] text-ink">{c.subject}</span>
+              {c.via === 'session' && <span className="shrink-0 text-[10px] text-ink-faint" title="here because its author session was inside this project">from here</span>}
+              <span className="shrink-0 text-ink-faint">{ago(c.at)}</span>
+            </button>
+            {shown && (
+              <div className="px-4 pb-[10px] pl-[52px] font-mono text-[11.5px] leading-[1.6] text-ink-dim">
+                {c.body
+                  ? <pre className="m-0 whitespace-pre-wrap break-words font-mono">{c.body}</pre>
+                  : <span className="text-ink-faint">no body — a subject alone; the record starts with the next commit</span>}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -686,10 +632,24 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
       {rec ? (
         <Fold title="Record" meta={`${rec.name} · ${rec.paths[0]} · ${recLocal ? `${recLocal} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}`}`}
               open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}>
-          <div className="flex items-center gap-[12px] border-t border-line px-4 py-[8px] text-[12px] text-ink-dim">
+          {/* The same figures and the same button the project has, pointed
+              at the vault (2026-09-15): the record is the other half of the
+              work, and it stands or pushes on the same terms. The push is
+              the whole vault's -- a repository pushes as one. */}
+          <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[9px] font-mono text-[11.5px]">
+            {rec.upstream ? (
+              <>
+                <span className={rec.ahead ? 'text-ink' : 'text-ink-faint'}>↑ {rec.ahead ?? 0} not on GitHub</span>
+                <span className={rec.behind ? 'text-ink' : 'text-ink-faint'}>↓ {rec.behind ?? 0} behind</span>
+              </>
+            ) : (
+              <span className="text-ink-faint">no upstream</span>
+            )}
+            <span className={rec.dirty.length ? 'text-ink' : 'text-ink-faint'}>{rec.dirty.length} uncommitted</span>
+          </div>
+          <div className="flex items-center gap-[12px] border-t border-line px-4 py-[9px] text-[12px] leading-[1.5] text-ink-dim">
             <span className="min-w-0 flex-1">
-              {rec.dirty.length ? `${rec.dirty.length} file${rec.dirty.length === 1 ? '' : 's'} changed and not committed. ` : ''}
-              {rec.ahead ? `The vault has ${rec.ahead} commit${rec.ahead === 1 ? '' : 's'} not on GitHub; pushing it pushes all of them.` : 'The vault is on GitHub.'}
+              {nextStep(rec).replace(/on this machine only\./, 'on this machine only, the whole vault\'s.')}
             </span>
             <PushButton r={rec} onPushed={onChanged} />
           </div>
@@ -803,7 +763,7 @@ const ago = (unix: number): string => {
  * you already set. The Schedule card went 2026-09-15 with the scheduler it
  * was the switchboard for: a section whose content is "nothing lives here"
  * is not a section. */
-export function Settings() {
+export function Settings({ onDecided }: { onDecided?: () => void }) {
   return (
     <>
       <Heading>Prompts</Heading>
@@ -811,6 +771,33 @@ export function Settings() {
 
       <Heading className="mt-7">Regression suite</Heading>
       <Regression />
+
+      {/* What arrives (2026-09-15): the one scheduled thing's last run, and
+          the proposals it staged, accepted or rejected here. This was the
+          Inbox tab; it is maintenance-class, nightly, and belongs with the
+          other things that are true until you change them. */}
+      <Heading className="mt-7">Maintenance</Heading>
+      <Maintenance onDecided={onDecided} />
+    </>
+  )
+}
+
+function Maintenance({ onDecided }: { onDecided?: () => void }) {
+  const night = useFetched<{ nightshift: NightshiftSummary | null }>('/v2/nightshift')
+  const inbox = useFetched<InboxPayload>('/v2/inbox')
+  const broken = night && night !== false && night.nightshift?.kind === 'broken'
+  return (
+    <>
+      <Card>
+        <div className="px-4 py-[13px] text-[12.5px] leading-[1.6]"
+             style={{ color: broken ? 'var(--color-faber)' : 'var(--color-ink-dim)' }}>
+          {night === false ? 'Could not read nightshift\'s record.' : night === null ? 'Loading…' : nightshiftLine(night.nightshift)}
+          <span className="ml-[8px] font-mono text-[10.5px] text-ink-faint">nightly at 03:00 · backend/runtime/nightshift.log</span>
+        </div>
+      </Card>
+      <div className="mt-[10px]">
+        {inbox === false ? <Unreachable what="the proposals" /> : inbox === null ? <Loading /> : <Inbox data={inbox} onDecided={onDecided} />}
+      </div>
     </>
   )
 }

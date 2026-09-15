@@ -271,8 +271,9 @@ if __name__ == "__main__":
     entry = report.record(slugs, failed, seen)
     if entry["error"]:
         # Every item failed the same way: not a quiet night, a broken one.
-        # Said so, and exited non-zero, so launchd's log and the digest
-        # both carry it. Six weeks of "quiet night" hid exactly this.
+        # Said so, and exited non-zero, so launchd's log and Settings'
+        # Maintenance section both carry it. Six weeks of "quiet night"
+        # hid exactly this.
         print(f"nightshift: FAILED -- every advance failed: {entry['error']}", file=sys.stderr)
         sys.exit(2)
     if slugs:

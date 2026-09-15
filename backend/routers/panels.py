@@ -4,10 +4,12 @@ These read; they do not launch. Anything that starts a session goes through
 `sessions_v2.py`, so a panel cannot become a second, quieter way to spend the
 5h window.
 
-Nothing here is generated ahead of time. The digest at the top of the Inbox
-is computed when the panel opens (`digest.py`); the morning brief it replaced
-was a file a scheduler was meant to write, and the scheduler never existed,
-so the file told you about a Thursday for five days.
+Nothing here is generated ahead of time: every panel is computed when it
+opens. The Repo view is the memory -- the commit log, bodies and all, is
+where a piece of work was left -- and Settings carries what arrives
+(nightshift's last run, the proposals). A morning brief and then an Inbox
+digest preceded that on 2026-09-15; both were summaries of what the
+commits already said.
 """
 from __future__ import annotations
 
@@ -22,7 +24,6 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-import digest
 import vault_io
 from jobs import MAINTENANCE, MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
 from nightshift import apply as proposals
@@ -44,31 +45,14 @@ def _safe_frontmatter(path: str) -> dict | None:
         return None
 
 
-@router.get("/digest")
-def digest_view() -> dict:
-    """What happened across Noctis since you were last here, and what is
-    next -- the card at the top of the Inbox. Counts, composed into
-    sentences by the shell; see `digest.py` for why there is no file, no
-    scheduler and no prose call."""
-    facts = digest.gather(_git)
-    proposals = [i for i in _proposals() if i["kind"] == "proposal"]
-    flagged = _flagged_jobs()
-    facts["inbox"] = {
-        "waiting": len(proposals),
-        "flagged": len(flagged),
-        # Staged after the previous sitting ended: what *arrived*, as against
-        # what has been sitting there. Both are worth knowing; only one is news.
-        "arrived": sum(1 for p in proposals if facts["since"] and p["at"] and p["at"] > facts["since"]),
-    }
-    return facts
+@router.get("/nightshift")
+def nightshift_last() -> dict:
+    """Nightshift's newest recorded run and how many nights in a row have
+    ended the same way -- Settings' Maintenance section reads it. Null
+    until a run has been recorded."""
+    from nightshift import report
 
-
-@router.post("/digest/here")
-def digest_here() -> dict:
-    """A presence heartbeat from the shell: you are at the app now. Thirty
-    minutes without one ends a sitting, and the next digest reads from
-    here."""
-    return digest.here()
+    return {"nightshift": report.summary()}
 
 
 def _flagged_jobs() -> list[dict]:
@@ -420,6 +404,29 @@ def repos(cwd: list[str] = Query(min_length=1)) -> dict:
     }
 
 
+def _commits(root: Path, n: int, paths: list[str] | None, unpushed: set[str]) -> list[dict]:
+    """The last `n` commits, newest first, each with its body: the body is
+    the record -- where a piece of work left things -- and the view shows
+    it, so a subject-only log would be a list of titles with the memory
+    cut off. Records are split on a separator git will not print in a
+    message, since a body has newlines of its own."""
+    log = _git(root, "log", "-n", str(n), "--format=%H%x1f%h%x1f%s%x1f%ct%x1f%b%x1e",
+               *(["--", *paths] if paths else [])) or ""
+    commits = []
+    for record in log.split("\x1e"):
+        # Python's strip() counts \x1f as whitespace, so `_git` has already
+        # eaten a trailing empty body from the last record: pad rather than
+        # demand five fields, or the newest bodiless commit vanishes.
+        parts = record.strip("\n").split("\x1f")
+        if len(parts) < 4 or not parts[0].strip():
+            continue
+        parts += [""] * (5 - len(parts))
+        full, short, subject, ts, body = parts[:5]
+        commits.append({"sha": short, "full": full, "subject": subject, "body": body.strip(),
+                        "at": int(ts), "pushed": full not in unpushed})
+    return commits
+
+
 def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
     """A repository's local state. With `paths`, the commits and dirty files
     are those touching them -- how the vault is read as one project's notes
@@ -450,14 +457,7 @@ def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
     unpushed: set[str] = set()
     if upstream:
         unpushed = set((_git(root, "rev-list", f"{upstream}..HEAD") or "").split())
-    log = _git(root, "log", "-n", "20", "--format=%H%x1f%h%x1f%s%x1f%ct", *(["--", *paths] if paths else [])) or ""
-    commits = []
-    for line in log.splitlines():
-        parts = line.split("\x1f")
-        if len(parts) != 4:
-            continue
-        full, short, subject, ts = parts
-        commits.append({"sha": short, "subject": subject, "at": int(ts), "pushed": full not in unpushed})
+    commits = _commits(root, 20, paths, unpushed)
     _mark_commit_modes(root, commits)
 
     # The GitHub half is not read here. It is three network calls per
@@ -498,10 +498,39 @@ def _project_notes(root: Path) -> dict | None:
         return None
     paths = jobs.job_notes_paths("faber", slug)
     notes = _repo_at(vault, paths=paths)
-    # The job's record is the job's work, by the same ownership rule as the
-    # project's commits -- whichever terminal wrote it.
+    # The record is two sets, united (2026-09-15). Commits touching the
+    # job's notes paths, whoever made them; and commits to the vault made
+    # from inside this project -- the log entry, the lesson, the job context
+    # a build session writes as it goes, which touch shared files and were
+    # invisible here under the path rule alone. The second set comes from
+    # attribution: each vault commit knows where its author session was.
+    root_str = str(root.resolve()).rstrip("/")
+    inside = lambda cwd: bool(cwd) and (cwd == root_str or cwd.startswith(root_str + "/"))  # noqa: E731
+    unpushed: set[str] = set()
+    if notes["upstream"]:
+        unpushed = set((_git(vault, "rev-list", f"{notes['upstream']}..HEAD") or "").split())
+    recent = _commits(vault, 60, None, unpushed)
+    _mark_commit_modes(vault, recent)
+    by_path = {c["full"]: c for c in notes["commits"]}
+    # Git's own order, newest first -- not a sort by timestamp, which two
+    # commits in one second would shuffle. Walk the recent vault log and
+    # keep what the record claims; path commits older than that log go on
+    # the end, in their own order.
+    merged = []
+    for c in recent:
+        if c["full"] in by_path:
+            c["via"] = "path"
+        elif inside((c.get("by") or {}).get("cwd")):
+            c["via"] = "session"
+        else:
+            continue
+        merged.append(c)
+    in_recent = {c["full"] for c in recent}
     for c in notes["commits"]:
-        c["mode"] = "faber"
+        if c["full"] not in in_recent:
+            c["via"] = "path"
+            merged.append(c)
+    notes["commits"] = merged[:20]
     notes["paths"] = paths
     notes["cwds"] = []
     return notes
@@ -534,15 +563,37 @@ def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
     """
     from datetime import datetime
     import jobs
+    from orchestrator.jsonl import mode_for_cwd
     from orchestrator.store import ConversationStore
 
-    if jobs.find_job_for_cwd("faber", root):
-        for c in commits:
-            c["mode"] = "faber"
-        return
-
+    # Evidence first (2026-09-15): the session whose transcript ran the
+    # commit is its author, whatever was live at the time. A session filed
+    # as General from a directory that is a dev job's project is Faber's --
+    # the VS Code session that built most of today was one. Each commit
+    # also remembers where its author was, which is what lets a project's
+    # Record claim the vault commits made from inside it.
     store = ConversationStore()
     try:
+        unresolved = []
+        for c in commits:
+            row = store.session_for_commit(c["subject"])
+            if row is None:
+                unresolved.append(c)
+                continue
+            mode = row["mode"]
+            if mode == "general":
+                mode = mode_for_cwd(row["cwd"], "general")
+            c["mode"] = mode
+            c["by"] = {"session": row["id"], "cwd": row["cwd"]}
+        if not unresolved:
+            return
+        # No transcript claims the rest. Ownership next: a dev job's project
+        # is Faber's, whichever terminal typed the command.
+        if jobs.find_job_for_cwd("faber", root):
+            for c in unresolved:
+                c["mode"] = "faber"
+            return
+        commits = unresolved
         rows = store.sessions_in(str(root))
         everywhere = store.sessions_all()
     finally:
@@ -583,6 +634,28 @@ class PushRequest(BaseModel):
 
 
 _ATTRIBUTION = re.compile(r"^\s*(Co-Authored-By:|Claude-Session:|.*Generated with \[Claude Code\])", re.I | re.M)
+
+# A commit is the record (2026-09-15): the Repo view is where you read
+# where a piece of work left things, so a commit with a subject and no
+# body is a title with the memory cut off. The push refuses one -- for
+# commits made after the rule was written; the rule cannot reach back and
+# demand a body of commits that predate it.
+RECORD_RULE_SINCE = 1789603200   # 2026-09-17 00:00 UTC (datetime(2026, 9, 17, tzinfo=utc).timestamp())
+
+
+def _recordless(root: Path, outgoing: str) -> list[str]:
+    """Short shas of outgoing commits, dated after the rule, that have no body."""
+    log = _git(root, "log", outgoing, "--format=%h%x1f%ct%x1f%b%x1e", timeout=20) or ""
+    bare = []
+    for record in log.split("\x1e"):
+        parts = record.strip("\n").split("\x1f")
+        if len(parts) < 2 or not parts[0].strip():
+            continue
+        parts += [""] * (3 - len(parts))       # a stripped trailing empty body, as in _commits
+        short, ts, body = parts[:3]
+        if int(ts) >= RECORD_RULE_SINCE and not body.strip():
+            bare.append(short)
+    return bare
 
 
 @router.post("/repos/push")
@@ -626,6 +699,11 @@ def repos_push(req: PushRequest) -> dict:
         raise HTTPException(status_code=409, detail=(
             f"{tainted} attribution line{'s' if tainted != 1 else ''} (Co-Authored-By / Claude-Session) in the "
             f"commits about to go -- strip them first (scripts/strip_claude_trailers.py); nothing was pushed"))
+    bare = _recordless(root, outgoing)
+    if bare:
+        raise HTTPException(status_code=409, detail=(
+            f"{len(bare)} commit{'s' if len(bare) != 1 else ''} with no body ({', '.join(bare[:5])}) -- a commit is the "
+            f"record; amend {'it' if len(bare) == 1 else 'them'} with where the work leaves things; nothing was pushed"))
 
     behind = 0
     if upstream:

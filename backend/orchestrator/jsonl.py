@@ -345,6 +345,31 @@ class IndexPass(NamedTuple):
     refreshed: list[str]
 
 
+def mode_for_cwd(cwd: str | None, default: str = "general") -> str:
+    """A transcript Noctis did not launch carries no mode signal, but its
+    working directory does: a session in a dev job's `project_path` is
+    Faber's work whoever opened it -- the VS Code session that built most of
+    2026-09-15 was filed as General and its commits credited to whichever
+    tab was open. Everywhere else stays the default."""
+    if not cwd:
+        return default
+    try:
+        import jobs
+        from pathlib import Path as _P
+        # The transcript's cwd is wherever the session last was -- often a
+        # subdirectory -- so walk up to the project root, stopping at home.
+        here = _P(cwd).expanduser().resolve()
+        home = _P.home().resolve()
+        for candidate in (here, *here.parents):
+            if candidate == home or candidate == candidate.parent:
+                break
+            if jobs.find_job_for_cwd("faber", candidate):
+                return "faber"
+        return default
+    except Exception:  # noqa: BLE001 -- no vault, no jobs: the default is the honest answer
+        return default
+
+
 def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> IndexPass:
     """Ingest every transcript the store has not seen, and re-read every one
     that has grown since it was filed.
@@ -374,7 +399,7 @@ def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> 
             state = store.transcript_state(p.stem)
             if state is None:
                 conv = read(p)
-                if store.ingest(conv, mode_of.get(p.stem, default_mode), size) is not None:
+                if store.ingest(conv, mode_of.get(p.stem) or mode_for_cwd(conv.cwd, default_mode), size) is not None:
                     taken.append(p.stem)
                 continue
             row_id, source, indexed = state
