@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Unreachable } from './Async'
 import { Pools, type PoolTone } from './Pools'
-import { post, put } from './engine'
+import { get, post, put } from './engine'
 import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
 import { MODE_ACCENT, MODE_LABEL, VAULT_MODE, type Mode } from './domain'
@@ -31,6 +31,11 @@ export interface DigestPayload {
   open: number
   on_hold: number
   inbox: { waiting: number; flagged: number; arrived: number }
+  /** Nightshift's newest run and how many nights in a row ended the same
+   *  way; null until it has recorded one. `kind` is what happened: staged
+   *  something, quiet, partial failure, or broken (every item failed with
+   *  one error, which `error` names). */
+  nightshift: { ran_at: string; staged: number; failed: number; seen: number; error: string | null; kind: 'staged' | 'quiet' | 'partial' | 'broken'; streak: number } | null
 }
 
 export interface InboxPayload {
@@ -186,7 +191,22 @@ export function digestLines(d: DigestPayload): { happened: string[]; next: strin
   if (!moved.length) happened.push('No commits.')
   if (d.inbox.arrived > 0) happened.push(`${plural(d.inbox.arrived, 'proposal')} arrived.`)
 
+  // The one scheduled thing, said plainly whatever it did. A run of the
+  // same outcome is counted: "broken, 3 nights running" is the line that
+  // six weeks of "quiet night" in a log never produced.
+  const n = d.nightshift
+  if (n) {
+    const at = new Date(n.ran_at)
+    const hm = Number.isNaN(at.getTime()) ? '' : ` at ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+    const run = n.streak > 1 ? ` (${n.streak} nights running)` : ''
+    if (n.kind === 'broken') happened.push(`Nightshift failed${hm} — ${n.error}${run}`)
+    else if (n.kind === 'partial') happened.push(`Nightshift ran${hm} — ${plural(n.staged, 'proposal')} staged, ${n.failed} of ${n.seen} failed`)
+    else if (n.kind === 'staged') happened.push(`Nightshift ran${hm} — ${plural(n.staged, 'proposal')} staged`)
+    else happened.push(`Nightshift ran${hm} — nothing to stage${run}`)
+  } else happened.push('Nightshift has not recorded a run.')
+
   const next: string[] = []
+  if (n?.kind === 'broken') next.push(`nightshift is broken — ${n.error}`)
   const toPush = d.repos.filter((r) => (r.ahead ?? 0) > 0).map((r) => r.name)
   if (toPush.length) next.push(`push ${toPush.join(' and ')} from Repo`)
   if (d.inbox.waiting > 0) next.push(`${plural(d.inbox.waiting, 'proposal')} waiting below`)
@@ -939,71 +959,138 @@ function Prompts() {
 interface RegressionCase {
   id: string
   mode: string
+  rule: string | null
   prompt: string
   tests: string
+  /** The case's last result, and whether it still speaks for the prompt
+   *  as it is now -- `stale` when the composed prompt has changed since. */
+  last: { passed: boolean; why: string; attempts: number; ran_at: string; reply: string; stale: boolean } | null
+}
+interface RegressionStatus {
+  running: boolean
+  scope: string | null
+  done: number
+  total: number
+  results: { id: string; mode: string; rule: string | null; passed: boolean; why: string; attempts: number }[]
 }
 
-/* The regression suite, listed but not run.
+/* The regression suite, scoped and recorded.
  *
  * Reading it is free; running it is one real session per case on production
- * models. Those are different enough to be different routes — and the button
- * says what it will spend before you press it, because a suite that quietly
- * burns the 5h window is one you stop trusting yourself to click.
- */
+ * models -- so the button says what it will spend, and the scope is what an
+ * edit can affect: `system` is composed into every mode, an overlay into
+ * one. Each case keeps its last result with the prompt it ran against, so
+ * a green suite is a state that accumulates over small runs rather than a
+ * thirteen-session ceremony. A failing case reran once before it counted. */
 function Regression() {
-  const data = useFetched<{ cases: RegressionCase[]; sessions: number; path: string }>(
-    '/v2/regression',
-  )
   const [open, setOpen] = useState(false)
+  const [scope, setScope] = useState('system')
+  const [status, setStatus] = useState<RegressionStatus | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)          // re-read the suite when a run ends
+  // Keyed by `tick`, so the record is re-read once a run has landed its
+  // results; the query string changes nothing on the server.
+  const view = useFetched<{ cases: RegressionCase[]; scopes: Record<string, number>; sessions: number; path: string }>(`/v2/regression?t=${tick}`)
 
-  if (data === false) return <Unreachable what="the regression suite" />
-  if (data === null) return <Loading />
+  // Poll the run while one is going -- every two seconds is plenty for
+  // cases that take twenty each -- and stop, re-reading the record, when
+  // it ends.
+  useEffect(() => {
+    if (!status?.running) return
+    const id = setInterval(async () => {
+      const s = await get<RegressionStatus>('/v2/regression/status')
+      if (!s) return
+      setStatus(s)
+      if (!s.running) { clearInterval(id); setTick((t) => t + 1) }
+    }, 2000)
+    return () => clearInterval(id)
+  }, [status?.running])
+
+  if (view === false) return <Unreachable what="the regression suite" />
+  if (view === null) return <Loading />
+
+  const cost = view.scopes[scope] ?? 0
+  const tally = (cs: RegressionCase[]) => ({
+    passed: cs.filter((c) => c.last?.passed && !c.last.stale).length,
+    failed: cs.filter((c) => c.last && !c.last.passed && !c.last.stale).length,
+    stale: cs.filter((c) => c.last?.stale).length,
+    never: cs.filter((c) => !c.last).length,
+  })
+  const t = tally(view.cases)
+  const dot = (c: RegressionCase) =>
+    !c.last ? 'var(--color-line)' : c.last.stale ? 'var(--color-ink-faint)' : c.last.passed ? 'var(--color-good)' : 'var(--color-faber)'
+
+  const start = async () => {
+    setError(null)
+    const out = await post<{ started: string; sessions: number }>('/v2/regression/run', { scope })
+    if ('error' in out) { setError(out.error); return }
+    setStatus({ running: true, scope, done: 0, total: out.sessions, results: [] })
+  }
 
   return (
     <Card>
-      <div className="flex items-center gap-[10px] px-4 py-[12px]">
-        <span className="text-[13px] text-ink">
-          {data.cases.length} case{data.cases.length === 1 ? '' : 's'}
-        </span>
+      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px] px-4 py-[12px]">
+        <span className="text-[13px] text-ink">{plural(view.cases.length, 'case')}</span>
+        {/* What the record says, at a glance: current passes, current
+            failures, results the prompt has moved past, never run. */}
         <span className="font-mono text-[11px] text-ink-faint">
-          {/* The cost, before the click. */}
-          running spends {data.sessions} sessions on production models
+          <span style={{ color: 'var(--color-good)' }}>{t.passed} pass</span> · <span style={{ color: t.failed ? 'var(--color-faber)' : undefined }}>{t.failed} fail</span> · {t.stale} stale · {t.never} never run
         </span>
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          className="ml-auto font-mono text-[11px] text-ink-faint underline decoration-line underline-offset-2 hover:text-ink-dim"
-        >
-          {open ? 'hide' : 'show cases'}
+        <button type="button" onClick={() => setOpen(!open)}
+                className="ml-auto font-mono text-[11px] text-ink-faint underline decoration-line underline-offset-2 hover:text-ink-dim">
+          {open ? 'hide cases' : 'show cases'}
         </button>
       </div>
 
       {open && (
         <div className="border-t border-line">
-          {data.cases.map((c) => (
-            <div key={c.id} className="border-b border-line px-4 py-[9px] last:border-b-0">
-              <div className="flex items-baseline gap-[8px]">
-                <span className="font-mono text-[11px] text-ink-faint">{c.id}</span>
-                <span
-                  className="font-mono text-[11px]"
-                  style={{ color: MODE_ACCENT[c.mode as Mode] ?? 'var(--color-ink-dim)' }}
-                >
-                  {c.mode}
-                </span>
+          {view.cases.map((c) => (
+            <div key={c.id} className="flex items-start gap-[10px] border-b border-line px-4 py-[8px] last:border-b-0">
+              <span className="mt-[6px] h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: dot(c) }}
+                    title={!c.last ? 'never run' : c.last.stale ? 'ran against an earlier prompt' : c.last.passed ? 'passed' : c.last.why} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-baseline gap-x-[8px] font-mono text-[11px]">
+                  <span className="text-ink-faint">{c.id}</span>
+                  <span style={{ color: MODE_ACCENT[c.mode as Mode] ?? 'var(--color-ink-dim)' }}>{c.mode}</span>
+                  {c.rule && <span className="text-ink-faint">{c.rule}</span>}
+                  {c.last && (
+                    <span className="ml-auto text-ink-faint">
+                      {c.last.stale ? 'stale · ' : ''}{c.last.passed ? 'passed' : 'failed'}{c.last.attempts > 1 ? ` on attempt ${c.last.attempts}` : ''} · {sinceLabel(c.last.ran_at).replace(/^since /, '')}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-[2px] text-[12px] leading-[1.5] text-ink-dim">{c.tests}</div>
+                {c.last && !c.last.passed && !c.last.stale && (
+                  <div className="mt-[3px] font-mono text-[11px]" style={{ color: 'var(--color-faber)' }}>{c.last.why}</div>
+                )}
               </div>
-              <div className="mt-[3px] text-[12px] leading-[1.5] text-ink-dim">{c.tests}</div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Not built rather than hidden: running it needs the orchestrator to
-          host thirteen sessions and report them back, which is real work and
-          not a button. */}
-      <div className="border-t border-line px-4 py-[10px] font-mono text-[11px] text-ink-faint">
-        Running from here is not built yet — use{' '}
-        <span className="text-ink-dim">python prompts/run_regression.py</span> in{' '}
-        <span className="text-ink-dim">backend/</span>.
+      {/* Run: the scope is what an edit can affect, and the cost is said
+          before the click. */}
+      <div className="flex flex-wrap items-center gap-[10px] border-t border-line px-4 py-[9px] font-mono text-[11px]">
+        <span className="text-ink-faint">run the cases an edit to</span>
+        <select value={scope} onChange={(e) => setScope(e.target.value)}
+                className="rounded-control border border-line bg-ground px-[6px] py-[2px] text-ink outline-none">
+          {Object.keys(view.scopes).map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <span className="text-ink-faint">affects — {plural(cost, 'session')} on production models</span>
+        {status?.running ? (
+          <span className="ml-auto text-ink-dim">
+            running {status.scope} · {status.done}/{status.total}
+            {status.results.length > 0 && ` · ${status.results.filter((r) => r.passed).length} pass, ${status.results.filter((r) => !r.passed).length} fail`}
+          </span>
+        ) : (
+          <button type="button" onClick={() => void start()} disabled={cost === 0}
+                  className="ml-auto rounded-control px-[11px] py-[4px] text-ink transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+                  style={{ background: 'var(--color-sig)' }}>
+            run {cost}
+          </button>
+        )}
+        {error && <span className="basis-full text-[11px]" style={{ color: 'var(--color-faber)' }}>{error}</span>}
       </div>
     </Card>
   )

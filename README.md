@@ -76,7 +76,7 @@ Everything that arrived while you were away, first in the rail because it is wha
 
 ### Settings
 
-The prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault, with a regression suite that checks a change still produces the right mode.
+The prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault (saved uncommitted; the Repo tab commits them). Beside them, the **regression suite**: thirteen cases, each a mode, a prompt and a deterministic assertion guarding one rule — the attribution rule, the Confusion Protocol, plan-before-code, mode identity. Run from the card, scoped to what an edit can affect: an overlay runs its mode's cases, `system.md` runs all of them, and the cost in sessions is stated before the click. Each case keeps its last result against the prompt it ran on, so a result the prompt has since moved past shows as stale rather than as a pass; a failing case reruns once before it counts.
 
 ## Architecture
 
@@ -193,7 +193,7 @@ Full detail in [DOCUMENTATION.md](DOCUMENTATION.md) · [`STATUS.md`](STATUS.md) 
 - [`CHANGELOG.md`](CHANGELOG.md) — what changed, and why.
 - [`SETUP.md`](SETUP.md) — one-time machine checklist.
 
-The spec, design brief and migration records are the build's own planning documents and live in the private vault, not here.
+**Two sides to every project, and two places they commit.** What a contributor needs to run and change the code — this README, `DOCUMENTATION.md`, `STATUS.md`, `CHANGELOG.md`, `SETUP.md`, `CLAUDE.md` — lives here, in the public repository, and is written to be safe to push: no secrets, no private reasoning, every decision a contributor would need. The *record* of building it — the spec, design brief, migration records, open questions, the daily log and the lessons — lives in the private vault at the project's notes path (`second-brain/wiki/Noctis OS/`), and commits there. A Faber session working on this repository writes to both, each in its own commit; the Repo tab shows the vault side beneath the project as **Record**, so both halves of one piece of work are one view. The rule, from `CLAUDE.md`: the repo's docs carry every decision a contributor needs and nothing that is only the build's own reasoning.
 
 **Single-user by design.** No multi-tenancy, no hosted deployment, no auth beyond one bearer token. Public as a working example of the architecture.
 

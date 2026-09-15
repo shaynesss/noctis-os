@@ -159,12 +159,22 @@ ADVANCE = {
 }
 
 
-def run() -> list[str]:
+def run() -> tuple[list[str], list[dict], int]:
+    """Scan -> Advance -> Stage. Returns (staged slugs, failures, items seen).
+
+    Failures are returned, not only printed: from 2026-08-05 to 09-15 every
+    night's advance step failed identically ("No such file or directory:
+    'claude'" -- launchd's PATH) and this loop, correctly refusing to let one
+    item's failure drop the rest, printed each one to a log and ended the
+    night as quiet. The caller records them, so identical failure across
+    every item is a broken machine and reported as one."""
     vault_path = vault_io.get_vault_path()
     inbox_dir = vault_path / "modes" / "nightshift" / "inbox"
     inbox_dir.mkdir(parents=True, exist_ok=True)
     pending = _existing_pending_slugs()
     staged_slugs = []
+    failed: list[dict] = []
+    seen = 0
 
     for checker in SLACK_CHECKS.values():
         for item in checker():
@@ -173,6 +183,7 @@ def run() -> list[str]:
                 continue  # already awaiting review, Scan re-derives but Stage stays idempotent
 
             slug = _slug_for(item)
+            seen += 1
 
             inbox_path = inbox_dir / f"{slug}.md"
             try:
@@ -184,6 +195,7 @@ def run() -> list[str]:
                 # in the 2026-07-21 ship-gate review, where this had no
                 # exception handling at all.
                 print(f"nightshift: advance failed for {slug} ({item.kind}): {exc}", file=sys.stderr)
+                failed.append({"slug": slug, "kind": item.kind, "error": str(exc)[:200]})
                 continue
 
             if not inbox_path.exists():
@@ -203,7 +215,7 @@ def run() -> list[str]:
             _stage(item, slug, rationale, confidence)
             staged_slugs.append(slug)
 
-    return staged_slugs
+    return staged_slugs, failed, seen
 
 
 def _extract_rationale(proposal_text: str) -> str | None:
@@ -253,8 +265,19 @@ def _stage(item: SlackItem, slug: str, rationale: str, confidence: str) -> None:
 
 
 if __name__ == "__main__":
-    slugs = run()
+    from nightshift import report
+
+    slugs, failed, seen = run()
+    entry = report.record(slugs, failed, seen)
+    if entry["error"]:
+        # Every item failed the same way: not a quiet night, a broken one.
+        # Said so, and exited non-zero, so launchd's log and the digest
+        # both carry it. Six weeks of "quiet night" hid exactly this.
+        print(f"nightshift: FAILED -- every advance failed: {entry['error']}", file=sys.stderr)
+        sys.exit(2)
     if slugs:
         print(f"nightshift: staged {len(slugs)} item(s): {', '.join(slugs)}")
+    elif failed:
+        print(f"nightshift: nothing staged; {len(failed)} of {seen} item(s) failed (see above)")
     else:
         print("nightshift: quiet night, nothing staged")

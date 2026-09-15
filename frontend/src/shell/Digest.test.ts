@@ -16,13 +16,25 @@ const base: DigestPayload = {
   open: 4,
   on_hold: 2,
   inbox: { waiting: 0, flagged: 0, arrived: 0 },
+  nightshift: null,
 }
 
 describe('digestLines', () => {
   it('says what happened, and says so when nothing did', () => {
     const { happened, next } = digestLines(base)
-    expect(happened).toEqual(['No sessions ran.', 'No commits.'])
+    expect(happened).toEqual(['No sessions ran.', 'No commits.', 'Nightshift has not recorded a run.'])
     expect(next).toEqual(['nothing'])
+  })
+
+  it('a broken nightshift is a line of its own, counted, and a next', () => {
+    const at = new Date(2026, 8, 15, 3, 0).toISOString()
+    const { happened, next } = digestLines({ ...base, nightshift: { ran_at: at, staged: 0, failed: 4, seen: 4, error: "No such file or directory: 'claude'", kind: 'broken', streak: 41 } })
+    expect(happened.at(-1)).toBe("Nightshift failed at 03:00 — No such file or directory: 'claude' (41 nights running)")
+    expect(next[0]).toBe("nightshift is broken — No such file or directory: 'claude'")
+    expect(digestLines({ ...base, nightshift: { ran_at: at, staged: 2, failed: 0, seen: 2, error: null, kind: 'staged', streak: 1 } }).happened.at(-1))
+      .toBe('Nightshift ran at 03:00 — 2 proposals staged')
+    expect(digestLines({ ...base, nightshift: { ran_at: at, staged: 0, failed: 0, seen: 0, error: null, kind: 'quiet', streak: 3 } }).happened.at(-1))
+      .toBe('Nightshift ran at 03:00 — nothing to stage (3 nights running)')
   })
 
   it('names the sessions by character and the repositories by movement', () => {
@@ -42,6 +54,7 @@ describe('digestLines', () => {
       'noctis-os · 12 commits, 12 not pushed',
       'second-brain · nothing new, 11 not pushed, 2 files uncommitted',
       '2 proposals arrived.',
+      'Nightshift has not recorded a run.',
     ])
   })
 

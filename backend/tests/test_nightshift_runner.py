@@ -54,7 +54,7 @@ def test_run_stages_a_flagged_dev_job(vault, monkeypatch):
     monkeypatch.setitem(runner.SLACK_CHECKS, "research", lambda: [])
     monkeypatch.setitem(runner.SLACK_CHECKS, "settings", lambda: [])
 
-    slugs = runner.run()
+    slugs, _failed, _seen = runner.run()
 
     assert len(slugs) == 1
     assert slugs[0].startswith("flagged-job-noctis-build-")
@@ -80,10 +80,10 @@ def test_run_is_idempotent_against_already_pending_item(vault, monkeypatch):
     monkeypatch.setitem(runner.SLACK_CHECKS, "research", lambda: [])
     monkeypatch.setitem(runner.SLACK_CHECKS, "settings", lambda: [])
 
-    first = runner.run()
+    first, _, _ = runner.run()
     assert len(first) == 1
 
-    second = runner.run()
+    second, _, _ = runner.run()
     assert second == []
 
     state, _ = vault_io.read_frontmatter(runner.STATE_PATH)
@@ -108,7 +108,7 @@ def test_one_failing_item_does_not_drop_other_items(vault, monkeypatch):
     monkeypatch.setitem(runner.SLACK_CHECKS, "research", lambda: [good_item])
     monkeypatch.setitem(runner.SLACK_CHECKS, "settings", lambda: [])
 
-    slugs = runner.run()
+    slugs, _failed, _seen = runner.run()
 
     assert len(slugs) == 1
     assert slugs[0].startswith("flagged-job-b-")

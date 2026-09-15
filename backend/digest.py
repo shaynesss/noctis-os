@@ -221,11 +221,17 @@ def gather(git: Git, since_at: str | None = None, store: ConversationStore | Non
     vault_root = Path(vault_io.get_vault_path())
     roots = [vault_root] + [p for p in jobs["projects"] if p != vault_root]
 
+    # What nightshift did last night, and for how many nights it has been
+    # doing the same: the one scheduled thing, whose six weeks of silent
+    # failure are why this line exists.
+    from nightshift import report
+
     return {
         "date": datetime.now().strftime("%A %-d %B"),
         "since": since_at,
         "sessions": sessions,
         "repos": _repos(git, roots, after),
+        "nightshift": report.summary(),
         "modes": [
             {"label": label,
              "job": jobs["per_mode"][label][0]["name"] if jobs["per_mode"][label] else None,

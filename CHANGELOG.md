@@ -9,6 +9,36 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Nightshift on record; the regression suite scoped and run from Settings (2026-09-15)
+
+- **Every nightshift run is recorded**, and the Inbox digest reads it.
+  `nightshift/report.py` writes one entry per run to
+  `backend/data/nightshift.json` — when, what staged, what failed and why —
+  and `summary()` names the outcome (`staged`, `quiet`, `partial`,
+  `broken`) with how many nights in a row have ended the same way. The
+  digest's first card says "Nightshift ran at 03:00 — 2 proposals staged",
+  or "Nightshift failed at 03:00 — No such file or directory: 'claude' (41
+  nights running)", and a broken night is a *next*. When every item fails
+  with one error the runner exits non-zero and says so, instead of "quiet
+  night". Six weeks of silence are what this is for.
+- **The regression suite is a module** (`prompts/regression.py`), and the
+  card runs it. Scope follows composition: an edit to an overlay runs that
+  mode's cases, an edit to `system.md` runs all of them, `rule:<name>` runs
+  every case guarding one rule — a structural mapping, not a judgement.
+  Every case in `regression.jsonl` now carries its `rule` (eleven rules
+  across thirteen cases). A failing case reruns once before it counts: one
+  failure is a flake, two is a signal, and a per-case retry cannot hide a
+  real regression the way the old suite-wide 11-of-12 bar could. Cases run
+  three at a time. Each result is recorded per case with the hash of the
+  composed prompt it ran against; a result the prompt has moved past shows
+  as **stale**, so "the suite is green" is a state that accumulates over
+  small runs rather than a thirteen-session ceremony. `POST
+  /v2/regression/run {scope}` starts a run in a thread (one at a time;
+  409 otherwise), `GET /v2/regression/status` is polled by the card, and
+  `GET /v2/regression` returns every case with its last result — reading
+  never runs anything. `run_regression.py` is the same module from the
+  command line, with `--scope`.
+
 ### Settings' Save tells the truth, and nightshift finally finds `claude` (2026-09-15)
 
 - **Save is the write.** `PUT /v2/prompts/{id}` writes the file in the

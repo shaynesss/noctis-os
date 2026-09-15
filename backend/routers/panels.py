@@ -15,6 +15,8 @@ import json
 import os
 import re
 import subprocess
+import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -829,36 +831,70 @@ def save_prompt(prompt_id: str, body: PromptUpdate) -> dict:
 
 @router.get("/regression")
 def regression_suite() -> dict:
-    """The regression cases, without running any of them.
+    """The regression cases with their last results, without running any.
 
-    Reading the suite is free; running it is thirteen real sessions on
-    production models. Those are different enough that they are different
-    routes — a page that fires the expensive one just by being opened would
-    spend the 5h window every time you glanced at Settings.
+    Reading the suite is free; running it is real sessions on production
+    models. Those are different enough that they are different routes -- a
+    page that fired the expensive one just by being opened would spend the
+    5h window every time you glanced at Settings. `scopes` says how many
+    sessions each scope costs, so the button can say it before the click.
     """
-    import json
+    from prompts import regression
 
-    path = "prompts/regression.jsonl"
-    if not vault_io.file_exists(path):
-        return {"cases": [], "path": path}
+    if not vault_io.file_exists("prompts/regression.jsonl"):
+        return {"cases": [], "scopes": {}, "path": "prompts/regression.jsonl", "sessions": 0}
+    return regression.status()
 
-    cases = []
-    for line in vault_io.read_file(path).splitlines():
-        if not line.strip():
-            continue
+
+class RegressionRun(BaseModel):
+    # `system`/`all`, a mode, or `rule:<name>` -- what an edit can affect.
+    scope: str = Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9:_-]*$")
+
+
+# One run at a time, in a thread the request returns from at once: the
+# cases take twenty to forty seconds each and a request held open for a
+# four-minute run would time out in the shell. The shell polls `/status`.
+_regression_run: dict = {"running": False, "scope": None, "done": 0, "total": 0, "results": [], "started_at": None}
+_regression_lock = threading.Lock()
+
+
+@router.post("/regression/run")
+def regression_run(body: RegressionRun) -> dict:
+    """Start running the cases `scope` covers. 409 while a run is going: two
+    runs at once would double the sessions and interleave the records."""
+    from prompts import regression
+
+    cases = regression.cases_for(body.scope)
+    if not cases:
+        raise HTTPException(status_code=404, detail=f"No cases in scope {body.scope!r}")
+    with _regression_lock:
+        if _regression_run["running"]:
+            raise HTTPException(status_code=409, detail=f"A run is already going ({_regression_run['scope']})")
+        _regression_run.update(running=True, scope=body.scope, done=0, total=len(cases), results=[],
+                               started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
+    def landed(r: dict) -> None:
+        with _regression_lock:
+            _regression_run["done"] += 1
+            _regression_run["results"].append({k: r[k] for k in ("id", "mode", "rule", "passed", "why", "attempts")})
+
+    def go() -> None:
         try:
-            case = json.loads(line)
-        except ValueError:
-            continue
-        cases.append({
-            "id": case.get("id"),
-            "mode": case.get("mode"),
-            "prompt": case.get("prompt"),
-            "tests": case.get("tests"),
-        })
-    return {"cases": cases, "path": path,
-            # What running it will actually cost, stated before you press it.
-            "sessions": len(cases)}
+            regression.run(body.scope, on_result=landed)
+        finally:
+            with _regression_lock:
+                _regression_run["running"] = False
+
+    threading.Thread(target=go, name="regression", daemon=True).start()
+    return {"started": body.scope, "sessions": len(cases)}
+
+
+@router.get("/regression/status")
+def regression_status() -> dict:
+    """Where the current (or last) run is: cases done of total, and each
+    result as it landed. Cheap enough to poll every couple of seconds."""
+    with _regression_lock:
+        return dict(_regression_run)
 
 
 @router.get("/mode-dirs")
