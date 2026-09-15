@@ -27,6 +27,10 @@ scheduler, which is the only feature left in the build order.
   are 0.86 — the chrome read as a dark frame round a clear pane. The
   ground is heavier (`0.42 → 0.62`) so the words on it read over a bright
   desktop.
+- **Settings loses its Schedule card.** It was the switchboard for the
+  scheduler, and the scheduler was closed this morning; a section whose
+  content is "nothing lives here" is not a section. Settings is Prompts and
+  the Regression suite. Running the suite from the app is still to come.
 - **Pools on Stats only.** They were on the Repo modules too and looked
   wrong against the folds and the push row; the Repo view will get its own
   treatment.

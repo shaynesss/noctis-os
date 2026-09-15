@@ -777,10 +777,12 @@ const ago = (unix: number): string => {
 }
 
 /* Settings is now only things that are true until you change them: the
- * prompts, the regression suite, the schedule. The models table went because
- * a mode's model does not change unless you change it with /model, so a
- * read-only table of five rows saying "opus" four times was a page telling
- * you what you already set. */
+ * prompts and the regression suite. The models table went because a mode's
+ * model does not change unless you change it with /model, so a read-only
+ * table of five rows saying "opus" four times was a page telling you what
+ * you already set. The Schedule card went 2026-09-15 with the scheduler it
+ * was the switchboard for: a section whose content is "nothing lives here"
+ * is not a section. */
 export function Settings() {
   return (
     <>
@@ -789,19 +791,6 @@ export function Settings() {
 
       <Heading className="mt-7">Regression suite</Heading>
       <Regression />
-
-      <Heading className="mt-7">Schedule</Heading>
-      <Card>
-        {/* Honest rather than a control panel for nothing: no scheduler
-            exists, and since the digest replaced the morning brief nothing
-            needs one to be read. Naming what one would run is more use than
-            a row of dead toggles. */}
-        <div className="px-4 py-[13px] text-[12.5px] leading-[1.6] text-ink-dim">
-          Nothing runs on a schedule. The Inbox digest is computed when you open it; maintenance
-          runs when asked. If a launchd job for the vault commit or maintenance ever lands, this
-          is where it is turned on and off.
-        </div>
-      </Card>
     </>
   )
 }
