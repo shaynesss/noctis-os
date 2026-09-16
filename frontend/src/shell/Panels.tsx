@@ -651,7 +651,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
       <Dirty files={r.dirty} />
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
             open={commitsOpen} onToggle={() => toggle('code')}
-            right={<><PushButton r={r} onPushed={onChanged} />{commitsOpen && <Legend />}</>}>
+            right={<><PushButton r={r} onPushed={onChanged} /><span className={commitsOpen ? '' : 'invisible'}><Legend /></span></>}>
         <CommitList commits={r.commits} />
       </Fold>
 
@@ -666,7 +666,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
           <Dirty files={rec.dirty} />
           <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}, all on GitHub`}
                 open={recordOpen} onToggle={() => toggle('record')}
-                right={<><PushButton r={rec} onPushed={onChanged} />{recordOpen && <Legend />}</>}>
+                right={<><PushButton r={rec} onPushed={onChanged} /><span className={recordOpen ? '' : 'invisible'}><Legend /></span></>}>
             <FileList files={rec.files} />
           </Fold>
         </>
