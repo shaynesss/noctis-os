@@ -496,13 +496,13 @@ function Pane({ view, limits, terminals, onInboxDecided }: {
   const cwds = terminals.map((t) => `cwd=${encodeURIComponent(t.cwd)}`).join('&')
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {/* Settings centres itself: auto vertical margins inside a flex column
-          sit a short page in the middle and let a tall one flow from the
-          top, which justify-content would clip. Repo takes the pane -- full
-          width, from the top (2026-09-16): its modules are a grid that
-          grows with the repositories open, and a cap plus centring left
-          three of them floating in the middle of a wide window. */}
-      <div className={`w-full px-8 pb-8 pt-7 ${view === 'repo' ? '' : 'mx-auto my-auto max-w-[840px]'}`}>
+      {/* Every view sits in the middle of the pane: auto vertical margins
+          inside a flex column centre a short page and let a tall one flow
+          from the top, which justify-content would clip. Repo takes the
+          full width (2026-09-16) -- its modules are a grid that grows with
+          the repositories open, and a 1240px cap left three of them narrow
+          in a wide window; Settings keeps its reading column. */}
+      <div className={`my-auto w-full px-8 pb-8 pt-7 ${view === 'repo' ? '' : 'mx-auto max-w-[840px]'}`}>
         {view === 'repo' && <Fetched<RepoPayload> key={`${cwds}#${repoTick}`} path={`/v2/repos?${cwds}`} what="the repositories" render={(d) => <Repo data={d} terminals={terminals} onChanged={() => setRepoTick((t) => t + 1)} />} />}
         {view === 'settings' && <Settings onDecided={onInboxDecided} />}
       </div>
