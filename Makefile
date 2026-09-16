@@ -100,9 +100,20 @@ doctor:
 #
 # This replaces `make backend`, which started a *second* uvicorn. That was
 # right when nothing supervised the first one and is a port clash now.
+#
+# Two cases, and the second is the one that used to need a person: the
+# supervisor is running, so killing uvicorn is enough and it comes back in
+# seconds; or the supervisor itself is gone (it exited, or `make dev` was
+# never run), so it is started here, detached, logging to runtime/dev.log.
 reload:
-	@pkill -f "uvicorn main:app" >/dev/null 2>&1 || true
-	@echo "backend killed; the supervisor brings it back within a few seconds"
+	@if pgrep -f 'python[0-9.]* supervise\.py$$' >/dev/null 2>&1; then \
+		pkill -f "uvicorn main:app" >/dev/null 2>&1 || true; \
+		echo "backend killed; the supervisor brings it back within a few seconds"; \
+	else \
+		mkdir -p backend/runtime; \
+		(cd backend && nohup .venv/bin/python supervise.py >> runtime/dev.log 2>&1 < /dev/null &); \
+		echo "supervisor was not running; started it (log: backend/runtime/dev.log)"; \
+	fi
 	@echo "(if you are on 'make browser', its reloader has already done it)"
 
 dev:

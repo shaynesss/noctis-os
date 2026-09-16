@@ -15,10 +15,16 @@ Three properties, and the middle one is the one people skip:
 
   1. **Notice.** Poll `/health`, not the process table. A process can be alive
      and wedged, and "running" is not "working".
-  2. **Back off, then stop.** Restarting flat out forever turns one fault into
-     a thrash that hides the cause. Delays grow, and after enough failures it
-     gives up and says why -- a supervisor that never quits makes a permanent
-     fault invisible.
+  2. **Back off, then keep trying slowly.** Restarting flat out forever turns
+     one fault into a thrash that hides the cause, so the delays grow. But a
+     supervisor that gives up turns a blip into an outage that lasts until a
+     person notices: on 2026-09-16 a two-second probe timed out against a
+     server that was answering every request, the supervisor killed it, four
+     restarts in 48 seconds did not come up, and it exited -- Settings sat on
+     "not responding" for an hour. Now the ladder ends in a steady retry
+     every minute, forever, each one logged with its count, and a probe that
+     fails is confirmed with a longer one before anything is killed. A
+     permanent fault is still visible: it is the line that keeps repeating.
   3. **Reap before respawning.** The probe fires for a wedged process as well
      as a dead one, and spawning beside a wedged instance leaves it holding
      the port, so every replacement dies on "Address already in use".
@@ -43,6 +49,9 @@ HEALTH = f"http://127.0.0.1:{PORT}/health"
 
 POLL_S = 3.0
 BACKOFF_S = (1, 2, 5, 10, 30)
+STEADY_S = 60          # after the ladder: retry at this interval, forever
+PROBE_S = 2.0          # the routine probe
+CONFIRM_S = 10.0       # the second look before a failed probe counts
 START_TIMEOUT_S = 30.0
 
 _child: subprocess.Popen | None = None
@@ -108,6 +117,54 @@ def wait_until_healthy(deadline: float) -> bool:
     return False
 
 
+def answering() -> bool:
+    """The routine probe, confirmed before it counts.
+
+    A probe that times out is not a death: a server busy with a slow request
+    answers late, not never. So a failed 2s probe is followed by one 10s look
+    before the supervisor concludes anything -- the cost of being wrong the
+    other way is killing a healthy server, which is what happened.
+    """
+    return healthy(timeout=PROBE_S) or healthy(timeout=CONFIRM_S)
+
+
+def next_delay(failures: int) -> float:
+    """Seconds to wait before restart number `failures + 1`: up the ladder,
+    then the steady interval, forever."""
+    return BACKOFF_S[failures] if failures < len(BACKOFF_S) else STEADY_S
+
+
+def supervise(iterations: int | None = None) -> None:
+    """The loop: probe, and restart when the backend stops answering.
+
+    Never returns on its own. `iterations` bounds it for tests.
+    """
+    global _child
+    failures = 0
+    n = 0
+    while iterations is None or n < iterations:
+        n += 1
+        time.sleep(POLL_S)
+        if answering():
+            if failures:
+                _log(f"backend back after {failures} restart{'s' if failures != 1 else ''}")
+            failures = 0
+            continue
+        delay = next_delay(failures)
+        failures += 1
+        if failures <= len(BACKOFF_S):
+            _log(f"not answering; restart {failures} in {delay:g}s")
+        else:
+            _log(f"still not answering after {failures - 1} restarts; trying again in "
+                 f"{delay:g}s -- run `make doctor`; if imports FAIL the fault is in the code")
+        time.sleep(delay)
+        reap()
+        try:
+            _child = spawn()
+        except Exception as e:              # noqa: BLE001
+            _log(f"restart failed: {type(e).__name__}: {e}")
+
+
 def main() -> int:
     global _child
 
@@ -130,27 +187,8 @@ def main() -> int:
         reap()
         return 1
     _log(f"backend up on :{PORT}")
-
-    failures = 0
-    while True:
-        time.sleep(POLL_S)
-        if healthy():
-            failures = 0
-            continue
-        if failures >= len(BACKOFF_S):
-            _log("backend will not stay up; giving up. Run `make doctor` — if "
-                 "imports FAIL the fault is in the code, not the supervisor.")
-            reap()
-            return 1
-        delay = BACKOFF_S[failures]
-        failures += 1
-        _log(f"not answering; restart {failures} in {delay}s")
-        time.sleep(delay)
-        reap()
-        try:
-            _child = spawn()
-        except Exception as e:              # noqa: BLE001
-            _log(f"restart failed: {type(e).__name__}: {e}")
+    supervise()
+    return 0
 
 
 if __name__ == "__main__":

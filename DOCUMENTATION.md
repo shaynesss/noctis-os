@@ -337,10 +337,17 @@ launch-at-login, which are load-bearing for an app whose whole premise is
 being one keystroke away. Closing hides rather than quits.
 
 **Supervision.** `backend/supervise.py` polls `/health` rather than the
-process table, because a process can be alive and wedged. It backs off 1s→30s
-and then gives up with a reason, because a supervisor that never quits makes a
-permanent fault invisible. It reaps before respawning, because the probe fires
-for a wedged process too and spawning beside one leaves it holding the port.
+process table, because a process can be alive and wedged. A probe that fails
+is confirmed with a longer one (2s, then 10s) before anything is killed,
+because a server busy with a slow request answers late, not never. It backs
+off 1s→30s and then keeps trying every minute, forever, each attempt logged
+with its count — it used to give up after the ladder, and on 2026-09-16 that
+turned a two-second stall into an hour with nothing on the port. A permanent
+fault is still visible: it is the line that keeps repeating in
+`runtime/dev.log`. It reaps before respawning, because the probe fires for a
+wedged process too and spawning beside one leaves it holding the port.
+`make reload` covers both states: supervisor running, it kills uvicorn and
+lets it come back; supervisor gone, it starts one detached.
 
 **The supervisor and `--reload` cannot coexist**, which is why each path has
 exactly one: a reload is indistinguishable from a death to a health probe, so
@@ -440,7 +447,7 @@ Start with `make doctor`. It answers most of this in three lines.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| App loads, nothing responds | Backend is *absent*, not broken. Under `make dev` the supervisor should have caught it; under `make browser` there is no supervisor, so a dead backend leaves Vite serving a UI pointed at a closed port. | `make reload` — kills uvicorn so the supervisor restarts it on current code, keeping the frontend's state |
+| App loads, nothing responds | Backend is *absent*, not broken. Under `make dev` the supervisor should have caught it; under `make browser` there is no supervisor, so a dead backend leaves Vite serving a UI pointed at a closed port. | `make reload` — kills uvicorn so the supervisor restarts it on current code, keeping the frontend's state; if the supervisor itself is gone, starts one |
 | `make doctor` says `imports FAIL` | A real code error | `cd backend && .venv/bin/python -c "import main"` and read the traceback |
 | `capabilities` shows a `GAP` | A methodology references a tool this machine cannot reach | Install it, or amend the methodology — do not leave it |
 | A session asks permission for `vault_search` | The shared allowlist did not reach the spawn | `ps -axo args \| grep -- --settings` |

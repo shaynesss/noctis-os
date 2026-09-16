@@ -9,6 +9,21 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The supervisor keeps trying (2026-09-16)
+
+- **It no longer gives up.** `backend/supervise.py` backs off 1s→30s and
+  then retries every minute, forever, each attempt logged with its count.
+  It used to exit after the ladder, and at 12:24 today that turned a
+  two-second stall into an hour with nothing on port 8000: every Settings
+  and Stats card read "not responding" until someone looked.
+- **A slow answer is not a death.** A failed 2s probe is confirmed with a
+  10s one before anything is killed — the server that was reaped today was
+  answering every request.
+- **`make reload` starts the supervisor if it is gone**, detached, logging
+  to `backend/runtime/dev.log`; with the supervisor alive it kills uvicorn
+  as before. Four tests in `tests/test_supervise.py`; verified live on all
+  three paths.
+
 ### The file system, written down (2026-09-16)
 
 - **README gains "The file system"**: the `~/Developer` tree Noctis relies
