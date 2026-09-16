@@ -545,6 +545,16 @@ def _project_notes(root: Path, project_newest_at: int | None = None) -> dict | N
     notes["cwds"] = []
     notes["files"] = _record_files(vault, paths, merged, notes["dirty"], unpushed)
     notes["trails"] = _record_trails(project_newest_at, merged)
+    # The record's figures are the record's, not the vault's (2026-09-16):
+    # "not on GitHub" counts the record's own unpushed commits, the way
+    # `dirty` already counts only files under the notes paths. The vault's
+    # whole count sat beside a Record fold listing three and read as a
+    # contradiction. A push is still the repository's -- git pushes history,
+    # not paths -- so the vault's count rides along as `vault_ahead` for the
+    # button to say so. Bounded by the sixty-commit window the union reads.
+    notes["vault_ahead"] = notes["ahead"]
+    if notes["upstream"]:
+        notes["ahead"] = sum(1 for c in merged if not c["pushed"])
     return notes
 
 

@@ -9,6 +9,19 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The lid, then two blocks that open with their path (2026-09-16)
+
+- **The lid is name, branch, sprites, link — no path.** Each block under
+  it opens with the full path of what it is about: the repository, then
+  the record's (`<vault>/<notes_path>`). Same figures, files and Commits
+  fold in both; the record's fold is called Commits too, and shows the
+  record by file.
+- **The record's figures are the record's.** "5 not on GitHub" beside a
+  fold listing three was two counts of different things. `ahead` on the
+  record now counts the record's own unpushed commits and the button says
+  "push 3"; the vault's five ride along as `vault_ahead` in the button's
+  title, because a push is the repository's.
+
 ### One anatomy, twice (2026-09-16)
 
 - **A module is a lid, figures, uncommitted files, and a fold with the

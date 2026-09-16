@@ -81,7 +81,10 @@ export interface RepoInfo {
    *  by file (2026-09-15): each with the commit that last touched it, or
    *  none for a file never committed; `trails` is how far the newest
    *  record commit sits behind the newest project commit, in seconds. */
-  notes?: (RepoInfo & { paths: string[]; files: RecordFile[]; trails: RecordTrails | null }) | null
+  notes?: (RepoInfo & { paths: string[]; files: RecordFile[]; trails: RecordTrails | null; vault_ahead: number | null }) | null
+  /** On a record: the whole vault's unpushed count, since a push is the
+   *  repository's; `ahead` is the record's own. */
+  vault_ahead?: number | null
 }
 
 export interface RecordFile { path: string; dirty: boolean; commit: RepoInfo['commits'][number] | null }
@@ -475,6 +478,7 @@ function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
         </>
       ) : state === 'done' ? null : (
         <button type="button" disabled={state === 'pushing'}
+                title={r.vault_ahead != null && r.vault_ahead !== ahead ? `a push is the whole repository's: ${r.vault_ahead} commits leave, ${ahead} of them this record's` : undefined}
                 onClick={() => (diverged ? setState('confirm-force') : void run(false))}
                 className="rounded-control px-[9px] py-[2px] text-ink transition-opacity hover:opacity-90 disabled:opacity-40"
                 style={{ background: 'var(--color-sig)', outline: diverged ? '1px solid var(--color-faber)' : undefined }}>
@@ -584,21 +588,26 @@ const Legend = () => (
  * commits, the record (for a dev job's project), GitHub -- each a fold
  * inside the same border, so the grouping is the box and not the reader's
  * inference. */
-/* The lid of a block: name, branch, an optional note (the record's notes
- * path), the terminals in it, the GitHub link, and the path underneath. */
-function Lid({ name, branch, slug, chips, path, note }: {
-  name: string; branch: string | null; slug: string | null; chips?: React.ReactNode; path?: string; note?: string
-}) {
+/* The lid: name, branch, the terminals in it, the GitHub link. No path
+ * -- that opens the block under it (2026-09-16). */
+function Lid({ name, branch, slug, chips }: { name: string; branch: string | null; slug: string | null; chips?: React.ReactNode }) {
   return (
-    <div className="px-4 py-[9px]">
-      <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[4px]">
-        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{name}</span>
-        <span className="font-mono text-[11px] text-ink-faint">· {branch ?? 'detached'}</span>
-        {note && <span className="font-mono text-[11px] text-ink-faint">· {note}</span>}
-        {chips}
-        {slug && <Ext href={`https://github.com/${slug}`} className="ml-auto font-mono text-[11px] text-ink-dim hover:text-ink">{slug} ↗</Ext>}
-      </div>
-      {path && <div className="mt-[3px] truncate font-mono text-[11px] text-ink-faint" title={path}>{path}</div>}
+    <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[4px] px-4 py-[10px]">
+      <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{name}</span>
+      <span className="font-mono text-[11px] text-ink-faint">· {branch ?? 'detached'}</span>
+      {chips}
+      {slug && <Ext href={`https://github.com/${slug}`} className="ml-auto font-mono text-[11px] text-ink-dim hover:text-ink">{slug} ↗</Ext>}
+    </div>
+  )
+}
+
+/* The row that opens a block: the full path of what the block is about,
+ * and for the record the vault's link, since the record has no lid. */
+function PathRow({ path, slug }: { path: string; slug?: string | null }) {
+  return (
+    <div className="flex items-baseline gap-[10px] border-t border-line px-4 py-[8px] font-mono text-[11px] text-ink-faint">
+      <span className="min-w-0 flex-1 truncate" title={path}>{path}</span>
+      {slug && <Ext href={`https://github.com/${slug}`} className="shrink-0 text-ink-dim hover:text-ink">{slug} ↗</Ext>}
     </div>
   )
 }
@@ -637,8 +646,9 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
    * here: tried on the modules 2026-09-15, wrong against the folds. */
   return (
     <section className="flex flex-col rounded-card border border-line bg-surface">
-      <Lid name={r.name} branch={r.branch} slug={r.slug} path={r.root}
-           chips={terminals.map((t) => <TerminalChip key={t.id} t={t} />)} />
+      <Lid name={r.name} branch={r.branch} slug={r.slug} chips={terminals.map((t) => <TerminalChip key={t.id} t={t} />)} />
+
+      <PathRow path={r.root} />
       <Figures r={r} />
       <Dirty files={r.dirty} />
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
@@ -649,19 +659,17 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
 
       {rec && (
         <>
-          <div className="border-t border-line bg-elevated/30">
-            <Lid name={rec.name} branch={rec.branch} slug={rec.slug} note={rec.paths[0]} />
-          </div>
+          {/* The record: the same block, for the notes path. Its figures are
+              the record's own -- the vault's whole count beside a fold of
+              three read as a contradiction -- and its fold is called Commits
+              too, since it is the same shape: the record's commits, shown by
+              the file each last touched. */}
+          <PathRow path={`${rec.root}/${rec.paths[0]}`} slug={rec.slug} />
           <Figures r={rec} />
           <Dirty files={rec.dirty} />
-          <Fold title="Record" meta={plural(rec.files.length, 'file')}
+          <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub · ${plural(rec.files.length, 'file')}` : `${rec.commits.length}, all on GitHub · ${plural(rec.files.length, 'file')}`}
                 open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}
                 right={<PushButton r={rec} onPushed={onChanged} />}>
-            {/* By file, not by commit (2026-09-15): the vault's own module
-                lists the commits; this fold says whether the writing about
-                the project is current -- one row per record file, and how
-                far the record trails the code. The push is the whole
-                vault's: a repository pushes as one. */}
             <div className="border-t border-line px-4 py-[8px] text-[12px] leading-[1.5] text-ink-dim">{trailsLine(rec.trails)}</div>
             <FileList files={rec.files} />
           </Fold>

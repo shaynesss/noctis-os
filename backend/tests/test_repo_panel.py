@@ -419,3 +419,31 @@ def test_the_record_reads_by_file_and_says_how_far_it_trails_the_code(tmp_path, 
     assert t["behind"] >= 1 and t["project_at"] == r["commits"][0]["at"] and t["record_at"] == n["commits"][0]["at"], t
     # The vault as its own repository carries no record of its own.
     assert _one(client, auth_headers, vault)["notes"] is None
+
+
+def test_the_records_figures_are_the_records_not_the_vaults(tmp_path, monkeypatch, client, auth_headers):
+    """The vault may be five commits ahead while only two of them touch the
+    project's record. The record block says two; the vault's five ride
+    along as `vault_ahead`, because a push is the repository's."""
+    project = _repo(tmp_path, "proj")
+    vault = _repo(tmp_path, "vault")
+    (vault / "wiki" / "Proj").mkdir(parents=True); (vault / "other.md").write_text("x")
+    (vault / "wiki" / "Proj" / "SPEC.md").write_text("spec")
+    subprocess.run(["git", "add", "-A"], cwd=vault, check=True); _commit(vault, "spec and other")
+    # A bare "origin" the vault is ahead of, so ahead/behind are real numbers.
+    origin = tmp_path / "origin.git"; subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+    subprocess.run(["git", "remote", "add", "origin", str(origin)], cwd=vault, check=True)
+    subprocess.run(["git", "push", "-q", "-u", "origin", "HEAD"], cwd=vault, check=True, capture_output=True)
+    for i in range(3):
+        (vault / "other.md").write_text(f"x{i}"); subprocess.run(["git", "add", "-A"], cwd=vault, check=True); _commit(vault, f"other {i}")
+    for i in range(2):
+        (vault / "wiki" / "Proj" / "SPEC.md").write_text(f"spec {i}"); subprocess.run(["git", "add", "-A"], cwd=vault, check=True); _commit(vault, f"spec {i}")
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    monkeypatch.setattr(panels, "_gh", lambda *a, **k: None)
+    monkeypatch.setattr(panels.vault_io, "get_vault_path", lambda: vault)
+    monkeypatch.setattr("jobs.find_job_for_cwd", lambda mode, cwd: "proj" if Path(str(cwd)).resolve() == project.resolve() else None)
+    monkeypatch.setattr("jobs.job_notes_paths", lambda mode, slug: ["wiki/Proj"])
+    n = _one(client, auth_headers, project)["notes"]
+    assert n["vault_ahead"] == 5, "the whole vault is five ahead"
+    assert n["ahead"] == 2, "the record is two ahead -- the two commits that touch it"
+    assert sum(1 for c in n["commits"] if not c["pushed"]) == 2
