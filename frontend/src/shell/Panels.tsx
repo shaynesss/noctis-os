@@ -411,7 +411,7 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
    * a repository" told the reader nothing they could act on here. */
   const many = groups.length > 1
   return (
-    <div className="grid items-stretch gap-6"
+    <div className="grid items-start gap-6"
          style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
       {groups.map((r) => (
         <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
@@ -508,7 +508,7 @@ function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
           <span>{title}</span>
           {meta && <span className="font-normal normal-case tracking-normal text-ink-faint">· {meta}</span>}
         </button>
-        {right && <span className="flex shrink-0 flex-col items-center gap-[6px] py-[6px] pr-4 font-mono text-[11px]">{right}</span>}
+        {right && <span className="flex shrink-0 flex-col items-center justify-center gap-[6px] py-[6px] pr-4 font-mono text-[11px]">{right}</span>}
       </div>
       {open && !empty && children}
     </div>
@@ -611,7 +611,7 @@ function Stand({ path, r }: { path: string; r: RepoInfo }) {
   const unpushed = r.ahead ?? 0
   return (
     <div className="border-t border-line px-4 py-[8px] font-mono">
-      <div className="truncate text-[11px] text-ink-faint" title={path}>{path}</div>
+      <div className="truncate text-[11px] font-bold text-ink" title={path}>{path}</div>
       <div className="mt-[6px] flex flex-wrap items-center gap-x-[14px] gap-y-[4px] text-[11.5px]">
         {r.upstream ? (
           <>
@@ -651,7 +651,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
       <Dirty files={r.dirty} />
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
             open={commitsOpen} onToggle={() => toggle('code')}
-            right={<><PushButton r={r} onPushed={onChanged} /><span className={commitsOpen ? '' : 'invisible'}><Legend /></span></>}>
+            right={<><PushButton r={r} onPushed={onChanged} /><span className={commitsOpen ? '' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
         <CommitList commits={r.commits} />
       </Fold>
 
@@ -666,7 +666,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
           <Dirty files={rec.dirty} />
           <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}, all on GitHub`}
                 open={recordOpen} onToggle={() => toggle('record')}
-                right={<><PushButton r={rec} onPushed={onChanged} /><span className={recordOpen ? '' : 'invisible'}><Legend /></span></>}>
+                right={<><PushButton r={rec} onPushed={onChanged} /><span className={recordOpen ? '' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
             <FileList files={rec.files} />
           </Fold>
         </>
