@@ -31,11 +31,28 @@ export function usePill(active: string | null) {
   const [pill, setPill] = useState<PillRect | null>(null)
   const key = hover ?? active
   useLayoutEffect(() => {
-    const target = key ? rows.current[key] : null
-    const box = list.current
-    if (!target || !box) { setPill(null); return }
-    const t = target.getBoundingClientRect(), b = box.getBoundingClientRect()
-    setPill({ top: t.top - b.top, left: t.left - b.left, width: t.width, height: t.height })
+    const measure = () => {
+      const target = key ? rows.current[key] : null
+      const box = list.current
+      if (!target || !box) { setPill(null); return }
+      const t = target.getBoundingClientRect(), b = box.getBoundingClientRect()
+      setPill({ top: t.top - b.top, left: t.left - b.left, width: t.width, height: t.height })
+    }
+    measure()
+    // The pill was measured once, on the key changing, and the rows moved
+    // under it afterwards (2026-09-16): the strip centres its tabs, so any
+    // tab changing width -- the monospace font arriving, a split button
+    // appearing on the tab that stopped being the showing one -- shifts
+    // every other tab, and the pill stayed where the tab had been. It now
+    // follows every size change of the box and of any row, and the font.
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    if (ro) {
+      if (list.current) ro.observe(list.current)
+      for (const el of Object.values(rows.current)) if (el) ro.observe(el)
+    }
+    window.addEventListener('resize', measure)
+    void document.fonts?.ready.then(measure)
+    return () => { ro?.disconnect(); window.removeEventListener('resize', measure) }
   }, [key])
   return {
     list, hover, pill,
