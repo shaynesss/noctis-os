@@ -76,6 +76,65 @@ The engine's rolling **5-hour and 7-day windows** — the real currency on a sub
 
 Three things that are true until you change them. **Maintenance:** nightshift's last run — nightly at 03:00, said as one sentence with how many nights in a row have ended the same way — and the proposals it staged, as packages: the sender's sprite, what the change is, what accepting does, the full rationale, evidence and a red/green diff on demand. **Accepting applies the diff** — all hunks or none — archives the proposal, and commits the vault; rejecting archives it. Maintenance itself never edits a methodology; the person accepting is the edit. A job gone stale becomes a proposal here too, which is how loose ends come back round. **Prompts:** the prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault (saved uncommitted; the Repo tab commits them). Beside them, the **regression suite**: thirteen cases, each a mode, a prompt and a deterministic assertion guarding one rule — the attribution rule, the Confusion Protocol, plan-before-code, mode identity. Run from the card, scoped to what an edit can affect: an overlay runs its mode's cases, `system.md` runs all of them, and the cost in sessions is stated before the click. Each case keeps its last result against the prompt it ran on, so a result the prompt has since moved past shows as stale rather than as a pass; a failing case reruns once before it counts.
 
+## The file system
+
+Noctis relies on one directory tree, `~/Developer`, and every path it reads is relative to it. It is a native file tree — not an Obsidian vault, though it keeps a linked system's principles (wikilinks, one page per thing, an index) and Obsidian can open it as a viewer. The line at the root is **publish tier**; nothing at the root itself is versioned, so each folder's `README.md` says what it is for.
+
+```mermaid
+flowchart TB
+    subgraph DEV["~/Developer — one native file tree"]
+        direction LR
+        subgraph PUB["public · pushes to GitHub"]
+            NOS["noctis-os/<br/>the system"]
+            PRJ["projects/<br/>what ships · one repo each"]
+        end
+        subgraph PRV["private"]
+            SB["second-brain/<br/>the knowledge base"]
+            PV["private/<br/>the restricted tier · placeholder"]
+        end
+    end
+    subgraph SBI["second-brain/ — three kinds of thing"]
+        direction LR
+        INS["instructions<br/>prompts/ · modes/*/mode.md · agents/"]
+        STA["state<br/>state.md · lessons.md · jobs/*/context.md · maintenance/"]
+        KNW["knowledge<br/>wiki/ · log.md · index.md"]
+    end
+    NOS -- "symlink · argv · polls" --> INS
+    NOS -- "reads on a poll · writes on accept" --> STA
+    NOS -- "MCP retrieval · Record fold" --> KNW
+    PRJ -. "project_path ↔ notes_path<br/>in jobs/slug/context.md" .-> STA
+    SB --- SBI
+```
+
+| Folder | What | Tier | Remote |
+|---|---|---|---|
+| `noctis-os/` | this repository: the interface, the backend, the MCP server, the nightly runner. Outside `projects/` because it is what reads every other folder, and its path is baked into the launchd plist, Claude Code's per-project memory and `.env`. | public | `shaynesss/noctis-os` |
+| `projects/` | one directory and one repo per project that ships; `archive/` for what is finished. The folder itself is unversioned. | public | one per project |
+| `second-brain/` | the knowledge base — the brain in the diagram above | private | `shaynesss/second-brain` |
+| `private/` | only what cannot sit in `second-brain` at all: third-party confidences, personal reflection. A placeholder until something belongs there. | private | none yet |
+
+**A project is three things that share a name**, and the job context is the join:
+
+| Where | What | Named in |
+|---|---|---|
+| `projects/<slug>/` | the code | `context.md` as `project_path` |
+| `second-brain/wiki/<Title>/` | the record: Overview, Decision Log, Spec, briefs | `context.md` as `notes_path` |
+| `second-brain/modes/dev/jobs/<slug>/context.md` | the state: stage, status, where the work was left | — |
+
+A Faber session opened in a project directory receives that job's context in its argv, writes code to the project and the record to the vault, and the Repo view shows both halves under one module: the code's commits, and the record by file.
+
+**Inside `second-brain/`, three kinds of thing**, and the folder says which. *Instructions* the machine hands to sessions: `prompts/system.md` is `~/.claude/CLAUDE.md` by symlink, so every Claude Code session on the machine reads it; a session Noctis hosts also gets its mode's overlay (`prompts/overlays/<mode>.md`, pointing at `modes/<mode>/<mode>.md`), its subagents (`modes/<mode>/agents/`) and the tail of its job context, all in the argv; `maintenance/` is the same shape at the root because maintenance is infrastructure, not a mode. *State* the machine reads and sessions write: `modes/*/state.md`, `lessons.md`, `jobs/*/context.md`, `maintenance/state.md` and `inbox/`. *Knowledge* only sessions and retrieval read: `wiki/` (a folder per project, flat pages for everything else), `log.md`, `index.md`. The schema that decides which is which is the vault's own `CLAUDE.md`.
+
+| Reader | Reads |
+|---|---|
+| Every Claude Code session on the machine | `prompts/system.md` via the symlink; the `CLAUDE.md` of the directory it opened in |
+| A session Noctis hosts, at launch | its overlay, its agents, the tail of its job context — all in the argv |
+| A session, because a rule tells it to | its methodology, its `lessons.md`, the vault schema, the job's notes folder |
+| The backend, on a poll | `modes/*/state.md`, `lessons.md`, `jobs/*/context.md`, `maintenance/state.md`, `maintenance/inbox/` |
+| The nightly runner | `maintenance/schedule.md`, `maintenance/agents/distiller.md`, each mode's declared slack |
+| The MCP server's retrieval | every `.md` under `second-brain/` except `eval/` |
+| Nobody automated | the vault's `README.md` and `index.md`, `design-lodge/`, `raw/`, `skills/`, `private/` |
+
 ## Architecture
 
 ```mermaid

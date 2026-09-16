@@ -9,6 +9,20 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The file system, written down (2026-09-16)
+
+- **README gains "The file system"**: the `~/Developer` tree Noctis relies
+  on, as a diagram and a map — four folders by publish tier, a project as
+  three things joined by its job context, the vault's three kinds of
+  content, and who reads what. `~/Developer/README.md` and
+  `projects/README.md` written; the vault's `README.md`, `CLAUDE.md`
+  Structure section and `prompts/README.md` rewritten to the same map.
+- **Retired for real**: WORKING-CONTEXT.md (job contexts replaced it
+  2026-07-20; every page that named it as live state repointed), the v1
+  scratch directory (`~/Developer/.scratch/` removed; dev.md's Plan and
+  Setup wording proposed), two Playwright screenshots tracked at
+  `frontend/`. `candles` moved to `projects/archive/`.
+
 ### The record by file, and the vault by folder (2026-09-15, night)
 
 - **The Record fold reads by file, not by commit.** One row per record file
