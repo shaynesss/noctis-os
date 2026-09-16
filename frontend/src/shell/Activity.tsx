@@ -101,34 +101,38 @@ export function Activity(
 
         {/* Wide content scrolls inside its own container so the app body never
             scrolls sideways. */}
-        <div className="overflow-x-auto pb-[2px]">
-          <div className="inline-grid grid-cols-[auto_1fr] gap-x-[7px] gap-y-[5px] font-mono text-[9px] text-ink-faint">
-            <div />
-            <div className="grid h-3 auto-cols-[13px] grid-flow-col">
-              {weeks.map((_, w) => (
-                <span key={w} className="whitespace-nowrap">
-                  {monthLabel(w)}
-                </span>
-              ))}
-            </div>
+        {/* The cells size from the card, not from a fixed 13px (2026-09-16):
+            one column per week across the full width, each cell square, so
+            the grid fills whatever width the card is given instead of
+            leaving a third of it dark. The day labels share the grid's rows
+            so they stay level with the cells at any size. */}
+        <div className="grid grid-cols-[auto_1fr] gap-x-[7px] gap-y-[5px] font-mono text-[9px] text-ink-faint">
+          <div />
+          <div className="grid h-3" style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))` }}>
+            {weeks.map((_, w) => (
+              <span key={w} className="whitespace-nowrap">
+                {monthLabel(w)}
+              </span>
+            ))}
+          </div>
 
-            <div className="grid grid-rows-[repeat(7,13px)] items-center pr-px text-right">
-              {['', 'Mon', '', 'Wed', '', 'Fri', ''].map((d, i) => (
-                <span key={i}>{d}</span>
-              ))}
-            </div>
-            <div className="grid auto-cols-[13px] grid-flow-col grid-rows-[repeat(7,13px)]">
-              {weeks.flatMap((col, w) =>
-                col.map((c, d) => (
-                  <div
-                    key={`${w}-${d}`}
-                    title={`${c.count || 'No'} session${c.count === 1 ? '' : 's'} · ${c.date.toDateString().slice(4)}`}
-                    className="h-[10px] w-[10px] rounded-[2px]"
-                    style={{ background: level(c.count), visibility: c.future ? 'hidden' : undefined }}
-                  />
-                )),
-              )}
-            </div>
+          <div className="grid grid-rows-[repeat(7,minmax(0,1fr))] items-center pr-px text-right">
+            {['', 'Mon', '', 'Wed', '', 'Fri', ''].map((d, i) => (
+              <span key={i}>{d}</span>
+            ))}
+          </div>
+          <div className="grid grid-flow-col gap-[3px]"
+               style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))`, gridTemplateRows: 'repeat(7, auto)' }}>
+            {weeks.flatMap((col, w) =>
+              col.map((c, d) => (
+                <div
+                  key={`${w}-${d}`}
+                  title={`${c.count || 'No'} session${c.count === 1 ? '' : 's'} · ${c.date.toDateString().slice(4)}`}
+                  className="aspect-square w-full rounded-[2px]"
+                  style={{ background: level(c.count), visibility: c.future ? 'hidden' : undefined }}
+                />
+              )),
+            )}
           </div>
         </div>
       </div></Beam>

@@ -7,7 +7,7 @@
  * here -- counts composed into sentences, no model in the loop -- and then
  * what is waiting on you.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Unreachable } from './Async'
 import { Pools, type PoolTone } from './Pools'
 import { get, post, put } from './engine'
@@ -410,11 +410,20 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
    * every mode starts in a repository now, and a section saying "not in
    * a repository" told the reader nothing they could act on here. */
   const many = groups.length > 1
+  /* Modules in a row share a height while every fold is closed, so the
+   * row reads as equals. The moment one opens a fold the row lets each
+   * take its own height (2026-09-16): stretching the others to a list
+   * they do not have put a screen of empty card beside it. */
+  const [opened, setOpened] = useState<Set<string>>(() => new Set())
+  const onOpenChange = useCallback((root: string, has: boolean) => setOpened((s) => {
+    if (s.has(root) === has) return s
+    const n = new Set(s); if (has) n.add(root); else n.delete(root); return n
+  }), [])
   return (
-    <div className="grid items-stretch gap-6"
+    <div className={`grid gap-6 ${opened.size ? 'items-start' : 'items-stretch'}`}
          style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
       {groups.map((r) => (
-        <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
+        <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged} onOpenChange={onOpenChange}
                     terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
       ))}
     </div>
@@ -508,7 +517,7 @@ function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
           <span>{title}</span>
           {meta && <span className="font-normal normal-case tracking-normal text-ink-faint">· {meta}</span>}
         </button>
-        {right && <span className="flex shrink-0 flex-col items-center justify-center gap-[6px] py-[6px] pr-4 font-mono text-[11px]">{right}</span>}
+        {right && <span className="flex shrink-0 flex-col items-center justify-center py-[6px] pr-4 font-mono text-[11px]">{right}</span>}
       </div>
       {open && !empty && children}
     </div>
@@ -627,10 +636,13 @@ function Stand({ path, r }: { path: string; r: RepoInfo }) {
   )
 }
 
-function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void }) {
+function RepoModule({ r, terminals, folded, onChanged, onOpenChange }: {
+  r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void; onOpenChange?: (root: string, has: boolean) => void
+}) {
   // One Commits fold open at a time: opening the record's closes the
   // code's and back (2026-09-16), so the card never holds two long lists.
   const [open, setOpen] = useState<'code' | 'record' | null>(folded ? null : 'code')
+  useEffect(() => { onOpenChange?.(r.root, open !== null) }, [open, r.root, onOpenChange])
   const commitsOpen = open === 'code', recordOpen = open === 'record'
   const toggle = (which: 'code' | 'record') => setOpen((o) => (o === which ? null : which))
   const [githubOpen, setGithubOpen] = useState(false)
@@ -647,11 +659,15 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
     <section className="flex flex-col rounded-card border border-line bg-surface">
       <Lid name={r.name} branch={r.branch} slug={r.slug} chips={terminals.map((t) => <TerminalChip key={t.id} t={t} />)} />
 
+      {/* The blocks sit centred between the lid and GitHub (2026-09-16):
+          in a row of equal heights, a shorter card's spare space splits
+          above and below its blocks rather than pooling under them. */}
+      <div className="my-auto">
       <Stand path={r.root} r={r} />
       <Dirty files={r.dirty} />
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
             open={commitsOpen} onToggle={() => toggle('code')}
-            right={<><PushButton r={r} onPushed={onChanged} /><span className={commitsOpen ? '' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
+            right={<><PushButton r={r} onPushed={onChanged} /><span className={commitsOpen ? 'mt-[6px]' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
         <CommitList commits={r.commits} />
       </Fold>
 
@@ -666,16 +682,14 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
           <Dirty files={rec.dirty} />
           <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}, all on GitHub`}
                 open={recordOpen} onToggle={() => toggle('record')}
-                right={<><PushButton r={rec} onPushed={onChanged} /><span className={recordOpen ? '' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
+                right={<><PushButton r={rec} onPushed={onChanged} /><span className={recordOpen ? 'mt-[6px]' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
             <FileList files={rec.files} />
           </Fold>
         </>
       )}
 
-      {/* Pinned to the bottom (2026-09-16): modules in a row share a
-          height, and the space a shorter one has goes above this fold, not
-          under it, so every card ends on the same row. */}
-      <div className="mt-auto">
+      </div>
+      <div>
       <Fold title="GitHub" meta={r.slug ? r.slug : `not available: ${r.github_reason ?? 'unknown'}`}
             open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>
         {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
