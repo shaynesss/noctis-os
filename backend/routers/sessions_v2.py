@@ -38,7 +38,6 @@ class Windows:
     five_hour_resets_at: int
     seven_day_used: float
     seven_day_resets_at: int
-    using_overage: bool = False
 
 
 _limits: Windows | None = None
@@ -223,7 +222,6 @@ async def statusline(payload: dict, mode: str | None = None,
                 five_hour_resets_at=int(five.get("resets_at") or 0),
                 seven_day_used=float(seven.get("used_percentage") or 0) / 100,
                 seven_day_resets_at=int(seven.get("resets_at") or 0),
-                using_overage=bool(payload.get("using_overage", False)),
             )
         except (TypeError, ValueError):
             pass  # a window whose numbers are not numbers is no reading
@@ -259,17 +257,24 @@ def statusline_all() -> dict:
 
 @router.get("/limits")
 def limits() -> dict:
-    """The rolling windows, or nulls before any session has reported them.
+    """The rolling windows, or nulls before any session has reported them,
+    and any model the engine is currently refusing.
 
     Nulls rather than zeros: zero utilisation and "not yet known" would
     otherwise render identically, and the difference decides whether there
     is room to start another session.
+
+    `refused` is the other half of "can I work right now", and the windows
+    cannot answer it: on 2026-09-16 Fable 5.1 returned 429 "You're out of
+    usage credits" while the 7-day window read 51%. The interface showed
+    nothing, because its one alarm read a `using_overage` key the status
+    line has never sent -- so that field is gone and this one is measured.
     """
     global _limits_seen
     lim = _limits
+    refused = jsonl.refusals()
     if lim is None:
-        return {"known": False, "five_hour": None, "seven_day": None,
-                "using_overage": False}
+        return {"known": False, "five_hour": None, "seven_day": None, "refused": refused}
     # When this reading arrived, tracked by identity so it is right whichever
     # door it came through -- a stream event replaces the object, a status
     # line replaces the object, and either way a new object is a new reading.
@@ -283,8 +288,12 @@ def limits() -> dict:
         "known": True,
         "five_hour": {"used": lim.five_hour_used, "resets_at": lim.five_hour_resets_at},
         "seven_day": {"used": lim.seven_day_used, "resets_at": lim.seven_day_resets_at},
-        "using_overage": lim.using_overage,
         "reported_at": _limits_seen[1],
+        # What the engine is currently refusing, which the windows above do
+        # not cover: a model can be out of usage credits while the
+        # subscription's own windows sit at half. Read from the transcripts,
+        # because the status line has never carried it (2026-09-16).
+        "refused": refused,
     }
 
 

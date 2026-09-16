@@ -426,11 +426,18 @@ def test_billing_says_plainly_that_nothing_is_charged(client):
     assert body["basis"] == "api-list-price"
 
 
-def test_limits_report_overage_even_before_anything_is_known(client):
-    """Overage is the one signal here that can mean money, so its absence
-    must be explicit rather than a missing key the UI reads as undefined."""
+def test_limits_say_what_is_refused_even_before_a_window_is_known(client, tmp_path, monkeypatch):
+    """A refused model is the one signal here that can stop the work, so its
+    absence must be explicit rather than a missing key the UI reads as
+    undefined. Pinned to an empty transcripts directory: without it this
+    reads the real machine's, and it found a live refusal the day it was
+    written."""
+    from orchestrator import jsonl
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    monkeypatch.setattr(jsonl, "_limit_cache", None)
+    monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
     body = client.get("/v2/sessions/limits", headers=AUTH).json()
-    assert body["using_overage"] is False
+    assert body["refused"] == []
 
 
 def test_billing_requires_auth(client):

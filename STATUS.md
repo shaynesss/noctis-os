@@ -25,6 +25,7 @@ Verified live, not only by tests.
 - **Nightshift**: nightly at 03:00 under `launchd`. Its first step is the staleness pass (a job untouched six hours with no clean session end is flagged in its own context); then the scan, which stages a status note for each flagged job and a distillation draft for each mode with undistilled lessons, into `maintenance/inbox/` where Settings reads. Its first run since the PATH fix, 2026-09-16 03:04, completed and recorded `quiet`.
 - **MCP server**: five tools against the real vault, stdio, no third-party dependencies (it imports `retrieval/` and `jobs.py` from beside it), usable from any MCP client; registered at user scope so every session on the machine has `vault_search`.
 - **Shell**: Tauri 2, Opt+Space summon, tray, launch-at-login; `⌘T` mode entry, `⌘⇧H` handoff, `⌘W` close, `⌘1–9` focus.
+- **Limits**: the 5-hour and 7-day windows in the status bar, and a banner naming any model the engine is refusing, with the message it gave, read from the transcripts and cleared when that model answers again.
 - **Telemetry**: hooks attribute actions to a mode and job for hosted sessions; the status line feeds the bar and survives a reload.
 
 ## Next

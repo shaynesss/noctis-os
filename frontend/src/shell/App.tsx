@@ -15,7 +15,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { Unreachable } from './Async'
-import { BottomBar, OverageBanner, Rail, TitleStrip, type LiveLimits } from './Chrome'
+import { BottomBar, Rail, RefusedBanner, TitleStrip, type LiveLimits } from './Chrome'
 import { del, get, type HistoryTranscript, type Stats as StatsPayload, type Window } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { Palette } from './Palette'
@@ -347,18 +347,23 @@ export function App() {
   /* Overage is the one number that can mean money, and the only thing that
    * raises a banner. Dismissed for this window only, re-armed if it clears
    * and returns. */
-  const [overageDismissed, setOverageDismissed] = useState(false)
+  /* One banner at a time, newest first: two models refusing at once is a
+   * list nobody reads, and the newest is the one the work just hit. */
+  const refused = limits?.refused?.[0] ?? null
+  const [dismissedRefusal, setDismissedRefusal] = useState<string | null>(null)
   useEffect(() => {
-    if (!limits?.using_overage) setOverageDismissed(false)
-  }, [limits?.using_overage])
+    // A new refusal re-arms the banner: dismissing Fable's says nothing
+    // about the next model to stop.
+    if (refused && dismissedRefusal && dismissedRefusal !== refused.at) setDismissedRefusal(null)
+  }, [refused, dismissedRefusal])
 
   const report = shown ? reports[shown.id] : undefined
 
   return (
     <div className="relative flex h-full flex-col" style={{ ['--accent' as string]: accent }}>
       <TitleStrip />
-      {limits?.using_overage && !overageDismissed && (
-        <OverageBanner onDismiss={() => setOverageDismissed(true)} />
+      {refused && dismissedRefusal !== refused.at && (
+        <RefusedBanner refused={refused} onDismiss={() => setDismissedRefusal(refused.at)} />
       )}
 
       <div className="flex min-h-0 flex-1">

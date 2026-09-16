@@ -473,3 +473,128 @@ def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> 
         return IndexPass(taken, refreshed)
     finally:
         _indexing.release()
+
+
+# ------------------------------------------------------------ what the engine refused
+
+# A model can stop answering while the subscription's own windows look fine:
+# on 2026-09-16 Fable 5.1 returned 429 "You're out of usage credits" with the
+# 7-day window at 51% and the 5-hour at 6%. Nothing in the interface said so,
+# because the only alarm it had read a `using_overage` key the status line
+# has never sent. The refusal is in the transcript, which is already the
+# honest source for everything else about a session, so it is read from
+# there.
+_limit_cache: tuple[tuple[int, float], list[dict[str, Any]]] | None = None
+_limit_stamp = 0.0
+_LIMIT_MIN_INTERVAL_S = 5.0        # the bar polls every four
+
+# Per transcript: how far it has been read, the model of the last real turn,
+# the refusals seen, and when each model last answered. Read forward from
+# where the last pass stopped, like `scan_usage`: a tail window was tried
+# first and was wrong twice over. The refusal record is synthetic, so the
+# model comes from the turn before it -- and a window wide enough to hold
+# the refusal can still have dropped that turn, which is exactly what
+# happened within the hour (the banner appeared, then vanished while the
+# refusal was still current). State that must survive its own file's growth
+# cannot be read from a moving window.
+_refusal_memo: dict[Path, tuple[int, str | None, dict[str, dict[str, Any]], dict[str, str]]] = {}
+
+
+def _model_label(model_id: str) -> str:
+    """`claude-fable-5-1` -> `Fable 5.1`, the shape the CLI shows itself.
+
+    The refusal record is synthetic and carries no display name, and the
+    status line's is per session rather than per model, so it is derived.
+    An id that does not fit the pattern is returned as it came: a label that
+    guesses wrong is worse than one that looks like an id.
+    """
+    parts = model_id.removeprefix("claude-").split("-")
+    if not parts or not parts[0]:
+        return model_id
+    # Version digits only: `claude-haiku-4-5-20251001` is Haiku 4.5, and the
+    # release stamp is not part of what anyone calls it.
+    rest = [p for p in parts[1:] if p.isdigit() and len(p) < 8]
+    return f"{parts[0].capitalize()} {'.'.join(rest)}".strip()
+
+
+def _refusals_in(path: Path) -> list[dict[str, Any]]:
+    """Models this transcript shows the engine refusing, with what it said,
+    dropping any the same model answered afterwards.
+
+    Only the bytes written since the last pass are read. Lines are filtered
+    before they are parsed: a transcript is mostly tool output, and the two
+    record shapes that matter here both name a model.
+    """
+    offset, last_model, refused, answered = _refusal_memo.get(path, (0, None, {}, {}))
+    try:
+        if path.stat().st_size < offset:       # rotated, or rewritten shorter
+            offset, last_model, refused, answered = 0, None, {}, {}
+    except OSError:
+        return []
+
+    end = offset
+    try:
+        with path.open("rb") as f:
+            f.seek(offset)
+            for raw in f:
+                if not raw.endswith(b"\n"):
+                    break                      # mid-write; next pass takes it
+                end += len(raw)
+                if b'"model"' not in raw and b'"rate_limit"' not in raw:
+                    continue
+                try:
+                    r = json.loads(raw.decode("utf-8", errors="replace"))
+                except json.JSONDecodeError:
+                    continue
+                msg = r.get("message") or {}
+                at = str(r.get("timestamp") or "")
+                if r.get("error") == "rate_limit":
+                    if not last_model:
+                        continue
+                    said = ""
+                    for block in msg.get("content") or []:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            said = block.get("text") or ""
+                    refused[last_model] = {
+                        "model": last_model, "label": _model_label(last_model),
+                        "at": at, "message": said.strip(), "session": path.stem,
+                    }
+                    continue
+                model = msg.get("model")
+                if isinstance(model, str) and model and not model.startswith("<"):
+                    last_model = model
+                    if msg.get("usage"):
+                        answered[model] = at
+    except OSError:
+        return []
+
+    _refusal_memo[path] = (end, last_model, refused, answered)
+    return [e for m, e in refused.items() if answered.get(m, "") <= e["at"]]
+
+
+def refusals(hours: float = 6.0) -> list[dict[str, Any]]:
+    """Every model the engine is currently refusing, newest first.
+
+    Only transcripts touched in the last few hours are read, and only their
+    tails: a refusal matters while it is current, and the file it is in is
+    one a session was using when it happened.
+    """
+    global _limit_cache, _limit_stamp
+    now = _time.monotonic()
+    cutoff = _time.time() - hours * 3600
+    try:
+        recent = [p for p in PROJECTS.glob("**/*.jsonl") if p.stat().st_mtime > cutoff]
+    except OSError:
+        return []
+    sig = (len(recent), max((p.stat().st_mtime for p in recent), default=0.0))
+    if _limit_cache and (now - _limit_stamp < _LIMIT_MIN_INTERVAL_S or _limit_cache[0] == sig):
+        return _limit_cache[1]
+
+    seen: dict[str, dict[str, Any]] = {}
+    for p in recent:
+        for event in _refusals_in(p):
+            if event["at"] > seen.get(event["model"], {}).get("at", ""):
+                seen[event["model"]] = event
+    out = sorted(seen.values(), key=lambda e: e["at"], reverse=True)
+    _limit_cache, _limit_stamp = (sig, out), now
+    return out

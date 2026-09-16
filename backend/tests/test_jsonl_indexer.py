@@ -248,3 +248,104 @@ def test_scan_usage_resumes_where_it_left_off(tmp_path, monkeypatch):
     with p.open("a", encoding="utf-8") as f:
         f.write('age": {"role": "assistant", "model": "claude-haiku-4-5", "content": [], "usage": {"input_tokens": 1, "output_tokens": 1}}}\n')
     assert jsonl.scan_usage(p, resume=True).turns == 4
+
+
+def _turn(model, ts, usage=True):
+    m = {"role": "assistant", "model": model, "content": [{"type": "text", "text": "ok"}]}
+    if usage:
+        m["usage"] = {"input_tokens": 1, "output_tokens": 1}
+    return {"type": "assistant", "timestamp": ts, "message": m}
+
+
+def _refusal(ts, said):
+    return {"type": "assistant", "timestamp": ts, "error": "rate_limit",
+            "message": {"role": "assistant", "model": "<synthetic>",
+                        "content": [{"type": "text", "text": said}]}}
+
+
+def test_a_refused_model_is_read_from_the_transcript_and_clears_when_it_answers(tmp_path, monkeypatch):
+    """A model can stop answering while the subscription's windows look fine:
+    Fable 5.1 returned 429 "out of usage credits" on 2026-09-16 with the
+    7-day window at 51%. The refusal is in the transcript, and it is over
+    when that same model answers again."""
+    from orchestrator import jsonl
+    proj = tmp_path / "-Users-x-repo"; proj.mkdir()
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+
+    said = "You're out of usage credits. Run /usage-credits to keep using Fable 5.1 or /model to switch models."
+    p = proj / "s1.jsonl"
+    p.write_text("\n".join(json.dumps(r) for r in [
+        _turn("claude-fable-5-1", "2026-09-16T19:45:00Z"),
+        _refusal("2026-09-16T19:51:34Z", said),
+    ]) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
+    out = jsonl.refusals()
+    assert len(out) == 1
+    assert out[0]["model"] == "claude-fable-5-1" and out[0]["label"] == "Fable 5.1"
+    assert out[0]["message"] == said and out[0]["session"] == "s1"
+
+    # Switching models does not clear it: Opus answering says nothing about Fable.
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(_turn("claude-opus-5", "2026-09-16T19:55:00Z")) + "\n")
+    monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
+    assert [e["model"] for e in jsonl.refusals()] == ["claude-fable-5-1"]
+
+    # The model answering again does.
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(_turn("claude-fable-5-1", "2026-09-16T20:10:00Z")) + "\n")
+    monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
+    assert jsonl.refusals() == []
+
+
+def test_an_old_transcript_is_not_read_for_refusals(tmp_path, monkeypatch):
+    """A refusal matters while it is current. Yesterday's is not news, and
+    reading every transcript on every poll is what this avoids."""
+    import os, time
+    from orchestrator import jsonl
+    proj = tmp_path / "-Users-x-repo"; proj.mkdir()
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    p = proj / "old.jsonl"
+    p.write_text("\n".join(json.dumps(r) for r in [
+        _turn("claude-fable-5-1", "2026-09-15T10:00:00Z"),
+        _refusal("2026-09-15T10:01:00Z", "out of usage credits"),
+    ]) + "\n", encoding="utf-8")
+    old = time.time() - 48 * 3600
+    os.utime(p, (old, old))
+    monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
+    assert jsonl.refusals() == []
+
+
+def test_model_label_reads_like_the_cli_shows_it():
+    from orchestrator.jsonl import _model_label
+    assert _model_label("claude-fable-5-1") == "Fable 5.1"
+    assert _model_label("claude-opus-5") == "Opus 5"
+    assert _model_label("claude-haiku-4-5-20251001") == "Haiku 4.5"
+    assert _model_label("something-else") == "Something"
+
+
+def test_a_refusal_survives_the_output_written_after_it(tmp_path, monkeypatch):
+    """The scan read a tail window first, and lost the refusal within the
+    hour: the window still held the 429, but the turn before it -- the only
+    record naming the model -- had scrolled out, so it was attributed to
+    nothing and dropped. Read forward from where the last pass stopped."""
+    from orchestrator import jsonl
+    proj = tmp_path / "-Users-x-repo"; proj.mkdir()
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    monkeypatch.setattr(jsonl, "_refusal_memo", {})
+    p = proj / "busy.jsonl"
+    p.write_text("\n".join(json.dumps(r) for r in [
+        _turn("claude-fable-5-1", "2026-09-16T19:45:00Z"),
+        _refusal("2026-09-16T19:51:34Z", "You're out of usage credits."),
+    ]) + "\n", encoding="utf-8")
+    monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
+    assert [e["model"] for e in jsonl.refusals()] == ["claude-fable-5-1"]
+
+    # A megabyte of ordinary tool traffic afterwards, none of it a turn.
+    with p.open("a", encoding="utf-8") as f:
+        for i in range(400):
+            f.write(json.dumps({"type": "user", "timestamp": "2026-09-16T19:52:00Z",
+                                "message": {"role": "user", "content": "x" * 2600}}) + "\n")
+    monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
+    assert [e["model"] for e in jsonl.refusals()] == ["claude-fable-5-1"], \
+        "still refusing; the output after it says nothing about the model"

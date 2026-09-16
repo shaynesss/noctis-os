@@ -182,10 +182,23 @@ function Meter({ pct, tone = 'var(--sig-meter)' }: { pct: number; tone?: string 
  * cycling in headless -p, and Noctis produces no artifacts -- and neither
  * appears in the spec's status-line list. A status bar that reports things
  * the app cannot know is worse than a shorter one. */
+/** A model the engine is refusing right now, in its own words. */
+export interface Refusal {
+  model: string
+  /** `claude-fable-5-1` as `Fable 5.1`. */
+  label: string
+  /** ISO 8601, from the transcript record. */
+  at: string
+  message: string
+  session: string
+}
+
 export interface LiveLimits {
   five_hour: { used: number; resets_at: number }
   seven_day: { used: number; resets_at: number }
-  using_overage?: boolean
+  /** What the windows above cannot say: a model can be out of usage credits
+   *  while both windows sit at half, and on 2026-09-16 one was. */
+  refused?: Refusal[]
   /** Unix seconds when this reading arrived at the backend. A hosted session
    *  only learns the windows from its own API responses, so an idle terminal
    *  repeats one figure while other sessions move the account on -- the age
@@ -203,7 +216,20 @@ export interface LiveLimits {
  * impossible for it to stop you working, since you may well have decided the
  * overage is worth it.
  */
-export function OverageBanner({ onDismiss }: { onDismiss: () => void }) {
+/* What the engine refused, in the engine's own words.
+ *
+ * The banner this replaced announced overage from a `using_overage` field
+ * the status line has never sent, so it could not fire. On 2026-09-16 Fable
+ * 5.1 returned 429 "You're out of usage credits" while the 7-day window read
+ * 51% and the bar showed nothing: the windows are the subscription's, and a
+ * model billed to credits is outside them. The message is quoted rather than
+ * summarised, because it names the two commands that fix it.
+ */
+export function RefusedBanner({ refused, onDismiss }: { refused: Refusal; onDismiss: () => void }) {
+  const at = new Date(refused.at)
+  const when = Number.isNaN(at.valueOf())
+    ? null
+    : at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
   return (
     <div
       role="status"
@@ -215,8 +241,9 @@ export function OverageBanner({ onDismiss }: { onDismiss: () => void }) {
       }}
     >
       <span aria-hidden>▲</span>
-      <span>
-        Past your plan's included usage — sessions from here may be billed as overage.
+      <span className="min-w-0">
+        <b className="font-semibold">{refused.label}</b> stopped answering
+        {when ? ` at ${when}` : ''}: {refused.message}
       </span>
       <button
         type="button"
