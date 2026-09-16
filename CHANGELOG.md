@@ -9,6 +9,18 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### Three rows fewer on the Repo view (2026-09-16)
+
+- **No Record fold on a repository that is not a dev job's project.** The
+  vault module carried a disabled "Record · not a job's project" row that
+  explained an absence.
+- **No Uncommitted fold.** The count is on the lid; the file list rides
+  on it as a tooltip. "Uncommitted · 0" was a row that said nothing on
+  most modules.
+- **No "Not in a repository" section.** Every mode starts in a repository
+  now, and the section told the reader nothing they could act on here.
+  `outside` stays in the payload; the view ignores it.
+
 ### The supervisor keeps trying (2026-09-16)
 
 - **It no longer gives up.** `backend/supervise.py` backs off 1s→30s and

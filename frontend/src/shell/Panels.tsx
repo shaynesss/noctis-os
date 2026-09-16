@@ -400,35 +400,21 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
   const showingCwd = terminals.find((t) => t.showing)?.cwd
   const groups = [...data.repos].sort((a, b) =>
     Number(b.cwds.includes(showingCwd ?? '')) - Number(a.cwds.includes(showingCwd ?? '')))
-  const outside = terminals.filter((t) => data.outside.includes(t.cwd))
   /* One module per repository, laid out like the terminals: a row up to
    * three, a grid after. With more than one on screen the commit lists
-   * start folded, so the page reads as repositories first. */
+   * start folded, so the page reads as repositories first. A terminal in
+   * a directory outside any repository (`data.outside`) gets no module:
+   * every mode starts in a repository now, and a section saying "not in
+   * a repository" told the reader nothing they could act on here. */
   const many = groups.length > 1
   return (
-    <>
-      <div className="grid items-stretch gap-6"
-           style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
-        {groups.map((r) => (
-          <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
-                      terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
-        ))}
-      </div>
-      {outside.length > 0 && (
-        <>
-          <Heading className={groups.length ? 'mt-7' : ''}>Not in a repository</Heading>
-          <Card>
-            {outside.map((t, i) => (
-              <div key={t.id} className={`flex items-center gap-[10px] px-4 py-[9px] text-[12.5px] text-ink-dim ${i ? 'border-t border-line' : ''}`}>
-                <TerminalChip t={t} />
-                <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{t.cwd}</span>
-                <span className="shrink-0 text-ink-faint">git init in that terminal starts one</span>
-              </div>
-            ))}
-          </Card>
-        </>
-      )}
-    </>
+    <div className="grid items-stretch gap-6"
+         style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
+      {groups.map((r) => (
+        <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
+                    terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
+      ))}
+    </div>
   )
 }
 
@@ -595,7 +581,6 @@ const Legend = () => (
  * inference. */
 function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void }) {
   const unpushed = r.ahead ?? 0
-  const [dirtyOpen, setDirtyOpen] = useState(!folded)
   const [commitsOpen, setCommitsOpen] = useState(!folded)
   const [recordOpen, setRecordOpen] = useState(false)
   const [githubOpen, setGithubOpen] = useState(false)
@@ -629,7 +614,12 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         ) : (
           <span className="text-ink-faint">no upstream</span>
         )}
-        <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'}>{r.dirty.length} uncommitted</span>
+        {/* The list rides on the figure rather than in a fold of its own
+            (2026-09-16): a fold reading "Uncommitted · 0" was a row that
+            said nothing on most modules, and the count is already here. */}
+        <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'} title={r.dirty.length ? r.dirty.join('\n') : undefined}>
+          {r.dirty.length} uncommitted
+        </span>
       </div>
       {/* Three lines' worth of height whatever the sentence needs, so the
           folds below sit at the same height in every module on the row. */}
@@ -637,12 +627,6 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         <span className="min-w-0 flex-1">{nextStep(r)}</span>
         <PushButton r={r} onPushed={onChanged} />
       </div>
-
-      <Fold title="Uncommitted" meta={r.dirty.length} open={dirtyOpen} onToggle={() => setDirtyOpen((o) => !o)} empty={r.dirty.length === 0}>
-        <div className="max-h-[220px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7] text-ink-dim">
-          {r.dirty.map((f) => <div key={f}>{f}</div>)}
-        </div>
-      </Fold>
 
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
             open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)} right={commitsOpen ? <Legend /> : undefined}>
@@ -680,9 +664,10 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
           <div className="border-t border-line px-4 py-[8px] text-[12px] leading-[1.5] text-ink-dim">{trailsLine(rec.trails)}</div>
           <FileList files={rec.files} />
         </Fold>
-      ) : (
-        <Fold title="Record" meta="not a job's project" open={false} onToggle={() => undefined} empty />
-      )}
+      ) : null}
+      {/* No Record fold at all on a repository that is not a dev job's
+          project (2026-09-16): "Record · not a job's project" on the vault
+          module was a disabled row explaining an absence. */}
 
       <Fold title="GitHub" meta={r.slug ? r.slug : `not available: ${r.github_reason ?? 'unknown'}`}
             open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>

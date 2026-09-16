@@ -22,14 +22,15 @@ const github = (gh: GithubInfo | null, reason: string | null = null, pending = f
   strip(renderToStaticMarkup(<GithubCard gh={gh} reason={reason} pending={pending} />))
 
 describe('Repo view', () => {
-  it('says when a terminal is not in a repository, and how to start one', () => {
+  it('gives a terminal outside any repository no module and no section', () => {
+    // A "not in a repository" section told the reader nothing they could act
+    // on here, and every mode starts in a repository now (2026-09-16).
     const t = strip(renderToStaticMarkup(
       <Repo data={{ repos: [], outside: ['/Users/me/notes'] }}
             terminals={[{ id: 't1', mode: 'general', cwd: '/Users/me/notes', index: 1, showing: true }]} />))
-    expect(t).toContain('Not in a repository')
-    expect(t).toContain('general · 1')
-    expect(t).toContain('/Users/me/notes')
-    expect(t).toContain('git init')
+    expect(t).not.toContain('Not in a repository')
+    expect(t).not.toContain('/Users/me/notes')
+    expect(t.trim()).toBe('')
   })
 
   it('names the terminals in a repository the way the tab strip does, and links the slug', () => {
@@ -54,14 +55,14 @@ describe('Repo view', () => {
     ]
     const t = strip(renderToStaticMarkup(
       <Repo data={{ repos: [base, y], outside: ['/Users/me/notes'] }} terminals={terminals} />))
-    const yAt = t.indexOf('y · main'), xAt = t.indexOf('x · main'), outsideAt = t.indexOf('Not in a repository')
-    expect(yAt).toBeGreaterThan(-1); expect(xAt).toBeGreaterThan(-1); expect(outsideAt).toBeGreaterThan(-1)
+    const yAt = t.indexOf('y · main'), xAt = t.indexOf('x · main')
+    expect(yAt).toBeGreaterThan(-1); expect(xAt).toBeGreaterThan(-1)
     expect(yAt).toBeLessThan(xAt)
-    expect(xAt).toBeLessThan(outsideAt)
-    const yBlock = t.slice(yAt, xAt), xBlock = t.slice(xAt, outsideAt)
+    const yBlock = t.slice(yAt, xAt), xBlock = t.slice(xAt)
     expect(yBlock).toContain('faber · 2'); expect(yBlock).toContain('vesper · 3'); expect(yBlock).not.toContain('faber · 1')
     expect(xBlock).toContain('faber · 1'); expect(xBlock).not.toContain('vesper · 3')
-    expect(t.slice(outsideAt)).toContain('general · 4')
+    // The terminal outside any repository appears nowhere (2026-09-16).
+    expect(t).not.toContain('general · 4'); expect(t).not.toContain('Not in a repository')
   })
 
   it('folds the commit lists when there is more than one repository, and still says how many', () => {
@@ -115,7 +116,10 @@ describe('Repo view', () => {
     expect(t).toContain('it asks twice')
     expect(t).toContain('2 files changed and not committed')
     expect(text({ ahead: 5 })).toContain('5 commits on this machine only. Push puts them on GitHub as you')
-    expect(t).toContain('a.ts'); expect(t).toContain('b.ts')
+    // The dirty files ride on the figure's title, not in a fold of their own
+    // (2026-09-16): the count is on the lid, and "Uncommitted · 0" was a row
+    // that said nothing on most modules.
+    expect(t).not.toContain('a.ts'); expect(t).not.toContain('Uncommitted ·')
     expect(t).toContain('● abc1234 newest, local only 1m')
     expect(t).toContain('● def5678 older, on GitHub 2h')
   })
