@@ -411,7 +411,7 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
    * a repository" told the reader nothing they could act on here. */
   const many = groups.length > 1
   return (
-    <div className="grid items-start gap-6"
+    <div className="grid items-stretch gap-6"
          style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
       {groups.map((r) => (
         <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
@@ -672,10 +672,15 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         </>
       )}
 
+      {/* Pinned to the bottom (2026-09-16): modules in a row share a
+          height, and the space a shorter one has goes above this fold, not
+          under it, so every card ends on the same row. */}
+      <div className="mt-auto">
       <Fold title="GitHub" meta={r.slug ? r.slug : `not available: ${r.github_reason ?? 'unknown'}`}
             open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>
         {r.slug ? <GithubLive slug={r.slug} /> : <GithubCard gh={null} reason={r.github_reason} />}
       </Fold>
+      </div>
     </section>
   )
 }
