@@ -28,10 +28,10 @@ def is_safe_slug(value: str) -> bool:
 # A single lock around every write, not just log.md/index.md. The narrower
 # version of this ("only log.md/index.md need it, everything else has one
 # writer-type") was falsified by this project's own later additions --
-# staleness.py's flag_stale_jobs() (run on every GET /mode/{name} poll)
-# and PATCH /mode/dev/jobs/{slug} both read-modify-write the same
-# modes/dev/state.md, discovered in the 2026-07-21 ship-gate security
-# review. A single process-wide lock is disproportionate for nothing, but
+# staleness.py's flag_stale_jobs() and v1's PATCH /mode/dev/jobs/{slug}
+# both read-modify-write the same modes/dev/state.md, discovered in the
+# 2026-07-21 ship-gate security review (the route went at the 2026-09-12
+# cutover; the lock stays because the lesson does). A single process-wide lock is disproportionate for nothing, but
 # proportionate for a local single-user app's actual write volume, and
 # closes the class of bug rather than special-casing one more file. Note:
 # this still only protects the write itself, not the read-then-mutate step

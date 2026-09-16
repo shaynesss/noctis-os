@@ -27,8 +27,8 @@ Until 2026-09-12 this directory held `app.py`, a pywebview window that was
 v1's shell — chosen in July 2026 specifically to avoid adding a Rust
 toolchain. Tauri replaced it: the Rust toolchain became worth paying for once
 the shell needed a global hotkey, a tray, launch-at-login, and a packaging
-story. `app.py` and its tests are deleted; `SPEC.md`'s "Desktop shell and
-supervision" section is the current account.
+story. `app.py` and its tests are deleted; `DOCUMENTATION.md` §14 is the current
+account.
 
 Two things that pywebview shell taught, both of which survive in the current
 code:

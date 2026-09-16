@@ -69,8 +69,8 @@ describe('Repo view', () => {
     const y: RepoInfo = {
       ...base, root: '/Users/me/Developer/y', name: 'y', cwds: ['/Users/me/Developer/y'],
       commits: [
-        { sha: 'aaa1111', subject: 'y local', at: Math.floor(Date.now() / 1000) - 60, pushed: false },
-        { sha: 'bbb2222', subject: 'y pushed', at: Math.floor(Date.now() / 1000) - 60, pushed: true },
+        { sha: 'aaa1111', full: 'aaa1111aaa11', subject: 'y local', body: '', at: Math.floor(Date.now() / 1000) - 60, pushed: false },
+        { sha: 'bbb2222', full: 'bbb2222bbb22', subject: 'y pushed', body: '', at: Math.floor(Date.now() / 1000) - 60, pushed: true },
       ],
     }
     const terminals: RepoTerminal[] = [
@@ -104,8 +104,8 @@ describe('Repo view', () => {
     const t = text({
       ahead: 201, behind: 2, dirty: ['a.ts', 'b.ts'],
       commits: [
-        { sha: 'abc1234', subject: 'newest, local only', at: Math.floor(Date.now() / 1000) - 90, pushed: false },
-        { sha: 'def5678', subject: 'older, on GitHub', at: Math.floor(Date.now() / 1000) - 7200, pushed: true },
+        { sha: 'abc1234', full: 'abc1234abc12', subject: 'newest, local only', body: '', at: Math.floor(Date.now() / 1000) - 90, pushed: false },
+        { sha: 'def5678', full: 'def5678def56', subject: 'older, on GitHub', body: '', at: Math.floor(Date.now() / 1000) - 7200, pushed: true },
       ],
     })
     expect(t).toContain('↑ 201 not on GitHub')

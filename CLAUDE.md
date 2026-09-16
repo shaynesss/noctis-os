@@ -50,7 +50,7 @@ git for the vault → mode folders (methodology + lessons + state + agents) → 
 
 ## Design tooling
 
-Tailwind 4 is wired with the `@` alias; Impeccable is registered as **Product** and its design hook runs on every frontend edit. No shadcn — not declared, not banned.
+Tailwind 4 is wired with the `@` alias; Impeccable is registered as **Product** (`.impeccable/`, Live Mode pointed at `frontend/index.html`) and is invoked as a skill — there is no edit hook. No shadcn — not declared, not banned.
 
 ## Launch surfaces
 

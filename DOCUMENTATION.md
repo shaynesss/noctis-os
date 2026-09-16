@@ -21,7 +21,7 @@ Two halves that age differently.
 
 **The body** — whatever runs sessions. Today: a Tauri shell hosting the Claude Code CLI in a pseudo-terminal, and a FastAPI backend behind it.
 
-The body is replaceable and built to be. The brain is meant to outlive it. Everything below is organised around that split — §2–§5 are the body, §6–§9 the brain, §10–§17 the surfaces and cross-cutting concerns, and §18–§21 are for operating it.
+The body is replaceable and built to be. The brain is meant to outlive it. Everything below is organised around that split — §2–§5 are the body, §6–§9 the brain, §10–§17 the surfaces and cross-cutting concerns, §18–§21 are for operating it, and §22 is the terminal in full.
 
 ---
 
@@ -50,7 +50,7 @@ Built by `backend/interactive.py`, served by `GET /v2/sessions/interactive-args?
 | `--add-dir <vault>` | The engine sandboxes file access to the working directory; a Faber session in a repo could not read its own methodology without this. |
 | `--` + positional prompt | A handoff's carried summary, submitted as the session's first message. Behind the terminator, because a summary that opens with a bullet is an argument that opens with a dash, and the option parser exited on one. |
 
-**Four things the PTY host has to get right**, each found by testing rather than reasoning: size the PTY *before* spawning (at 0×0 the TUI exits instantly with no output); coalesce output into ~16ms frames *and flush on silence* (a flush that only runs on the next read strands the tail of a prompt that then blocks for input); kill the session, not the immediate child; keep sessions across a page reload and reattach to them (§22). Bytes cross Tauri's IPC base64-encoded, because a read can split a multi-byte character and xterm.js decodes UTF-8 itself. Measured 2026-09-14 with the batcher isolated under `seq` as the program: 7MB byte-exact and in order in 820ms (51 frames), and a program that prints then goes quiet gets its last frame **20ms** after its last byte rather than when it exits.
+**The PTY host's own rules** — size before spawning, coalesce and flush on silence, kill the session not the child, keep the page running while hidden, keep sessions across a reload — are §22's table, each found by testing rather than reasoning. Measured 2026-09-14 with the batcher isolated under `seq` as the program: 7MB byte-exact and in order in 820ms (51 frames), and a program that prints then goes quiet gets its last frame **20ms** after its last byte rather than when it exits.
 
 **Finding the binary.** PATH first, then `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin`, `~/.claude/local`, in both `engine.py` and `pty.rs`; `NOCTIS_CLAUDE_BIN` overrides. `launchd` starts processes with a bare `PATH` containing no Homebrew.
 
@@ -141,7 +141,7 @@ The budget matters because an orchestrated workload re-sends its context every t
 
 ## 6. The Noctis MCP server
 
-`backend/mcp/server.py`. Stdio JSON-RPC, dependency-free — `python3 server.py` and nothing to install. **This is the half that travels.**
+`backend/mcp/server.py`. Stdio JSON-RPC, no third-party dependencies — `python3 server.py` and nothing to install. It imports `retrieval/index.py` and `jobs.py` from beside it, so what travels is the `backend/` checkout, not one file. **This is the half that travels.**
 
 **It solves one thing: ranked retrieval from inside a running session.** Sessions already have Read/Grep/Glob, fine for most vault work. Two things they cannot do: **rank** (grep cannot answer "what did I decide about X" when the wording is forgotten) and **reach history** (SQLite, not files).
 
@@ -156,7 +156,6 @@ The budget matters because an orchestrated workload re-sends its context every t
 | `job_context` | A job's full record |
 | `worklist` | What is in flight across every mode, from each mode's `state.md` (the name predates the brief's retirement; it never read a worklist file) |
 | `propose` | Stage a proposal into the maintenance inbox — **not pre-approved** |
-| `permission_prompt` | Internal. Named by `--permission-prompt-tool`; surfaces a request in the app. |
 
 ### Prompts — the part that is easy to miss
 
@@ -252,7 +251,7 @@ Default location `backend/data/`, overridable with `NOCTIS_DATA_DIR`.
 
 React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `main.tsx` imports it and nothing else.
 
-**Rail:** Terminal · Repo · Stats · Settings, and the app opens on Repo. **The commit log is the memory** (2026-09-15): a commit's body is the record of where a piece of work was left, every session's commits close with *where this leaves things* and *what comes next* (a rule in `prompts/system.md`'s Git section, enforced by the push for commits dated after 2026-09-17), and a click on any commit opens its body under it, another closes it — so opening a project is reading where you stopped. The newest opened on its own for one evening and pushed Record and GitHub off the bottom of the module; nothing opens on its own now. A body arrives hard-wrapped at seventy-two columns and the module wraps at its own width, so `reflow` joins the lines inside a paragraph and keeps the blank lines between them, leaving a list's lines alone. Two summaries of the same thing preceded this on the same day — a morning brief (a vault file a scheduler never wrote) and then an Inbox digest (counts composed into sentences, with a presence heartbeat to know "since when") — and both went, because a summary of what the commits say is worth less than the commits. What *arrives* — nightshift's run, its proposals — moved to Settings. **Repo** is the repositories the open terminals are in, one group per repository, the showing terminal's first — `GET /v2/repos?cwd=…&cwd=…`, one `cwd` per terminal, grouped by `git rev-parse --show-toplevel` so two Faber sessions on one project are one group naming both terminals (`faber · 1`, `faber · 3`, the strip's own labels) and a session on another project is a second; directories in no repository come back under `outside`, which the view no longer renders — every mode starts in a repository, and a "not in a repository" section told the reader nothing they could act on there (2026-09-16). With more than one repository the modules lay out like the terminals — a row up to three, a grid after — and each module's commits start folded; alone, a repository's are open. Ten commits show and the rest scroll; subjects wrap rather than truncate. Each repository is one bordered module: a **lid** (name, the branch it is on, the terminals in it as sprite chips on one line; the GitHub link under the title) and then one anatomy, used twice (2026-09-16). A **block** is three cells: the full path of what it is about with the **figures** under it (not on GitHub, behind, uncommitted; a non-zero figure is ink, zero is faint), the **uncommitted files**, and a **Commits fold** whose right edge stacks the push button, centred, over the legend so the title stays on one line. The two Commits folds on a card are an accordion: opening one closes the other. The project's block is the repository's path. For a dev job's project a second block follows for the record's path (`<vault>/<notes_path>`, shown in full; the vault has no link there — its GitHub is one click from the vault's own module): its figures are **the record's own** — `ahead` counts the record's unpushed commits, `dirty` the files under the notes paths — because the vault's whole count beside a fold listing three read as a contradiction. A push is still the repository's, so the button carries the vault's count (`vault_ahead`) in its title when it differs. The record's Commits fold lists the record's commits, each marked `path` or `session` ("from here"), exactly as the project's lists the code's — a by-file view was tried for a day and put twelve unpushed commits beside three red rows, because twelve commits had touched one file. `files` stays in the payload. Modules in a row always share a height; a shorter card's spare space goes to its last Commits fold, whose header sits centred in it while closed. GitHub is the last fold. Uncommitted files are a figure and, whenever there are any, the row under it — count and files both in ink, like every other non-zero figure, so the eye ties them together; a module with none lists nothing. The sentence that used to sit there ("N files changed and not committed — a session commits as it goes…") is gone, and the push button, in the signature colour, sits on the fold it pushes (2026-09-16). A fold reading "Uncommitted · 0" was a row that said nothing on most modules (removed 2026-09-16), as was a disabled "Record · not a job's project" row on the vault module. The GitHub half is its own read — `GET /v2/repos/github?slug=owner/name`, three `gh` calls run at once, cached a minute per slug, failures not cached — so the local half is on screen before the network answers. Links leave the app through the shell's `open_url` command (macOS `open`, http(s) only), because the webview ignores `target="_blank"`. Each commit carries the mark of whose work it is, never a trailer, and by evidence first (2026-09-15): the history store indexes every transcript's tool calls with their arguments, so `store.session_for_commit(subject)` finds the session that ran `git commit` with that subject, and that session is the author — whatever tab was open at the time. A session Noctis did not launch (VS Code, a terminal) is filed by its directory: inside a dev job's `project_path`, or a subdirectory of it, it is Faber's (`jsonl.mode_for_cwd`), applied both when a transcript is indexed and when an already-filed General session is read back. Only a commit no transcript claims falls to the old rules: a dev job's project is Faber's; elsewhere the session live in that directory at the time, else any live session, most recently started winning; none, no mark. Before this, a Noctua tab open in the vault all afternoon was credited with thirty commits a VS Code session in the project had made. Each commit also carries its **body** — the record — and, on a Record commit, `via`: `path` when it touches the job's notes, `session` when its author was inside the project. Per group: branch, upstream, ahead/behind, dirty files, the last twenty commits with the unpushed ones marked, and, through `gh` when signed in and the remote is on GitHub, open pull requests with a one-word check state and open issues; GitHub failing leaves the local half intact with a reason. For a repository that is a dev job's project, a **Record** section shows the vault side. Which commits count is defined two ways united (2026-09-15): vault commits touching the job's `notes_path` (`wiki/<Project>/`) and job folder, whoever made them, and vault commits whose author session was inside the project — the log entry, the lesson, the job context a build session writes as it goes, which touch shared files and were invisible under the path rule alone. In git's own order, twenty at most, in the payload. **What the fold shows is the record by file** (2026-09-15, night): one row per record file — every tracked file under the notes paths, every file a session-attributed commit touched, every uncommitted file under the notes paths — with the commit that last touched it (sprite, subject, when, pushed or not), a file never committed first and marked as such, and a click opening that commit's body. `trails` (newest project commit against newest record commit, in seconds) stays in the payload; the sentence it fed was removed 2026-09-16 because the rows say it. A second chronological commit list under the project was the vault module's twenty rows twice; the file rows answer the question only this fold can — is the writing about this project current — and they degrade to one row for a one-page project rather than failing. The fold carries the same figures and the same push block as the project (`↑ not on GitHub · ↓ behind · uncommitted`, `push N`), pointed at the vault: a repository pushes as one, so the vault's push is the whole vault's. A session never pushes; the view has the push button instead — `POST /v2/repos/push` runs `git push` as the machine's git identity (yours), reads every outgoing message first and refuses on an attribution line (`Co-Authored-By`, `Claude-Session`, "Generated with Claude Code"), and asks for `force` as a second click when origin holds commits the branch does not, running it as `--force-with-lease`.
+**Rail:** Terminal · Repo · Stats · Settings, and the app opens on Repo. **The commit log is the memory** (2026-09-15): a commit's body is the record of where a piece of work was left, every session's commits close with *where this leaves things* and *what comes next* (a rule in `prompts/system.md`'s Git section, enforced by the push for commits dated after 2026-09-17), and a click on any commit opens its body under it, another closes it — so opening a project is reading where you stopped. The newest opened on its own for one evening and pushed Record and GitHub off the bottom of the module; nothing opens on its own now. A body arrives hard-wrapped at seventy-two columns and the module wraps at its own width, so `reflow` joins the lines inside a paragraph and keeps the blank lines between them, leaving a list's lines alone. Two summaries of the same thing preceded this on the same day — a morning brief (a vault file a scheduler never wrote) and then an Inbox digest (counts composed into sentences, with a presence heartbeat to know "since when") — and both went, because a summary of what the commits say is worth less than the commits. What *arrives* — nightshift's run, its proposals — moved to Settings. **Repo** is the repositories the open terminals are in, one group per repository, the showing terminal's first — `GET /v2/repos?cwd=…&cwd=…`, one `cwd` per terminal, grouped by `git rev-parse --show-toplevel` so two Faber sessions on one project are one group naming both terminals (`faber · 1`, `faber · 3`, the strip's own labels) and a session on another project is a second; directories in no repository come back under `outside`, which the view no longer renders — every mode starts in a repository, and a "not in a repository" section told the reader nothing they could act on there (2026-09-16). With more than one repository the modules lay out like the terminals — a row up to three, a grid after — and each module's commits start folded; alone, a repository's are open. Ten commits show and the rest scroll; subjects wrap rather than truncate. Each repository is one bordered module: a **lid** (name, the branch it is on, the terminals in it as sprite chips on one line; the GitHub link under the title) and then one anatomy, used twice (2026-09-16). A **block** is three cells: the full path of what it is about with the **figures** under it (not on GitHub, behind, uncommitted; a non-zero figure is ink, zero is faint), the **uncommitted files**, and a **Commits fold** whose right edge stacks the push button, centred, over the legend so the title stays on one line. The two Commits folds on a card are an accordion: opening one closes the other. The project's block is the repository's path. For a dev job's project a second block follows for the record's path (`<vault>/<notes_path>`, shown in full; the vault has no link there — its GitHub is one click from the vault's own module): its figures are **the record's own** — `ahead` counts the record's unpushed commits, `dirty` the files under the notes paths — because the vault's whole count beside a fold listing three read as a contradiction. A push is still the repository's, so the button carries the vault's count (`vault_ahead`) in its title when it differs. The record's Commits fold lists the record's commits, each marked `path` or `session` ("from here"), exactly as the project's lists the code's — a by-file view was tried for a day and put twelve unpushed commits beside three red rows, because twelve commits had touched one file. `files` stays in the payload. Modules in a row always share a height; a shorter card's spare space goes to its last Commits fold, whose header sits centred in it while closed. GitHub is the last fold. Uncommitted files are a figure and, whenever there are any, the row under it — count and files both in ink, like every other non-zero figure, so the eye ties them together; a module with none lists nothing. The sentence that used to sit there ("N files changed and not committed — a session commits as it goes…") is gone, and the push button, in the signature colour, sits on the fold it pushes (2026-09-16). A fold reading "Uncommitted · 0" was a row that said nothing on most modules (removed 2026-09-16), as was a disabled "Record · not a job's project" row on the vault module. The GitHub half is its own read — `GET /v2/repos/github?slug=owner/name`, three `gh` calls run at once, cached a minute per slug, failures not cached — so the local half is on screen before the network answers. Links leave the app through the shell's `open_url` command (macOS `open`, http(s) only), because the webview ignores `target="_blank"`. Each commit carries the mark of whose work it is, never a trailer, and by evidence first (2026-09-15): the history store indexes every transcript's tool calls with their arguments, so `store.session_for_commit(subject)` finds the session that ran `git commit` with that subject, and that session is the author — whatever tab was open at the time. A session Noctis did not launch (VS Code, a terminal) is filed by its directory: inside a dev job's `project_path`, or a subdirectory of it, it is Faber's (`jsonl.mode_for_cwd`), applied both when a transcript is indexed and when an already-filed General session is read back. Only a commit no transcript claims falls to the old rules: a dev job's project is Faber's; elsewhere the session live in that directory at the time, else any live session, most recently started winning; none, no mark. Before this, a Noctua tab open in the vault all afternoon was credited with thirty commits a VS Code session in the project had made. Each commit also carries its **body** — the record — and, on a Record commit, `via`: `path` when it touches the job's notes, `session` when its author was inside the project. Per group: branch, upstream, ahead/behind, dirty files, the last twenty commits with the unpushed ones marked, and, through `gh` when signed in and the remote is on GitHub, open pull requests with a one-word check state and open issues; GitHub failing leaves the local half intact with a reason. For a repository that is a dev job's project, the second block is the **record**, the vault side. Which commits count is defined two ways united (2026-09-15): vault commits touching the job's `notes_path` (`wiki/<Project>/`) and job folder, whoever made them, and vault commits whose author session was inside the project — the log entry, the lesson, the job context a build session writes as it goes, which touch shared files and were invisible under the path rule alone. In git's own order, twenty at most, in the payload. `files` (the record by file, each with the commit that last touched it) and `trails` (newest project commit against newest record commit, in seconds) stay in the payload: the by-file fold that read them was tried for a day (2026-09-15 night to 09-16) and replaced by the commit list, because twelve commits touching one file put "12 not on GitHub" beside three rows. The record's fold carries the record's own figures (`↑ not on GitHub · ↓ behind · uncommitted`) and the vault's push (`push N`, the vault's total in the button's title when it differs): a repository pushes as one. A session never pushes; the view has the push button instead — `POST /v2/repos/push` runs `git push` as the machine's git identity (yours), reads every outgoing message first and refuses on an attribution line (`Co-Authored-By`, `Claude-Session`, "Generated with Claude Code"), and asks for `force` as a second click when origin holds commits the branch does not, running it as `--force-with-lease`.
 
 **Transcript blocks** are how a *history* transcript renders (read-only, from the store); a live session is the CLI's own TUI in a terminal. The block kinds:
 
@@ -262,11 +261,9 @@ React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `ma
 | `thinking` | a token count and duration, not prose |
 | `tool` | a disclosure row, matched to its result **by id** — results interleave with text and can arrive out of order |
 
-**Shortcuts:** `⌘K` search · `⌘T` mode entry · `⌘⇧H` handoff · `⇧⇥` cycle effort · `⌘V` paste image.
+**Shortcuts:** `⌘K` search · `⌘T` launcher · `⌘⇧H` handoff · `⌘W` close · `⌘1–9` focus · `⌘⇧1–9` split. Every key without ⌘ belongs to the CLI in the terminal (§22).
 
-**SSE on POST**, not `EventSource` — the latter cannot carry the mandatory auth header.
-
-**Status block, four rows:** cwd · branch · model · clock; context % · 5h/7d windows · live/max sessions; mode state; artifact chips.
+**Status bar, one band:** the showing terminal's cwd and branch, its model and context %, the 5-hour and 7-day windows with the reading's age, the live session count.
 
 **No cost is shown as spend.** Under a subscription the figure is notional. Limits are the real currency. Stats shows a lifetime list-price total stated as not charged, and two rules keep it honest: every name that carries it says `list` (`list_cost`, `list_cost_usd`, `orchestrator/pricing.py`), and `/v2/billing` returns `charged: false`. The figure is priced from tokens — per-model list rates in `pricing.py`, cache writes at the 1-hour TTL the CLI uses — over the same transcripts the token counts are summed from, so cost and counts are one population; `priced_turns` says how many turns the figure covers, short only by models the table does not know. (Summed from the engine's own per-turn figures it covered 120 turns of 8,000 and read 20x low against its own tokens.) **Overage is the one exception that can mean money** and the only thing that raises a banner — alerting on anything else trains the alarm to be dismissed.
 
@@ -303,6 +300,8 @@ Runtime logs live in `backend/runtime/` — high-churn, ephemeral, gitignored. *
 
 **Per-item fault isolation:** each item's advance step is wrapped, so one failing call logs and continues rather than aborting the run and dropping every other independent item.
 
+**The flagged-job item has no producer.** `staleness.flag_stale_jobs()` marks a dev job `flagged` when its context is six hours untouched and its runtime log has no clean `SESSION_END`. It ran on v1's `GET /mode/{name}` poll, which went at the 2026-09-12 cutover, and nothing has called it since — so nightshift's flagged-job scan finds nothing, and dev.md's "session death marks the job flagged" is not currently true. Wire it into the nightly scan or delete it; open in `STATUS.md`.
+
 ---
 
 ## 13. Design Lodge
@@ -324,7 +323,7 @@ A **quick-capture inbox** takes a link plus a note; the next dev session sorts i
 
 **You develop in the window you use.** `make dev` is the app; `make browser`
 is the fallback for backend-only work where a Rust build is not worth paying
-for. **Product capabilities are identical** — everything else is backend or frontend code.
+for. **Everything but the terminal is identical** — a terminal needs the PTY host, so under `make browser` the pane says so and every other view works.
 `make open-app` is a double-clickable bundle around `make dev`. `make reload`
 kills the backend so the supervisor restarts it on new code — a deliberate
 restart takes the same path as a crash, which is the point of crash-only
@@ -355,9 +354,10 @@ the supervisor would reap the process the reloader just started. Observed
 live — writing `supervise.py` triggered a reload and a probe failed during
 the window.
 
-**What it does not buy.** Sessions are subprocesses of uvicorn, so a backend
-restart still kills a turn in flight. Supervision shortens downtime; it does
-not prevent loss. See §16.
+**What a restart costs.** Nothing to a session: the PTY registry lives in
+the shell's Rust process (§22), not under uvicorn. What it drops is the
+request in flight — a Repo read, a status-line report — and the view picks
+that up on its next poll.
 
 ---
 
@@ -433,7 +433,8 @@ Two variables are required. Everything else has a working default.
 | `NOCTIS_BACKEND` | no | `http://127.0.0.1:8000` | Where the MCP server reaches the backend. |
 | `NOCTIS_RECAP_MODEL` | no | `claude-haiku-4-5` | Model for `one_shot` — the session recap. |
 | `NIGHTSHIFT_DISTILLER_MODEL` | no | `claude-haiku-4-5` | Model for overnight lessons distillation. |
-| `NOCTIS_SCRATCH_ROOT` | no | `~/Developer` | Where Plan-stage scratch directories go before a project is named. |
+| `PROJECTS_DIR` | no | `~/Developer/projects`, else `~/Developer` | Where a Faber session starts: the directory that holds the projects, one level above any of them. |
+| `REGRESSION_MODEL` | no | each case's own mode model | Model for the prompt regression suite — set it for a cheap smoke run. |
 
 `NOCTIS_MODE` and `NOCTIS_JOB_ID` are set **by** the launcher for the telemetry hooks. Do not set them yourself.
 
@@ -466,7 +467,7 @@ Start with `make doctor`. It answers most of this in three lines.
 make test        # pytest + tsc -b + vitest
 ```
 
-438 backend, 80 frontend.
+299 backend, 73 frontend (2026-09-16).
 
 **Two traps worth knowing**, both of which shipped as bugs:
 
@@ -480,12 +481,13 @@ make test        # pytest + tsc -b + vitest
 ## 21. Known gaps
 
 **Outstanding:**
+- `staleness.flag_stale_jobs()` has no caller since the cutover (§12): nightshift's flagged-job scan has nothing to find. Wire or delete.
 - Nothing in the build order. The `launchd` scheduler that was its last item is no longer needed: the commit log is the record and needs no writer, a vault auto-push is against the push rule, and maintenance runs nightly on its own plist.
 
 **Known and accepted:**
 - Effort is not yet passed at spawn (`interactive-args` does not take it); the CLI's default applies until it is.
 - Commit attribution by transcript matches on the subject line: two commits with one subject (a repeated "wip") both credit the first session that ran it, and a subject under twelve characters is not searched at all and falls to the by-clock rules.
-- Whitespace-only text counts as speech — judging quality would be the guesswork §5 replaced.
+- Whitespace-only text counts as speech — judging quality would be guesswork.
 - `seven_day_opus` is in the CLI binary and absent from an observed Haiku run. Unverified.
 
 **Permanently out of scope:** multi-user or hosting · code editing / custom IDE · any deployment story.
@@ -550,31 +552,21 @@ every one.
 **Lifetime tokens: one raw number.** No split, no tiers. The CLI's own
 background calls are absent from the JSONL, which is 0.178% of the total.
 
-**The indexer runs beside the recorder, and the comparison is live.**
-`POST /v2/sessions/index` files every transcript history has not seen and
-re-reads every one that has grown since it was filed — the shell calls it when
-a terminal session ends, Stats calls it on each visit. Rows
-carry `source` (`recorder` | `transcript`) so the comparison only tests
-sessions the recorder itself wrote. `GET /v2/sessions/stats` returns
-`transcripts` (the lifetime figure read from disk) and `diff` (per-session
-recorded vs transcript) beside `lifetime`.
-
-**First honest run, 2026-09-13: 1 of 16 agree, and the recorder is the one
-that is wrong.** Every disagreement runs the same way — transcript 2–5×
-larger — and on the session checked field by field, *output* tokens are 2×
-too (6,486 recorded, 13,252 on disk; 4 usage rows for 29 API calls). Cache
-reads can be inflated by per-call re-reads; generated output cannot. So
-`result.usage` is not the whole turn, and the recorder has undercounted since
-it was written — the 09-08 fix corrected the model's *name*, not its number.
-The transcript is the more complete source. What `result.usage` actually
-contains is the open question; switching Stats to `transcripts.tokens` is
-step 4 and has not been done.
+**The indexer is the only writer.** `POST /v2/sessions/index` files every
+transcript history has not seen and re-reads every one that has grown since
+it was filed — the shell calls it when a terminal session ends, Stats calls
+it on each visit. For one day (2026-09-13) it ran beside the orchestrator's
+recorder and the two were compared session by session: 1 of 16 agreed, and
+on the one checked field by field the recorder had half the *output* tokens
+(6,486 against 13,252 on disk; 4 usage rows for 29 API calls) — cache reads
+can be inflated by re-reads, generated output cannot, so `result.usage` was
+never the whole turn. `lifetime` has read the transcripts since 2026-09-14
+(PTY-MIGRATION §7 step 4); the comparison came out on 2026-09-16, and rows
+still carry `source` only because the old ones were written that way.
 
 **Several terminals, kept alive.** `Terminals.tsx` holds a strip of them and
 stays mounted whichever rail item is showing — the first version unmounted on
-Stats, and unmounting a terminal kills its session. Slots are their own strip
-rather than a fourth kind of Chat tab, because a Chat tab is a conversation
-the orchestrator owns and a terminal owns itself.
+Stats, and unmounting a terminal kills its session.
 
 **Keys inside a terminal belong to the CLI.** The shell's key handler runs in
 the capture phase, before xterm, and binds Shift+Tab, Escape and the arrows —
@@ -585,8 +577,7 @@ the shell; everything without ⌘ passes through. VS Code's split.
 is polled on the same four-second cadence as the live counter. With a terminal
 showing, the bar's cwd, model and context come from that terminal's own
 `statusLine` report — keyed by the slot name the strip gave it, which rides
-out in the status-line command and comes back with each report — rather than
-from the Chat tab behind it. `refreshInterval: 5` keeps an idle terminal
+out in the status-line command and comes back with each report. `refreshInterval: 5` keeps an idle terminal
 reporting, so `/model` inside it reaches the bar without a redraw.
 
 **A reading has an age.** A hosted session only learns the 5h/7d windows from
@@ -597,8 +588,6 @@ reading is a minute old. `reported_at` is stamped by identity on the backend,
 so it is right whichever door the reading came through and does not advance
 just because the bar polled.
 
-The Chat composer is not rendered under a terminal — it sends to General, and
-beneath a terminal with its own prompt it read as a second place to type.
 Terminal labels are positional (1, 2, 3 for whatever is open), and tabs reorder by dragging — the order on screen is the order under ⌘1–9; the strip's empty space drags the window. The first
 version showed lifetime ordinals from a counter that StrictMode double-ran.
 Each tab carries its mode's mark — the character's sprite from

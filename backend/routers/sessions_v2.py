@@ -333,15 +333,6 @@ def stats() -> dict:
             {"day": r["day"], "sessions": r["sessions"]}
             for r in _store.daily_activity(days=365)
         ],
-        # The same number read from the CLI's own transcripts, beside the
-        # recorder's. This is the migration's gate (PTY-MIGRATION.md §7 step
-        # 3): the default switches to the transcript reader once the two
-        # agree over real use, and this is where that agreement is watched.
-        # `transcripts` counts sessions the recorder never saw -- terminals,
-        # VS Code -- so it is expected to be larger; `diff` is per session
-        # both saw, and that is the one that should be boring.
-        "transcripts": jsonl.lifetime_tokens_cached(),
-        "diff": jsonl.diff_against(_store),
     }
 
 

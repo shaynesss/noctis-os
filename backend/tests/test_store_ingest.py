@@ -136,20 +136,6 @@ def test_index_new_files_unknown_transcripts_with_their_mode(store, tmp_path, mo
     assert jsonl.index_new(store, {"known": "noctua"}).taken == []
 
 
-def test_diff_skips_sessions_only_the_indexer_wrote(store, tmp_path, monkeypatch):
-    proj = tmp_path / "-Users-x-repo"
-    proj.mkdir()
-    rec = {"type": "assistant", "timestamp": "2026-09-13T10:00:00Z",
-           "message": {"role": "assistant", "model": "m",
-                       "content": [{"type": "text", "text": "hi"}],
-                       "usage": {"input_tokens": 1, "output_tokens": 2}}}
-    (proj / "only-indexed.jsonl").write_text(json.dumps(rec), encoding="utf-8")
-    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
-    jsonl.index_new(store, {})
-
-    d = jsonl.diff_against(store)
-    assert d["compared"] == 0, "an indexed-only session is not a comparison"
-
 
 def test_a_second_indexing_pass_yields_to_the_one_running(store, monkeypatch):
     """Stats calls index_new on every visit and the shell calls it when a

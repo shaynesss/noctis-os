@@ -1,43 +1,29 @@
 # Session lifecycle hooks
 
-Claude Code hooks are how Noctis learns what a session did. They are registered per config dir in `settings.json` (written by `bootstrap/`, never tracked — the commands need absolute interpreter paths).
-
-**Verified firing end to end on 2026-09-07** with the real hook commands: a `Read` produced an action line and a clean exit produced the sentinel, in the expected runtime file.
-
-## The enumeration
+Claude Code hooks are how Noctis learns what a session did, whoever hosts it. Two scripts, both non-blocking, both told the mode by `NOCTIS_MODE` (and the job by `NOCTIS_JOB_ID`).
 
 | Hook | Event | Writes | Path |
 |---|---|---|---|
-| `log_action.py` | `PostToolUse` — once per tool call | One line: `<iso8601> <Tool> <target>` | `backend/runtime/<mode>__<job>.log` |
-| `mark_session_end.py` | `SessionEnd` — once, when the CLI process exits | `SESSION_END` sentinel, and clears the mode's `busy` marker | same runtime log, plus `busy_marker` |
+| `log_action.py` | `PostToolUse` — once per tool call | one line, `<iso8601> <Tool> <target>`, and sets the mode's `busy` marker | `backend/runtime/<mode>__<job>.log` |
+| `mark_session_end.py` | `SessionEnd` — once, when the CLI process exits | the `SESSION_END` sentinel; clears the `busy` marker | the same log, plus `busy_marker` |
 
-**Job identity** resolves from `NOCTIS_MODE` / `NOCTIS_JOB_ID` environment variables (Terminal.app launches inherit them) or from `--mode` / `--job-id` baked into the hook command at registration time (VS Code's URI handler carries no shell env, so Dev launches register a per-project hook with the args pre-filled).
+**How they reach a session.** A hosted session gets them in its argv: `engine.py` names them in the settings block (`PostToolUse`, `SessionEnd`, with absolute interpreter and script paths, which is why they cannot be a committed settings file) and `interactive.py` composes that into `--settings`; `pty_spawn` applies `NOCTIS_MODE` and `NOCTIS_JOB_ID` to the child, because a PTY child would otherwise inherit whatever the shell process carried. A session Noctis did not launch — VS Code, a terminal — fires them only if the project's own `.claude/settings.local.json` registers them, with `--mode` and `--job-id` baked into the command; the environment wins when both are present. `make doctor` reports swallowed hook failures, because a hook that stops firing looks exactly like a session that used no tools.
 
-**Runtime, not vault.** These logs are high-churn and ephemeral. They live in a gitignored `backend/runtime/` directory and never touch `second-brain/` — a locked v1 decision that v2 keeps.
+**Runtime, not vault.** The logs are high-churn and ephemeral: gitignored `backend/runtime/`, never `second-brain/`.
 
 ## Why `SessionEnd` and not `Stop`
 
-`Stop` fires after *every agent turn* — Claude finishes a response and waits for the next prompt. That is not session termination. Registering on `Stop` shipped briefly and was caught live when busy expressions flipped to idle mid-session, long before the terminal actually closed. `SessionEnd` fires exactly once, when the process exits.
+`Stop` fires after *every agent turn* — a response finishes and the CLI waits for the next prompt. Registering on it shipped briefly and was caught live when busy expressions flipped to idle mid-session. `SessionEnd` fires once, when the process exits. The `SESSION_END` sentinel is also the other half of `staleness.py`: a log that ends in it was closed on purpose and must never be flagged, however old it gets.
 
-The `SESSION_END` sentinel is also half of the staleness mechanism: a job whose log ends in it was closed *on purpose*, so `staleness.py` must never flag it however old it gets. Without the sentinel, every completed job would eventually look abandoned.
+## What they are for
 
-## What changes under v2 — and what doesn't
+A hosted session's own telemetry — the 5h/7d windows, context, model, session id, transcript path — comes from its `statusLine` report (`backend/scripts/statusline.sh` → `POST /v2/sessions/statusline`), and its history from the transcript the CLI writes to disk. The hooks are what fires on every tool call regardless of who hosts the session. That is what keeps the runtime-log format a real interface rather than an implementation detail.
 
-Hooks were originally scoped as **transitional scaffolding**, on the assumption that a custom agent loop would supersede them. There is no custom agent loop: Claude Code *is* the engine, so hooks are permanent architecture. But their role narrows, and the split is worth being explicit about:
+## Adding one
 
-| Session type | Telemetry source |
-|---|---|
-| Hosted by the orchestrator (general chat, Noctua, Vesper) | **The `stream-json` stream itself.** The orchestrator already parses every `ToolCall`, `ToolResult` and `TurnEnd`. Hooks would duplicate what it can see directly. |
-| Launched externally (**Faber → VS Code**) | **Hooks, and only hooks.** Noctis does not own that process and never sees its stream. This is the case that keeps them essential. |
-
-So hooks stop being the primary telemetry path and become the path for sessions Noctis doesn't host. That is a smaller job than they had in v1, but not a removable one — and it means the runtime-log format stays a real interface rather than an implementation detail the orchestrator could quietly change.
-
-## Adding a hook
-
-1. Write it in this directory; read the payload from stdin as JSON.
-2. Register it for every mode in `bootstrap/bootstrap.sh`'s hook-wiring step — not by hand in a single `settings.json`, which drifts.
-3. Re-run `./bootstrap/bootstrap.sh` (idempotent; it rewires all config dirs).
-4. Verify it actually fires. `--settings` accepts inline JSON, so a hook can be exercised against a real session without touching any config dir:
+1. Write it here. Read the payload from stdin as JSON; never block, never raise — end in a swallow and let `failure_log` record the fault, which is where `make doctor` reads it.
+2. Add it beside `PostToolUse` and `SessionEnd` in `engine.py`'s hook block, which `interactive.py` composes into `--settings`. A test asserts the scripts exist on disk.
+3. Prove it fires against a real session without touching any config file — `--settings` accepts inline JSON:
 
 ```bash
 claude -p "…" --settings '{"hooks":{"PostToolUse":[{"matcher":"","hooks":[{"type":"command","command":"…"}]}]}}'

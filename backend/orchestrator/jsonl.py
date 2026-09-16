@@ -417,24 +417,3 @@ def index_new(store, mode_of: dict[str, str], default_mode: str = "general") -> 
         return IndexPass(taken, refreshed)
     finally:
         _indexing.release()
-
-
-def diff_against(store, limit: int = 50) -> dict:
-    """Where the recorder and the transcripts disagree, session by session.
-
-    The migration's step 4 -- switching the default -- is gated on this being
-    boring. A session both saw should count the same tokens; one they count
-    differently is either a session that continued outside Noctis (the
-    transcript is right and larger) or a real defect in one reader.
-    """
-    rows = []
-    for p in sorted(PROJECTS.glob("**/*.jsonl"), key=lambda q: q.stat().st_mtime,
-                    reverse=True)[:limit]:
-        recorded = store.tokens_for_engine_id(p.stem)
-        if recorded is None:
-            continue
-        seen = scan_usage(p).lifetime
-        rows.append({"session": p.stem, "recorded": recorded, "transcript": seen,
-                     "delta": seen - recorded})
-    agree = sum(1 for r in rows if r["delta"] == 0)
-    return {"compared": len(rows), "agree": agree, "rows": rows[:12]}

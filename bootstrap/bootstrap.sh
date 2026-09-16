@@ -63,15 +63,8 @@ check_tool python3 "backend runtime"            "brew install python@3.13"      
 check_tool node    "frontend build"             "brew install node"                           required
 check_tool claude  "the engine — v2 drives it"  "npm i -g @anthropic-ai/claude-code"          required
 check_tool git     "vault + repo version control" "xcode-select --install"                    required
-check_tool cargo   "Tauri shell (Stage 2 item 4)" "curl https://sh.rustup.rs -sSf | sh"       optional
+check_tool cargo   "the Tauri shell (make dev)"   "curl https://sh.rustup.rs -sSf | sh"       optional
 check_tool jq      "statusline script"          "brew install jq"                             optional
-
-if python3 -c "import PyInstaller" 2>/dev/null; then
-  ok "pyinstaller — python sidecar packaging"
-else
-  warn "pyinstaller missing — needed to bundle the Python sidecar (Stage 2 item 4)"
-  printf "      ${DIM}pip install pyinstaller${RESET}\n"
-fi
 
 # FTS5 is not optional: all retrieval depends on it, and it is a compile-time
 # flag in SQLite rather than something installable later.

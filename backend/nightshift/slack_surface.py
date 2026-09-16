@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import vault_io
 from jobs import MAINTENANCE_STATE
-from triggers import lessons_path
+from jobs import lessons_path
 
 
 @dataclass

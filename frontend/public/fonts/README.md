@@ -20,7 +20,6 @@ imported at the v2 cutover, so everything fell through to Menlo. Both faces
 are declared in `src/shell/tokens.css` now, and a test fails if a vendored,
 requested font is not.
 
-**Press Start 2P** (Cody "CodeMan38" Boisclair, SIL OFL 1.1) is retired for
-v2 — it served v1's game world, and a pixel face is a reading burden in a
-text-dense tool. Kept, unreferenced, until the v1 cutover removes it with the
-rest of that surface.
+**Press Start 2P** served v1's game world and was removed on 2026-09-16 —
+a pixel face is a reading burden in a text-dense tool, and it had been
+vendored and unreferenced since the v2 cutover.

@@ -7,7 +7,7 @@
  * here -- counts composed into sentences, no model in the loop -- and then
  * what is waiting on you.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Unreachable } from './Async'
 import { Pools, type PoolTone } from './Pools'
 import { get, post, put } from './engine'
@@ -813,7 +813,7 @@ export function Settings({ onDecided }: { onDecided?: () => void }) {
 function Maintenance({ onDecided }: { onDecided?: () => void }) {
   const night = useFetched<{ nightshift: NightshiftSummary | null }>('/v2/nightshift')
   const inbox = useFetched<InboxPayload>('/v2/inbox')
-  const broken = night && night !== false && night.nightshift?.kind === 'broken'
+  const broken = Boolean(night) && night !== false && night?.nightshift?.kind === 'broken'
   return (
     <>
       <Card>

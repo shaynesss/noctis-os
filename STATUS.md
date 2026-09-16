@@ -8,7 +8,7 @@ Current state, not aspirational. History lives in [`CHANGELOG.md`](CHANGELOG.md)
 
 **v2 is the daily driver, and the session is a real terminal.** The app hosts the interactive Claude Code CLI in a pseudo-terminal per tab; the `-p` orchestrator that preceded it is deleted. Stage 1 complete; Stage 2 items 1–9 closed, and nothing is left in the build order — the `launchd`-on-wake scheduler that was item 6's last piece was closed on 2026-09-15 rather than built, because the commit log is the record. v1 is gone entirely.
 
-**Verified 2026-09-15 (night):** 303 backend tests, 76 frontend, `tsc -b` and `cargo check` clean, `make doctor` reporting both halves up and no capability gaps, `npm audit` and `pip-audit` clean. A Playwright pass over every rail tab, the launcher, the palette and the split keys reports no page errors.
+**Verified 2026-09-16:** 299 backend tests, 73 frontend, `tsc -b` and `cargo check` clean, `make doctor` reporting both halves up, no swallowed hook failures and no capability gap in any mode. A Playwright pass over every rail tab against the running app — and a second with a Faber terminal seeded in this repository, to see the record block — reports no page errors and no console errors. (The day's earlier commit bodies said "tsc clean" while `tsc -b` had seven errors — fixed in this pass; the number in a commit body is a claim, and `make test` is the check.)
 
 v2's premise: the app drives Claude Code as a subprocess rather than calling the API, so it runs on the existing subscription at no marginal cost. The interface is the deliverable — v2 exists to stop Claude Desktop being the entry point.
 
@@ -19,26 +19,27 @@ The spec, the product brief and the PTY migration record live in the vault: `sec
 Verified live, not only by tests.
 
 - **Terminal** — the real `claude`, one per tab, in the app's palette. A fresh session opens by saying what it is; sessions survive a reload (the PTY registry outlives the page and reattaches with a replay), resume by engine session id, split into a grid (`⌘⇧-number`; a row to three, then 2×2, 3×2, 3×3), and a split's tabs drag as one bracket.
-- **Repo** — the landing view, and the memory: one module per repository the open terminals are in; branch, ahead/behind, uncommitted files, the last twenty commits with their bodies on click (a body's last paragraph is where the work was left), red/green push dots, and the sprite of whose work each is, by the transcript that made it; GitHub's PRs and issues loaded after the local half; a **Record** fold showing the vault side of a dev job's project by file — every record file with the commit that last touched it, and how far the record trails the code — with the same figures and push as the project; the **push button**, which runs as you, refuses attribution lines and bodiless commits (dated after 2026-09-17), and asks separately before a force push.
-- **Stats** — the 5-hour and 7-day windows, lifetime tokens by kind, a year of activity, and every session's history indexed from the CLI's own transcripts; `⌘K` searches it.
-- **Settings** — the universal prompt and each mode's overlay, edited in the vault in place (uncommitted; Repo commits them); the **regression suite**, run from the card scoped to what an edit affects, each case recorded against the prompt it ran on; and **Maintenance** — nightshift's last run as one sentence, and its proposals with accept/reject (was the Inbox tab).
-- **MCP server** — five tools against the real vault, dependency-free stdio, usable from any MCP client; registered at user scope so every session on the machine has `vault_search`.
+- **Repo** — the landing view, and the memory: one module per repository the open terminals are in. A lid (name, branch, the terminals' sprites, the GitHub link) and then one anatomy, used twice: the code's block — its path, the figures (not on GitHub, behind, uncommitted), the uncommitted files, a Commits fold with the push on its lid — and, for a dev job's project, the record's block under it at `<vault>/wiki/<Project>/`, with the record's own figures and its own commits, each marked whether it touches the notes or was made from inside the project. A commit opens to its body on click; red and green dots say pushed or not; each wears the sprite of whose work it was, by the transcript that made it. GitHub's PRs and issues load after the local half. The **push button** runs as you, refuses attribution lines and bodiless commits (dated after 2026-09-17), and asks separately before a force push.
+- **Stats** — the 5-hour and 7-day windows, lifetime tokens by kind read from the CLI's own transcripts, a year of activity, and every session's history indexed from those transcripts; `⌘K` searches it.
+- **Settings** — the universal prompt and each mode's overlay, edited in the vault in place (uncommitted; Repo commits them); the **regression suite**, thirteen cases run from the card scoped to what an edit affects, each recorded against the prompt it ran on; and **Maintenance** — nightshift's last run as one sentence, and its proposals with accept/reject.
+- **Nightshift** — nightly at 03:00 under `launchd`. Its first run since the PATH fix, 2026-09-16 03:04, completed and recorded `quiet` (three items seen, nothing to stage, no error); Settings → Maintenance prints it.
+- **MCP server** — five tools against the real vault, stdio, no third-party dependencies (it imports `retrieval/` and `jobs.py` from beside it), usable from any MCP client; registered at user scope so every session on the machine has `vault_search`.
 - **Shell** — Tauri 2, Opt+Space summon, tray, launch-at-login; `⌘T` mode entry, `⌘⇧H` handoff, `⌘W` close, `⌘1–9` focus.
 - **Telemetry** — hooks attribute actions to a mode and job for hosted sessions; the status line feeds the bar and survives a reload.
 
 ## Next
 
 1. **The commit log as memory, in use.** It shipped 2026-09-15 evening; a week of mornings opening on Repo will say whether a commit body's last paragraph is enough to restart from, and whether the push's refusal of bodiless commits (from 2026-09-17) bites at the right moment.
-2. **Effort at spawn.** `interactive-args` does not take `--effort`; a terminal session runs at the CLI's default. Should come back as a launcher option and a Settings default.
-3. **Nightshift's first real run.** It runs nightly at 03:00 and failed every night from 2026-08-05 to 09-15 (launchd's PATH could not find `claude`); the fix is in, every run is now recorded, and Settings' Maintenance section reports it. The lessons-distillation path has never executed — the first night it does may surface bugs of its own. Watch the Maintenance line.
-4. **The MCP server travels as three directories.** `mcp/server.py` imports `retrieval/` and `orchestrator/`; "nothing to install" is true, "copy one file" is not. The adoption docs should say so.
-5. **Four maintenance proposals waiting** (Settings → Maintenance, 2026-09-15): the vault's folder-per-project rule, one dev.md clause (always a folder; slug = project directory), and the closed migration notes in `maintenance/audit.md` and `schedule.md`. Accepting them makes the vault's schema say what its layout already does.
+2. **The flagged-job pipeline has no producer.** `staleness.flag_stale_jobs()` marks a dev job `flagged` when its context is six hours untouched and its runtime log ends without a clean `SESSION_END`; it ran on v1's `GET /mode/{name}` poll, which went at the cutover, and nothing has called it since — so nightshift's flagged-job scan finds nothing and dev.md §8's "session death marks the job flagged" is not currently true. Either wire it into the nightly scan or delete it with the claim. A decision, not a bug fix.
+3. **One job, two sessions.** `CLAUDE.md`'s hard constraint says sessions run in parallel across modes, not within one job; the Repo view is built to name two Faber terminals on one project, and nothing in the launcher prevents it. Decide which is the rule, then make the other say so.
+4. **Effort at spawn.** `interactive-args` does not take `--effort`; a terminal session runs at the CLI's default. Should come back as a launcher option and a Settings default.
+5. **Nightshift's distillation path** has still never executed on a night with undistilled lessons; the first one that does may surface bugs of its own. Watch the Maintenance line.
 
 ## Known gaps, accepted
 
 - `busy` has no self-healing path if a `SessionEnd` hook never fires (force-quit, sleep).
 - Nightshift's apply has no schema-aware validation of the target file beyond the accept click.
-- The store's read-modify-write on `settings.md` is not atomic; accepted for a single-user, mostly-sequential app.
+- Commit attribution by transcript matches on the subject line: two commits with one subject both credit the first session that ran it (DOCUMENTATION §21).
 
 ## Deploy
 

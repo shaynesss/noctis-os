@@ -266,8 +266,8 @@ class ConversationStore:
 
         The only door into these tables now. There used to be a recorder
         that folded stream events as Noctis hosted a session; it could only
-        see sessions Noctis streamed, and the comparison in `jsonl.diff_against`
-        showed it undercounting every one of them. Terminal sessions, VS Code
+        see sessions Noctis streamed, and a side-by-side against the
+        transcripts (2026-09-13) showed it undercounting every one of them. Terminal sessions, VS Code
         sessions, anything the CLI ran: all arrive here, from the transcript
         the CLI itself wrote.
 

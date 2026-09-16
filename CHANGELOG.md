@@ -11,6 +11,49 @@ are complete and verified live. Nothing is left in the build order: the
 2026-09-15 rather than built, because the commit log is the record and needs
 no writer.
 
+### What the docs said and the code did not (2026-09-16)
+
+- **`tsc -b` was failing at HEAD** — seven errors from the day's Repo commits:
+  test fixtures predating `full` and `body` on a commit, an unused import in
+  two files, and a narrowing that compared a fetched value to `false` twice.
+  Fixed; `make test` is green again. The commit bodies that said "tsc clean"
+  were reporting a run that had not happened.
+- **Removed:** `triggers.py` — Custos's three trigger badges, computed for a
+  `GET /mode/settings` poll that went at the cutover; only `lessons_path` was
+  still read, and it moved to `jobs.py`. The recorder-vs-transcript
+  comparison — `jsonl.diff_against`, the `transcripts` and `diff` keys of
+  `/v2/sessions/stats` — which gated PTY-MIGRATION step 4, taken on 09-14.
+  `Transcript`'s composer-era props (`onEdit`, `onRetry`, `streaming`,
+  `recap`, `startedAt`, `lastTurn`) and `Working.tsx` with them: nothing has
+  passed them since the orchestrator went. Press Start 2P, vendored and
+  unreferenced since the v2 cutover. Bootstrap's check for a PyInstaller
+  sidecar that never existed. 299 backend, 73 frontend after, from 308 and 73.
+- **The browser fallback no longer throws on load.** `Terminal.tsx` subscribed
+  to the PTY's Tauri events before asking whether it was in Tauri, so `make
+  browser` opened with a page error from `@tauri-apps/api`; the subscription
+  now sits behind `inTauri()` with the spawn.
+- **Docs rewritten to what runs.** README's Repo section and `STATUS.md`
+  described the Record fold by file with a "trails the code" sentence, both
+  replaced the day before; the MCP server was "zero dependencies" in three
+  places when it imports two sibling modules; `DOCUMENTATION.md` §10 carried
+  the by-file fold and the commit-list fold in one paragraph, §14 said a
+  backend restart kills a session (the PTY registry is the shell's), §18
+  listed a `NOCTIS_SCRATCH_ROOT` nothing reads and missed `PROJECTS_DIR` and
+  `REGRESSION_MODEL`, §20 said 438 tests, §22 still had a Chat composer and an
+  unfinished migration step; `SETUP.md` asked for a VS Code setting v1's launch
+  surface needed and hand-rendered the plist bootstrap installs;
+  `backend/hooks/README.md` described per-config-dir hooks and a stream-json
+  orchestrator; `frontend/README.md` was the Vite template; `.env.example`
+  cited two deleted modules; `CLAUDE.md` claimed an Impeccable edit hook that
+  is not registered anywhere. All of it now says what is on disk.
+- **Two contradictions surfaced, not resolved** — they are rules, and the call
+  is Shayne's: `staleness.flag_stale_jobs()` has had no caller since the
+  cutover, so nightshift's flagged-job scan finds nothing and dev.md §8's
+  "session death marks the job flagged" is currently untrue; and `CLAUDE.md`'s
+  "sessions run in parallel across modes, not within one job" against a Repo
+  view built to name two Faber terminals on one project. Both in
+  `STATUS.md`'s Next.
+
 ### The card, settled (2026-09-16)
 
 - **Equal, open or closed.** Modules in a row always share a height; the

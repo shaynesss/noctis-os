@@ -1,32 +1,15 @@
-# React + TypeScript + Vite
+# frontend/
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+The shell: React 19 + TypeScript + Vite + Tailwind 4 in `src/`, and the Tauri 2 window that hosts it in `src-tauri/`. `main.tsx` mounts `src/shell/App.tsx` inside an error boundary and nothing else.
 
-Currently, two official plugins are available:
+| | |
+|---|---|
+| `src/shell/` | the v2 client — `App` (arrangement and chrome), `Terminals`/`Terminal` (xterm.js over the PTY), `Panels` (Repo, Settings), `Chrome` (rail, status bar, sprites), `Launcher`, `Palette`, `Transcript` (a past conversation from history), `tokens.css` (the design tokens the terminal theme is generated from) |
+| `src-tauri/src/pty.rs` | the pseudo-terminals: spawn, resize, kill, and a registry that outlives the page so a reload reattaches |
+| `src-tauri/src/lib.rs` | window, tray, global hotkey, `open_url` |
+| `public/assets` | a symlink to `../../assets`, so the sprites have one source |
+| `public/fonts/` | vendored faces; see its README |
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Run it from the repo root, not here: `make dev` (the window) or `make browser` (a tab at `:5180`). `npm run typecheck` is `tsc -b` — never `tsc --noEmit -p tsconfig.json`, which is a solution file with `"files": []` and checks nothing. `npm run test` is vitest. The `[tsc]` stream in `make dev`'s terminal is the typecheck; Vite itself never checks types.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+`DOCUMENTATION.md` §10 is the interface; §22 is the terminal.

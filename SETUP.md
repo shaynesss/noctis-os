@@ -1,30 +1,34 @@
 # SETUP.md
 
-Manual, machine-level checklist only. Everything else is scripted by `make setup` (see `scripts/setup.sh`, `Makefile`).
+The one-time, machine-level checklist. Two scripts do almost all of it; this file is what they cannot do for you, and where to look when something is off.
 
-## Noctis OS runtime
+## The two scripts
 
-- **Claude Code login** — `claude` CLI installed and logged in (`claude auth login` or equivalent), since the session launcher shells out to it.
-- **`VAULT_PATH`** — set in `.env` (copied from `.env.example` by `make setup`) to the absolute path of `second-brain/` on this machine.
-- **VS Code global setting: `workbench.browser.openLocalhostLinks`** — one-time, set globally (not per-repo) so any localhost link, including ones Claude Code prints in chat, opens in VS Code's Integrated Browser instead of a system browser tab. Needed for Dev mode's launch surface.
-- **Nightshift launchd job** — one-time, renders and loads `launchd/com.noctis-os.nightshift.plist.template` (nightly 03:00 run of `scripts/nightshift_run.sh`, see `backend/nightshift/runner.py` for what it actually does):
-  ```
-  sed "s|__REPO_ROOT__|$PWD|g" launchd/com.noctis-os.nightshift.plist.template \
-    > ~/Library/LaunchAgents/com.noctis-os.nightshift.plist
-  launchctl load ~/Library/LaunchAgents/com.noctis-os.nightshift.plist
-  ```
-  Trigger a run manually to test without waiting for 03:00: `launchctl start com.noctis-os.nightshift`. Logs land in `backend/runtime/nightshift.log` (gitignored, same runtime-scratch area as the telemetry hooks). Unload with `launchctl unload ~/Library/LaunchAgents/com.noctis-os.nightshift.plist`. The rendered plist holds an absolute repo path — launchd expands neither `~` nor environment variables — so re-render it if the repo ever moves. The tracked file is a template with `__REPO_ROOT__` placeholders and is never loaded directly.
+| | Does | Re-run |
+|---|---|---|
+| `make setup` (`scripts/setup.sh`) | this checkout's dependencies: the backend venv, `npm install`, and `.env` from `.env.example` if absent | after a dependency change |
+| `make bootstrap` (`bootstrap/bootstrap.sh`) | the machine: checks the tooling (`python3`, `node`, `claude`, `git` required; `cargo`, `jq` optional; SQLite with FTS5 and `bm25()`), confirms the vault is a git repository with a remote, symlinks `~/.claude/CLAUDE.md` → `second-brain/prompts/system.md`, writes `.env` with a generated token and the resolved vault path, and renders and loads the nightshift `launchd` plist | any time — idempotent, reports and skips what is already right, never overwrites without `--force` |
 
-## Vault access
+`./bootstrap/bootstrap.sh --dry-run` prints what it would do and changes nothing. Step by step in [`bootstrap/README.md`](bootstrap/README.md).
 
-The backend reads and writes `second-brain/` directly off disk. **No Obsidian, no istefox, no MCP dependency.** Obsidian is an optional viewer — useful for browsing the vault by hand, required by nothing.
+## By hand
 
-*(Removed 2026-09-07, Noctis v2 Stage 1 item 1. Obsidian's app-level config hung on 2026-08-29 for reasons unrelated to any vault file and cost most of an afternoon; it is demoted from prerequisite to convenience.)*
+- **Claude Code, logged in.** `claude` on `PATH` and authenticated once in a terminal — credentials are Keychain entries, and sessions, nightshift and the regression suite all shell out to it.
+- **`VITE_API_TOKEN`** in `.env`, the same value as `NOCTIS_API_TOKEN`. Bootstrap generates the latter and leaves the frontend's copy to you: Vite inlines it into the bundle, which `.env.example` explains is acceptable here and nowhere else.
+- **Rust**, for the window. `make dev` is the Tauri shell and needs `cargo`; bootstrap says so if it is missing, and the Makefile adds `~/.cargo/bin` to `PATH` so a non-login shell finds it. Without it, `make browser` runs the same backend and frontend in a browser tab.
+- **A vault remote.** Bootstrap warns rather than creates one; the `gh repo create` line it prints is the one-liner.
 
-Nothing else. Repo scaffolding, dependency installs, and env file creation are all handled by `make setup`.
+## Nightshift under launchd
 
-## Native desktop window (`make dev`, the normal way to run it)
+Bootstrap's step 5 renders `launchd/com.noctis-os.nightshift.plist.template` — launchd expands neither `~` nor variables in its paths, so the tracked file is a template with `__REPO_ROOT__` placeholders and is never loaded directly — into `~/Library/LaunchAgents/` and loads it. Nightly at 03:00 it runs `scripts/nightshift_run.sh` → `backend/nightshift/runner.py`. The script exports a `PATH` with Homebrew's bin on it, because launchd's own has none and from 2026-08-05 to 09-15 every night failed to find `claude`. Every run is recorded in `backend/data/nightshift.json`, and Settings → Maintenance says how the last one ended.
 
-`make dev` opens Noctis OS in its Tauri shell — a native window with global hotkey summon (Opt+Space), tray and launch-at-login — and runs the backend under `backend/supervise.py`, which restarts it if it stops answering. Closing the window hides it rather than quitting; the tray and the hotkey are the ways back. Needs Rust: `cargo` is installed by `bootstrap/`, and the Makefile adds `~/.cargo/bin` to PATH so a non-login shell still finds it.
+- Run it now rather than at 03:00: `launchctl start com.noctis-os.nightshift`
+- Log: `backend/runtime/nightshift.log` (gitignored, like every runtime file)
+- Unload: `launchctl unload ~/Library/LaunchAgents/com.noctis-os.nightshift.plist`
+- The rendered plist holds an absolute repo path: re-run `make bootstrap` if the checkout moves.
 
-`make browser` is the fallback for backend-only work — a browser tab at `:5180` and `uvicorn --reload` instead of the window and the supervisor — worth it only when a Rust build is not. *(Until 2026-09-12 this ran `desktop/app.py`, a pywebview window — v1's shell, now deleted.)*
+## Running it
+
+`make dev` opens the native window — Opt+Space summon, tray, launch-at-login; closing hides it, the tray and the hotkey are the ways back — with the backend under `backend/supervise.py`, which restarts it if it stops answering. `make browser` is the fallback for backend-only work: a browser tab at `:5180` and `uvicorn --reload` in place of the window and the supervisor. `make open-app` is the double-clickable wrapper around `make dev`. `make doctor` says what is up. The two paths side by side: `DOCUMENTATION.md` §14.
+
+Nothing else. The backend reads and writes `second-brain/` off disk — no Obsidian (an optional viewer, demoted from prerequisite on 2026-09-07), no MCP dependency of its own.

@@ -1,15 +1,14 @@
-/* Transcript — block-structured, not a character stream.
+/* Transcript — a past conversation, read from history.
  *
- * `stream-json` hands us discrete events (thinking, tool_use, tool_result,
- * text), so the transcript is built from blocks rather than appended text.
- * That is why the Design Brief takes Ghostty for *rendering* and not for its
- * stream model: a terminal-shaped transcript would fight the data. */
+ * Block-structured, not a character stream: the CLI's own transcript on disk
+ * records discrete events (thinking, tool_use, tool_result, text), so the
+ * reader is built from blocks rather than appended text. A live session is
+ * the CLI's own TUI in a terminal; this renders only what the store indexed. */
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Markdown } from './Markdown'
 import { Artifacts } from './Artifacts'
 import { failures, groupTools, summarise, type ToolBlock } from './tools'
-import { Finished, Working } from './Working'
-import { type Block, type Mode } from './domain'
+import { type Block } from './domain'
 
 function Caret({ open }: { open: boolean }) {
   return (
@@ -79,46 +78,16 @@ function Disclosure({
  */
 export function Transcript({
   blocks,
-  accent,
-  thinking,
-  mode,
-  startedAt,
-  recap,
-  lastTurn,
   historyId,
   onOpenDoc,
   scrollKey,
-  initialScroll,
-  onScroll,
-  streaming,
-  onEdit,
-  onRetry,
 }: {
   blocks: Block[]
-  accent: string
-  /** Live thinking-token estimate, or null when not reasoning. */
-  thinking?: number | null
-  mode: Mode
-  /** When the running turn began, or null when nothing is running. */
-  startedAt?: number | null
-  /** One-line reminder of where a restored conversation left off. */
-  recap?: string | null
-  /** The last turn's duration and end time. */
-  lastTurn?: { seconds: number; at: number } | null
   /** Backend row id, for the files this conversation touched. */
   historyId?: number | null
   onOpenDoc?: (vaultPath: string) => void
   /** Identifies the conversation, so its scroll position is its own. */
   scrollKey: string
-  /** Where this conversation was last left, in pixels from the top. */
-  initialScroll?: number
-  onScroll?: (key: string, top: number) => void
-  /** True while a turn is streaming, which is when to follow the output. */
-  streaming?: boolean
-  /** Put a past message back in the composer to rephrase. */
-  onEdit?: (text: string) => void
-  /** Ask the same thing again. */
-  onRetry?: (text: string) => void
 }) {
   const box = useRef<HTMLDivElement>(null)
   // How close to the bottom still counts as "at the bottom". A couple of
@@ -139,7 +108,7 @@ export function Transcript({
   useLayoutEffect(() => {
     const el = box.current
     if (!el) return
-    el.scrollTop = initialScroll ?? el.scrollHeight
+    el.scrollTop = el.scrollHeight
     /* And decide, from where we just landed, whether output should be
      * followed. Both layout effects run on mount and this one is declared
      * first, so without setting it here the follow below would immediately
@@ -155,41 +124,20 @@ export function Transcript({
     const el = box.current
     if (!el || !wasAtBottom.current) return
     el.scrollTop = el.scrollHeight
-  }, [blocks, thinking, streaming])
+  }, [blocks])
 
   return (
     <div
       ref={box}
-      onScroll={(e) => {
-        const el = e.currentTarget
+      onScroll={() => {
         wasAtBottom.current = atBottom()
-        onScroll?.(scrollKey, el.scrollTop)
       }}
       className="min-h-0 flex-1 overflow-y-auto"
     >
       <div className="mx-auto max-w-[840px] px-8 pb-8 pt-7">
-        {/* Above the transcript, not inside it: this is not something anyone
-            said. It is a reminder of where a resumed conversation got to,
-            which is the one thing you need before reading a wall of text you
-            wrote days ago. */}
-        {recap && (
-          <div className="mb-[20px] flex gap-[9px] text-[12.5px] italic leading-[1.6] text-ink-faint">
-            <span aria-hidden className="not-italic" style={{ color: accent }}>✳</span>
-            <span>
-              <span className="font-semibold not-italic">recap:</span> {recap}
-            </span>
-          </div>
-        )}
         {groupTools(blocks).map((group, gi) => {
           if (group.kind === 'tools') return <ToolRun key={`g${gi}`} tools={group.tools} />
-          const b = group.block
-          const i = gi
-          /* The last thing you said is the only one worth offering to redo:
-           * re-asking something from the middle of a conversation would send
-           * it to the end anyway, where it no longer means the same thing. */
-          const isLastUser = b.kind === 'user' && !blocks.slice(blocks.indexOf(b) + 1)
-            .some((later) => later.kind === 'user')
-          return renderBlock(b, i, isLastUser && !startedAt ? { onEdit, onRetry } : undefined)
+          return renderBlock(group.block, gi)
         })}
 
         {/* Below the conversation, above the turn's closing line: it is a
@@ -197,14 +145,6 @@ export function Transcript({
             when you finish reading rather than at the top. */}
         {historyId != null && onOpenDoc && (
           <Artifacts sessionId={historyId} onOpen={onOpenDoc} />
-        )}
-
-        {startedAt != null ? (
-          <Working key={startedAt} mode={mode} startedAt={startedAt} thinking={thinking} accent={accent} />
-        ) : (
-          lastTurn && (
-            <Finished mode={mode} seconds={lastTurn.seconds} at={lastTurn.at} accent={accent} />
-          )
         )}
       </div>
     </div>
@@ -260,18 +200,14 @@ function ToolRun({ tools }: { tools: ToolBlock[] }) {
 }
 
 /** One transcript block. */
-function renderBlock(
-  b: Block,
-  i: number,
-  redo?: { onEdit?: (text: string) => void; onRetry?: (text: string) => void },
-) {
+function renderBlock(b: Block, i: number) {
           if (b.kind === 'user') {
             /* A prompt glyph and dimmer ink instead of a YOU label: it is
              * already obvious which turn is yours, and a caption on every
              * one of them was two lines of furniture per exchange. The time
              * moves to a tooltip -- worth having, not worth a line. */
             return (
-              <div key={i} className="group mb-[16px] flex gap-[9px]" title={b.at}>
+              <div key={i} className="mb-[16px] flex gap-[9px]" title={b.at}>
                 <span
                   aria-hidden
                   className="select-none font-mono text-[13px] leading-[1.6] text-ink-faint"
@@ -281,34 +217,6 @@ function renderBlock(
                 <div className="min-w-0 whitespace-pre-wrap font-mono text-[13px] leading-[1.6] text-ink-dim">
                   {b.text}
                 </div>
-                {/* On hover, and only on the last thing you said. The engine
-                    cannot rewind a session, so neither of these replaces the
-                    exchange -- they ask again with it still in view, which is
-                    what actually happens and so what the UI should look like. */}
-                {redo && (
-                  <span className="ml-auto flex shrink-0 items-start gap-[4px] opacity-0 transition-opacity group-hover:opacity-100">
-                    {redo.onEdit && (
-                      <button
-                        type="button"
-                        onClick={() => redo.onEdit!(b.text)}
-                        title="Put this back in the composer to rephrase"
-                        className="rounded-control px-[6px] py-[2px] font-mono text-[10.5px] text-ink-faint hover:bg-elevated hover:text-ink"
-                      >
-                        edit
-                      </button>
-                    )}
-                    {redo.onRetry && (
-                      <button
-                        type="button"
-                        onClick={() => redo.onRetry!(b.text)}
-                        title="Ask this again"
-                        className="rounded-control px-[6px] py-[2px] font-mono text-[10.5px] text-ink-faint hover:bg-elevated hover:text-ink"
-                      >
-                        retry
-                      </button>
-                    )}
-                  </span>
-                )}
               </div>
             )
           }

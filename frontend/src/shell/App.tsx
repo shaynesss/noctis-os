@@ -16,7 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { Unreachable } from './Async'
 import { BottomBar, OverageBanner, Rail, TitleStrip, type LiveLimits } from './Chrome'
-import { del, get, post, type HistoryTranscript, type Stats as StatsPayload, type Window } from './engine'
+import { del, get, type HistoryTranscript, type Stats as StatsPayload, type Window } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { Palette } from './Palette'
 import {
@@ -474,8 +474,7 @@ function HistoryView({ transcript, full, onResume, onClose, onOpenDoc }: {
           </button>
         </span>
       </div>
-      <Transcript blocks={transcript.blocks} accent={MODE_ACCENT[transcript.mode]}
-                  mode={transcript.mode} historyId={transcript.id}
+      <Transcript blocks={transcript.blocks} historyId={transcript.id}
                   scrollKey={`h${transcript.id}`} onOpenDoc={onOpenDoc} />
     </div>
   )

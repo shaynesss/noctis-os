@@ -2,7 +2,7 @@
 
 Extracted 2026-07-21 from the v1 reference sheet (removed from the repo 2026-09-15 with Custos's and Echo's variants, the personas having been retired). Every non-idle sprite on the sheet, found via connected-component labeling (not hand-picked crop boxes) and run through the same cleanup pipeline the 5 locked idle sprites use: white-background flood removal to transparency, then a 1px alpha erosion pass to eat the anti-alias halo along the silhouette.
 
-**Mostly not wired into the app.** The character strip and the tab marks use `noctua-sleepy`, `vesper-drowsy`, `vesper-alert` and `faber-building`; the rest is the library for states the app does not yet draw.
+**Mostly not wired into the app.** The tab marks and the Repo view's chips use `noctua-sleepy` and `vesper-drowsy` (Faber's mark is the idle `faber.png`); the rest is the library for states the app does not yet draw.
 
 ## Naming — most are confident, a few are a best guess
 

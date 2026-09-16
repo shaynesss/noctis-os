@@ -115,15 +115,14 @@ export function Launcher({
       return
     }
     // Cmd+Enter, not bare Enter: the prompt is a textarea and newlines in an
-    // opening instruction are normal, so Enter must stay a newline here even
-    // though it sends in the composer.
+    // opening instruction are normal, so Enter must stay a newline here.
     if (e.key === 'Enter' && e.metaKey) {
       e.preventDefault()
       launch()
       return
     }
-    // Cmd+digit picks a mode. The composer's Cmd+1/2/3 is suspended while
-    // this is open, so the same keys mean "choose" rather than "switch tab".
+    // Cmd+digit picks a mode. The shell's Cmd+1-9 (focus a terminal) is
+    // suspended while this is open, so the same keys mean "choose".
     if (e.metaKey && /^[1-9]$/.test(e.key)) {
       const target = choices[Number(e.key) - 1]
       if (target) {

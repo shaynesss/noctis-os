@@ -15,6 +15,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { inTauri } from './host'
 import '@xterm/xterm/css/xterm.css'
 import { del, getResult, post } from './engine'
 import type { Mode } from './domain'
@@ -357,6 +358,15 @@ export function Terminal({
         tail = (tail + utf8.decode(bytes, { stream: true })).slice(-400)
         if (tail.includes('No conversation found')) resumedNothing = true
       }
+      /* The browser fallback (`make browser`) has no PTY host: `listen` and
+       * `invoke` reach for `__TAURI_INTERNALS__` and throw before anything
+       * is subscribed, which landed as a page error on every load. Say so
+       * in the pane instead, and leave the rest of the app to its work. */
+      if (!inTauri()) {
+        term_.writeln('\x1b[2m  terminals need the app -- this is the browser fallback. `make dev` opens the window.\x1b[0m')
+        setDead(true)
+        return
+      }
       const unData = await listen<{ id: string; b64: string; seq: number }>('pty:data', (e) => {
         if (e.payload.id !== id) return
         // A frame can be in flight from the batcher after the listener is
@@ -388,10 +398,9 @@ export function Terminal({
       const ended = () => {
         term_.writeln('\r\n\x1b[2m  session ended — press \x1b[0mr\x1b[2m to start a new one\x1b[0m')
         setDead(true)
-        /* Into history, now rather than on the next Stats visit. The recorder
-         * never saw this session -- it was never streamed -- so until the
-         * transcript is indexed it exists on disk and nowhere in the
-         * interface. The exit is the moment the file is complete. */
+        /* Into history, now rather than on the next Stats visit: until the
+         * transcript is indexed the session exists on disk and nowhere in
+         * the interface, and the exit is the moment the file is complete. */
         void post('/v2/sessions/index', {})
         /* And out of the live count now, not in thirty seconds. Liveness is
          * otherwise "reported recently", which is right for a terminal that

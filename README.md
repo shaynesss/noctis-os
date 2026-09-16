@@ -8,7 +8,7 @@
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />
   <img alt="status" src="https://img.shields.io/badge/v2-daily%20driver-orange.svg" />
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS-black.svg" />
-  <img alt="tests" src="https://img.shields.io/badge/tests-303%20%2B%2076-brightgreen.svg" />
+  <img alt="tests" src="https://img.shields.io/badge/tests-299%20%2B%2073-brightgreen.svg" />
 </p>
 
 ---
@@ -64,7 +64,7 @@ The repositories the open terminals are in, one group per repository, the showin
 
 **The commit log is the memory.** Per repository: branch, ahead/behind, uncommitted files, and the last twenty commits — click one for its body, click again to close it. A commit's body is the record of where that piece of work was left (every session's commits end with *where this leaves things* and *what comes next*), so opening a project is reading where you stopped; there is no separate brief. A red dot is "not on GitHub", a green one "on GitHub", and each commit wears the sprite of **whose work it was** — by evidence: the session whose transcript ran the commit, whatever tab happened to be open; a session filed from inside a dev job's project is Faber's. GitHub's half — open pull requests with a one-word check state, open issues — loads after the local half so the view never waits on the network.
 
-For a dev job's project, a **Record** fold shows the other half of the same work, by file: every file of the project's vault record — the notes folder (`wiki/<Project>/`), the job context, and the shared files a session inside this project last touched (the log entry, the lesson) — each with the commit that last wrote it, a never-committed file first, and one sentence saying how far the record trails the code. The same figures and the same push button as the project, pointed at the vault.
+For a dev job's project the module has a second block under the code's, the **record**: the project's vault side at `<vault>/wiki/<Project>/` — the notes folder, the job context, and the shared files a session inside this project wrote (the log entry, the lesson). Same anatomy as the code's block: the path, its own figures (the record's unpushed commits, not the vault's total), the uncommitted files, and a Commits fold listing the record's commits — each marked whether it is here because it touches the notes or because its author was inside the project — with the vault's push on its lid. One Commits fold is open at a time.
 
 **The push is a button, and it is yours.** A session never pushes (`git push` is denied to hosted sessions; the prompt sends every other one here). The button runs `git push` as your own git identity, reads every outgoing commit first and refuses if any carries an attribution trailer or — for commits dated after 2026-09-17 — has no body, and asks separately before a force push when the histories disagree.
 
@@ -74,7 +74,7 @@ The engine's rolling **5-hour and 7-day windows** — the real currency on a sub
 
 ### Settings
 
-Three things that are true until you change them. **Maintenance:** nightshift's last run — nightly at 03:00, said as one sentence with how many nights in a row have ended the same way — and the proposals it staged, as packages: the sender's sprite, what the change is, what accepting does, the full rationale, evidence and a red/green diff on demand. **Accepting applies the diff** — all hunks or none — archives the proposal, and commits the vault; rejecting archives it. Maintenance itself never edits a methodology; the person accepting is the edit. A job gone stale becomes a proposal here too, which is how loose ends come back round. **Prompts:** the prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault (saved uncommitted; the Repo tab commits them). Beside them, the **regression suite**: thirteen cases, each a mode, a prompt and a deterministic assertion guarding one rule — the attribution rule, the Confusion Protocol, plan-before-code, mode identity. Run from the card, scoped to what an edit can affect: an overlay runs its mode's cases, `system.md` runs all of them, and the cost in sessions is stated before the click. Each case keeps its last result against the prompt it ran on, so a result the prompt has since moved past shows as stale rather than as a pass; a failing case reruns once before it counts.
+Three things that are true until you change them. **Maintenance:** nightshift's last run — nightly at 03:00, said as one sentence with how many nights in a row have ended the same way — and the proposals it staged, as packages: the sender's sprite, what the change is, what accepting does, the full rationale, evidence and a red/green diff on demand. **Accepting applies the diff** — all hunks or none — archives the proposal, and commits the vault; rejecting archives it. Maintenance itself never edits a methodology; the person accepting is the edit. **Prompts:** the prompts every session reads — the universal prompt and each mode's overlay — edited in place in the vault (saved uncommitted; the Repo tab commits them). Beside them, the **regression suite**: thirteen cases, each a mode, a prompt and a deterministic assertion guarding one rule — the attribution rule, the Confusion Protocol, plan-before-code, mode identity. Run from the card, scoped to what an edit can affect: an overlay runs its mode's cases, `system.md` runs all of them, and the cost in sessions is stated before the click. Each case keeps its last result against the prompt it ran on, so a result the prompt has since moved past shows as stale rather than as a pass; a failing case reruns once before it counts.
 
 ## The file system
 
@@ -121,7 +121,7 @@ flowchart TB
 | `second-brain/wiki/<Title>/` | the record: Overview, Decision Log, Spec, briefs | `context.md` as `notes_path` |
 | `second-brain/modes/dev/jobs/<slug>/context.md` | the state: stage, status, where the work was left | — |
 
-A Faber session opened in a project directory receives that job's context in its argv, writes code to the project and the record to the vault, and the Repo view shows both halves under one module: the code's commits, and the record by file.
+A Faber session opened in a project directory receives that job's context in its argv, writes code to the project and the record to the vault, and the Repo view shows both halves under one module: the code's commits, and the record's.
 
 **Inside `second-brain/`, three kinds of thing**, and the folder says which. *Instructions* the machine hands to sessions: `prompts/system.md` is `~/.claude/CLAUDE.md` by symlink, so every Claude Code session on the machine reads it; a session Noctis hosts also gets its mode's overlay (`prompts/overlays/<mode>.md`, pointing at `modes/<mode>/<mode>.md`), its subagents (`modes/<mode>/agents/`) and the tail of its job context, all in the argv; `maintenance/` is the same shape at the root because maintenance is infrastructure, not a mode. *State* the machine reads and sessions write: `modes/*/state.md`, `lessons.md`, `jobs/*/context.md`, `maintenance/state.md` and `inbox/`. *Knowledge* only sessions and retrieval read: `wiki/` (a folder per project, flat pages for everything else), `log.md`, `index.md`. The schema that decides which is which is the vault's own `CLAUDE.md`.
 
@@ -172,7 +172,7 @@ Each of these is verifiable on your own machine rather than taken on trust.
 
 | Claim | Check it |
 |---|---|
-| The brain works from any MCP client | `python3 backend/mcp/server.py` — stdio JSON-RPC, zero dependencies. Point Cursor or Claude Desktop at it and `vault_search` answers |
+| The brain works from any MCP client | `python3 backend/mcp/server.py` — stdio JSON-RPC, nothing to install: the standard library plus two sibling modules (`retrieval/`, `jobs.py`) it imports from the checkout. Point Cursor or Claude Desktop at it and `vault_search` answers |
 | Retrieval is measured, not asserted | `python -m eval.run_retrieval_eval` — 80% recall@20, and the harness imports the same constants the server ships |
 | Modes differ by method, not capability | `make doctor` — every mode reports the same tool surface, and any gap between what a methodology assumes and what exists is printed |
 | Sessions inherit your real toolkit | No `CLAUDE_CONFIG_DIR` anywhere: `ps eww <pid> \| grep CLAUDE_CONFIG_DIR` finds nothing |
@@ -198,10 +198,11 @@ macOS · Python 3.11+ · Node 18+ · Claude Code CLI installed and logged in.
 ```bash
 git clone https://github.com/shaynesss/noctis-os.git
 cd noctis-os
-make setup     # deps, and .env.example -> .env
+make setup       # this checkout: backend venv, npm install
+make bootstrap   # this machine: tooling check, ~/.claude/CLAUDE.md symlink, .env with a token, nightshift under launchd
 ```
 
-Set `VAULT_PATH`, `NOCTIS_API_TOKEN` and `VITE_API_TOKEN` in `.env`. Everything else has a working default — see [DOCUMENTATION.md](DOCUMENTATION.md#configuration) for the full table.
+`make bootstrap` writes `.env` with a generated `NOCTIS_API_TOKEN` and the vault's resolved path; set `VITE_API_TOKEN` to the same token yourself. `./bootstrap/bootstrap.sh --dry-run` shows what it would touch first. Everything else has a working default — see [DOCUMENTATION.md](DOCUMENTATION.md#18-configuration) for the full table and [`SETUP.md`](SETUP.md) for the by-hand checklist.
 
 ```bash
 make dev       # the app: Tauri window, supervised backend, typecheck

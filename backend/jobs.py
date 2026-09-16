@@ -44,6 +44,12 @@ MODE_VAULT_DIR = {
 MAINTENANCE = "maintenance"
 MAINTENANCE_STATE = f"{MAINTENANCE}/state.md"
 MAINTENANCE_LESSONS = f"{MAINTENANCE}/lessons.md"
+
+
+def lessons_path(mode: str) -> str:
+    """Where a mode's lessons live, by vault folder name. Maintenance is
+    outside `modes/`; the other three are under it."""
+    return MAINTENANCE_LESSONS if mode == "maintenance" else f"modes/{mode}/lessons.md"
 MAINTENANCE_INBOX = f"{MAINTENANCE}/inbox"
 MAINTENANCE_ARCHIVE = f"{MAINTENANCE}/archive"
 MAINTENANCE_JOBS = f"{MAINTENANCE}/jobs"

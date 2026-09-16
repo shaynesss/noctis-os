@@ -134,11 +134,9 @@ def test_an_older_database_gains_the_new_columns(tmp_path):
 
 def test_stats_route_shape(client):
     body = client.get("/v2/sessions/stats", headers=AUTH).json()
-    # `transcripts` and `diff` are the migration's gate: the same number read
-    # from the CLI's own files beside the recorder's, and where they disagree.
-    assert set(body) == {"lifetime", "activity", "transcripts", "diff"}
-    assert set(body["transcripts"]) >= {"tokens", "turns", "sessions", "input", "output", "cached", "cache_write", "since"}
-    assert set(body["diff"]) == {"compared", "agree", "rows"}
+    # `lifetime` is read from the CLI's own transcripts (PTY-MIGRATION §7 step
+    # 4, taken 2026-09-14); the recorder it was once compared against is gone.
+    assert set(body) == {"lifetime", "activity"}
     assert set(body["lifetime"]) >= {"input", "output", "cached", "turns", "list_cost", "priced_turns"}
 
 
