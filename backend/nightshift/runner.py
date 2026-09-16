@@ -24,6 +24,7 @@ import vault_io  # noqa: E402
 from jobs import MAINTENANCE_INBOX, MAINTENANCE_STATE  # noqa: E402
 from nightshift.apply import _section  # noqa: E402
 from nightshift.slack_surface import SLACK_CHECKS, SlackItem  # noqa: E402
+import staleness  # noqa: E402
 
 STATE_PATH = MAINTENANCE_STATE
 # Cheapest/fastest current Claude tier, for mechanical distillation work
@@ -169,8 +170,17 @@ def run() -> tuple[list[str], list[dict], int]:
     night as quiet. The caller records them, so identical failure across
     every item is a broken machine and reported as one."""
     vault_path = vault_io.get_vault_path()
-    inbox_dir = vault_path / "modes" / "nightshift" / "inbox"
+    # Where Settings reads. Drafts went to modes/nightshift/inbox/ until
+    # 2026-09-16, a path the app stopped reading at the cutover, so a night's
+    # proposal could be indexed and never shown.
+    inbox_dir = vault_path / MAINTENANCE_INBOX
     inbox_dir.mkdir(parents=True, exist_ok=True)
+    # First, the deterministic half: mark the jobs whose session died
+    # mid-build, so the dev scan below has something to find. Nothing else
+    # calls this since v1's poll went.
+    for folder, slugs in staleness.flag_pass().items():
+        for slug in slugs:
+            print(f"nightshift: flagged {folder}/{slug} as stale", file=sys.stderr)
     pending = _existing_pending_slugs()
     staged_slugs = []
     failed: list[dict] = []

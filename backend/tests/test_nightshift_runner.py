@@ -3,16 +3,11 @@ from nightshift import runner
 from nightshift.slack_surface import SlackItem
 
 
-def _seed_flagged_job(vault, slug="noctis-build"):
-    vault_io.write_frontmatter(
-        "modes/dev/state.md",
-        {
-            "mode": "dev",
-            "busy": False,
-            "jobs": [{"slug": slug, "name": "Noctis build", "stage": "Build", "status": "stalled", "flagged": True}],
-        },
-        "",
-    )
+def _seed_flagged_job(vault, slug="noctis-build", flagged=True, last_touched=None):
+    meta = {"name": "Noctis build", "stage": "Build", "status": "stalled", "flagged": flagged}
+    if last_touched:
+        meta["last_touched"] = last_touched
+    vault_io.write_frontmatter(f"modes/dev/jobs/{slug}/context.md", meta, "")
 
 
 def test_extract_rationale_reads_the_rationale_section():
@@ -69,7 +64,8 @@ def test_run_stages_a_flagged_dev_job(vault, monkeypatch):
     # confidence is always high, never left as the None placeholder it used to be.
     assert entry["confidence"] == "high"
 
-    proposal_path = vault / "modes" / "nightshift" / "inbox" / f"{slugs[0]}.md"
+    # Where Settings reads: maintenance/inbox, not modes/nightshift/inbox.
+    proposal_path = vault / "maintenance" / "inbox" / f"{slugs[0]}.md"
     assert proposal_path.exists()
     assert "## Rationale" in proposal_path.read_text(encoding="utf-8")
 
@@ -112,3 +108,22 @@ def test_one_failing_item_does_not_drop_other_items(vault, monkeypatch):
 
     assert len(slugs) == 1
     assert slugs[0].startswith("flagged-job-b-")
+
+
+def test_run_flags_a_stale_job_before_scanning(vault, monkeypatch, tmp_path):
+    """The deterministic half first: a job whose session died three days ago
+    is flagged by the pass and staged by the scan in the same run."""
+    import staleness
+    from datetime import datetime, timedelta, timezone
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
+    monkeypatch.setitem(runner.SLACK_CHECKS, "learn", lambda: [])
+    monkeypatch.setitem(runner.SLACK_CHECKS, "research", lambda: [])
+    monkeypatch.setitem(runner.SLACK_CHECKS, "settings", lambda: [])
+    old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    _seed_flagged_job(vault, slug="died-mid-build", flagged=False, last_touched=old)
+
+    slugs, _failed, _seen = runner.run()
+
+    meta, _ = vault_io.read_frontmatter("modes/dev/jobs/died-mid-build/context.md")
+    assert meta["flagged"] is True
+    assert slugs == [s for s in slugs if s.startswith("flagged-job-died-mid-build-")] and len(slugs) == 1

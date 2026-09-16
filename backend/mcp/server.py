@@ -123,7 +123,7 @@ TOOLS = [
     },
     {
         "name": "worklist",
-        "description": "What is in flight across every mode, from each mode's state.md.",
+        "description": "What is in flight across every mode: each job's stage, status and last touch, from its context.",
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
@@ -213,13 +213,44 @@ def t_job_context(args: dict) -> dict:
     return text(ctx.read_text()[:8000])
 
 
+def _frontmatter_fields(path: Path, keys: tuple[str, ...]) -> dict[str, str]:
+    """The named top-level keys of a file's YAML frontmatter, as strings.
+    Standard library only, on purpose: this server travels without
+    site-packages, and a job's stage line needs no YAML parser."""
+    out: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+    if not lines or lines[0].strip() != "---":
+        return out
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        key, sep, value = line.partition(":")
+        if sep and key.strip() in keys and not line.startswith(" "):
+            out[key.strip()] = value.strip().strip("'\"")
+    return out
+
+
 def t_worklist(_args: dict) -> dict:
+    """Every job in flight, from the job folders. The `jobs` array in each
+    mode's state.md was v1's mirror of those folders and is empty now."""
     out = []
-    for d in sorted((VAULT / "modes").iterdir()) if (VAULT / "modes").is_dir() else []:
-        state = d / "state.md"
-        if state.exists():
-            out.append(f"## {d.name}\n{state.read_text()[:1200]}")
-    return text("\n\n".join(out) or "No mode state found.")
+    for mode in MODES:
+        jobs_dir = VAULT / "maintenance" / "jobs" if mode == "maintenance" else VAULT / "modes" / MODE_VAULT_DIR[mode] / "jobs"
+        if not jobs_dir.is_dir():
+            continue
+        rows = []
+        for d in sorted(p for p in jobs_dir.iterdir() if p.is_dir()):
+            f = _frontmatter_fields(d / "context.md", ("name", "stage", "status", "last_touched", "flagged"))
+            if not f:
+                continue
+            flag = " · FLAGGED" if f.get("flagged", "").lower() == "true" else ""
+            rows.append(f"- {d.name} · {f.get('stage', '?')} · {f.get('name', d.name)}{flag}\n"
+                        f"  {f.get('status', '')[:240]}\n  last touched {f.get('last_touched', '?')}")
+        out.append(f"## {mode}\n" + ("\n".join(rows) or "(no jobs)"))
+    return text("\n\n".join(out) or "No jobs found.")
 
 
 def t_propose(args: dict) -> dict:
@@ -231,12 +262,17 @@ def t_propose(args: dict) -> dict:
     something reviewable when it had not. The tool reports what still needs
     doing rather than silently half-completing.
     """
-    inbox = VAULT / "modes" / "nightshift" / "inbox"
-    inbox.mkdir(parents=True, exist_ok=True)
+    inbox = VAULT / "maintenance" / "inbox"
     slug = "".join(c for c in args.get("slug", "") if c.isalnum() or c in "-_") or "untitled"
     target_file = inbox / f"{slug}.md"
     if target_file.exists():
         return text(f"A proposal named '{slug}' already exists. Choose another slug.")
+    # A probe, not a proposal: say what would be written and write nothing.
+    # The conformance test calls every tool, and without this it left an
+    # `untitled.md` in the real vault's inbox on every run.
+    if args.get("dry_run"):
+        return text(f"Dry run: would stage maintenance/inbox/{slug}.md and write nothing else.")
+    inbox.mkdir(parents=True, exist_ok=True)
     target_file.write_text(
         f"# {slug}\n\n**Target:** `{args.get('target','')}`\n\n"
         f"**Rationale:** {args.get('rationale','')}\n\n"

@@ -371,14 +371,12 @@ def test_a_transcripts_mode_comes_from_its_directory_when_noctis_did_not_launch_
     assert jsonl.mode_for_cwd(None) == "general"
 
 
-def test_the_record_reads_by_file_and_says_how_far_it_trails_the_code(tmp_path, monkeypatch, client, auth_headers):
-    """The vault's own module already lists its commits; a second list under
-    the project was the same rows twice. The Record answers a question the
-    commit list cannot: is the writing about this project current? One row
-    per record file with the commit that last touched it -- a file a session
-    commit touched counts even outside the notes paths, an uncommitted file
-    counts with no commit -- and the gap between the newest project commit
-    and the newest record commit."""
+def test_the_record_lists_its_commits_and_says_how_far_it_trails_the_code(tmp_path, monkeypatch, client, auth_headers):
+    """The record's commits are the two sets united -- commits touching the
+    notes paths, and commits made from inside the project -- and `trails`
+    is the gap between the newest project commit and the newest record
+    commit. The by-file view this replaced (2026-09-15 to 09-16) put twelve
+    unpushed commits beside three rows."""
     import time
     from orchestrator.store import ConversationStore
     project = _repo(tmp_path, "proj")
@@ -407,14 +405,12 @@ def test_the_record_reads_by_file_and_says_how_far_it_trails_the_code(tmp_path, 
     monkeypatch.setattr("jobs.job_notes_paths", lambda mode, slug: ["wiki/Proj"])
     r = _one(client, auth_headers, project)
     n = r["notes"]
-    rows = {f["path"]: f for f in n["files"]}
-    assert set(rows) == {"wiki/Proj/SPEC.md", "wiki/Proj/Overview.md", "wiki/Proj/BRIEF.md", "log.md"}, rows.keys()
-    assert rows["log.md"]["commit"]["subject"] == "Log: the build session's own entry" and rows["log.md"]["commit"]["via"] == "session", \
-        "a file the build session touched is the record even outside the notes paths"
-    assert rows["log.md"]["commit"]["mode"] == "faber"
-    assert rows["wiki/Proj/SPEC.md"]["commit"]["subject"] == "spec and overview written"
-    assert rows["wiki/Proj/BRIEF.md"]["commit"] is None and rows["wiki/Proj/BRIEF.md"]["dirty"] is True, "never committed, and says so"
-    assert [f["path"] for f in n["files"]][0] == "wiki/Proj/BRIEF.md", "the file being worked on now comes first"
+    assert "files" not in n
+    by_subject = {c["subject"]: c for c in n["commits"]}
+    assert by_subject["Log: the build session's own entry"]["via"] == "session" and by_subject["Log: the build session's own entry"]["mode"] == "faber", \
+        "a commit the build session made is the record even outside the notes paths"
+    assert by_subject["spec and overview written"]["via"] == "path"
+    assert n["dirty"] == ["wiki/Proj/BRIEF.md"], "uncommitted under the notes paths, and only there"
     t = n["trails"]
     assert t["behind"] >= 1 and t["project_at"] == r["commits"][0]["at"] and t["record_at"] == n["commits"][0]["at"], t
     # The vault as its own repository carries no record of its own.

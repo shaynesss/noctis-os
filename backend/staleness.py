@@ -1,29 +1,35 @@
 """Deterministic staleness -> flagged mechanism for job-holding modes
 (CLAUDE.md's "Deterministic-where-possible" rule: staleness checks are
-backend code, never left to session judgment). Applies to dev, learn,
-research, and settings -- every mode whose own methodology file states
-"Session death marks the job context stale-and-flagged in the interface"
-(dev.md/learn.md/research.md/settings.md's Failure Behavior sections).
-Nightshift is deliberately excluded: its own Failure Behavior is stateless
-re-derivation (a dead run just leaves nothing in the inbox; the next
-scheduled Scan re-derives from scratch), so it has no job to flag and only
-ever *reads* other modes' `flagged` field (see modes/dev/state.md's
-frontmatter docs) via its flagged-job slack check.
+backend code, never left to session judgment). Every mode whose methodology
+says "session death marks the job context stale-and-flagged" -- dev, learn,
+research, and maintenance's own jobs.
 
 A job is flagged when it looks like a session died mid-build: no activity
 (runtime log or last_touched) for longer than STALE_THRESHOLD, and no
 SESSION_END sentinel (backend/hooks/mark_session_end.py, a SessionEnd hook --
 deliberately not Stop, which fires after every turn rather than on real
-session termination) ever
-closed it cleanly. A job someone just paused on purpose for a day is not
-"stale" in this sense as long as it closed cleanly last time -- only an
-abrupt, never-closed session counts.
+session termination) ever closed it cleanly. A job someone paused on purpose
+for a day is not "stale" in this sense as long as it closed cleanly last
+time -- only an abrupt, never-closed session counts. A job already at Ship
+or Done did not die mid-build and is never flagged.
+
+Runs as nightshift's first step (`nightshift/runner.py`), so the flag is
+set the night after a session died and the flagged-job scan that follows
+has something to find. It ran on v1's `GET /mode/{name}` poll until the
+2026-09-12 cutover deleted the route, and nothing called it for four days.
+
+Jobs are read from their folders -- `modes/<folder>/jobs/<slug>/context.md`,
+`maintenance/jobs/<slug>/context.md` -- which is where the launcher, the MCP
+server and the Repo view read them. The `jobs` array in each `state.md` was
+v1's mirror of those folders, kept in step by the deleted router; nothing
+writes it now, so it is not read here either.
 """
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import vault_io
+from jobs import MAINTENANCE_JOBS
 
 RUNTIME_DIR = Path(__file__).parent / "runtime"
 
@@ -31,6 +37,28 @@ RUNTIME_DIR = Path(__file__).parent / "runtime"
 # working break doesn't false-positive, short enough that a genuinely dead
 # session shows up the same day rather than waiting for a nightly sweep.
 STALE_THRESHOLD = timedelta(hours=6)
+
+# Vault folder -> where its jobs live.
+FLAGGABLE = {
+    "dev": "modes/dev/jobs",
+    "learn": "modes/learn/jobs",
+    "research": "modes/research/jobs",
+    "maintenance": MAINTENANCE_JOBS,
+}
+
+# The runtime log is named by whoever launched the session. A hosted session
+# logs under its mode's name (`faber__<slug>.log`, from NOCTIS_MODE); a
+# project's own `.claude/settings.local.json` hooks log under the vault
+# folder (`dev__<slug>.log`, from `--mode dev`). Both are the same job, so
+# both are read and the newest line wins.
+LOG_NAMES = {
+    "dev": ("dev", "faber"),
+    "learn": ("learn", "noctua"),
+    "research": ("research", "vesper"),
+    "maintenance": ("maintenance",),
+}
+
+SHIPPED_STAGES = ("Ship", "Done")
 
 
 def _parse_last_touched(last_touched: object) -> datetime | None:
@@ -60,86 +88,88 @@ def _parse_last_touched(last_touched: object) -> datetime | None:
         return None
 
 
-def _job_last_activity(mode: str, slug: str, last_touched: object) -> tuple[datetime | None, bool]:
+def _log_tail(log_path: Path) -> tuple[datetime | None, bool]:
+    """(time of the last line, whether it is the clean-close sentinel)."""
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        return None, False
+    last_line = lines[-1]
+    # Anchored, not a bare substring match: a real tool-call line is
+    # "<timestamp> <tool_name> <summary...>", where <summary> could itself
+    # happen to contain the literal text "SESSION_END" (e.g. editing
+    # mark_session_end.py) and would previously have been misread as a
+    # clean close. The sentinel mark_session_end.py actually writes is
+    # exactly two tokens: "<timestamp> SESSION_END". Found in the 2026-07-21
+    # ship-gate review.
+    parts = last_line.split(" ")
+    closed = len(parts) == 2 and parts[1] == "SESSION_END"
+    try:
+        return datetime.fromisoformat(parts[0]), closed
+    except ValueError:
+        return None, closed
+
+
+def _job_last_activity(folder: str, slug: str, last_touched: object) -> tuple[datetime | None, bool]:
     """Returns (last_activity_time, closed_cleanly). Runtime log activity
     (if present) is a more precise signal than last_touched -- it reflects
     real tool calls, not just whenever the job context happened to be
-    written.
+    written. With two logs for one job, the newest line decides both.
     """
     closed_cleanly = False
     last_activity = _parse_last_touched(last_touched)
+    newest_log: datetime | None = None
 
-    log_path = RUNTIME_DIR / f"{mode}__{slug}.log"
-    if log_path.exists():
-        lines = log_path.read_text(encoding="utf-8").splitlines()
-        if lines:
-            last_line = lines[-1]
-            # Anchored, not a bare substring match: a real tool-call line
-            # is "<timestamp> <tool_name> <summary...>", where <summary>
-            # could itself happen to contain the literal text "SESSION_END"
-            # (e.g. editing mark_session_end.py) and would previously have
-            # been misread as a clean close. The sentinel mark_session_end.py
-            # actually writes is exactly two tokens: "<timestamp> SESSION_END".
-            # Found in the 2026-07-21 ship-gate review.
-            parts = last_line.split(" ")
-            closed_cleanly = len(parts) == 2 and parts[1] == "SESSION_END"
-            timestamp_str = last_line.split(" ", 1)[0]
-            try:
-                log_time = datetime.fromisoformat(timestamp_str)
-                if last_activity is None or log_time > last_activity:
-                    last_activity = log_time
-            except ValueError:
-                pass
+    for name in LOG_NAMES.get(folder, (folder,)):
+        log_path = RUNTIME_DIR / f"{name}__{slug}.log"
+        if not log_path.exists():
+            continue
+        log_time, closed = _log_tail(log_path)
+        if log_time is None:
+            continue
+        if newest_log is None or log_time > newest_log:
+            newest_log, closed_cleanly = log_time, closed
 
+    if newest_log is not None and (last_activity is None or newest_log > last_activity):
+        last_activity = newest_log
     return last_activity, closed_cleanly
 
 
-# The four modes whose own Failure Behavior text promises stale-and-flagged
-# job tracking. Nightshift is excluded by design (see module docstring).
-FLAGGABLE_MODES = ("dev", "learn", "research", "settings")
-
-
-def flag_stale_jobs(mode: str, now: datetime | None = None) -> list[str]:
-    """Scans modes/<mode>/state.md's jobs, flags any that look abandoned
-    mid-session. Returns the slugs newly flagged this pass. Mutates both
-    the job's own context.md and the mirrored entry in state.md -- the
-    two must never drift (see mode.py's _sync_state_job_entry, which this
-    reuses).
+def flag_stale_jobs(folder: str, now: datetime | None = None) -> list[str]:
+    """Scans a mode's job folders, flags any that look abandoned
+    mid-session. Returns the slugs newly flagged this pass. Writes
+    `flagged: true` into the job's own context.md, which is the one place
+    the flag is read from.
     """
     now = now or datetime.now(timezone.utc)
-    state, _ = vault_io.read_frontmatter(f"modes/{mode}/state.md")
+    base = FLAGGABLE.get(folder)
+    if not base or not vault_io.file_exists(base):
+        return []
     newly_flagged = []
 
-    for job in state.get("jobs", []):
-        slug = job.get("slug")
-        if not slug or job.get("flagged"):
+    for slug in vault_io.list_subdirs(base):
+        job_path = f"{base}/{slug}/context.md"
+        if not vault_io.file_exists(job_path):
+            continue
+        try:
+            metadata, content = vault_io.read_frontmatter(job_path)
+        except ValueError:
+            continue
+        if metadata.get("flagged") or metadata.get("stage") in SHIPPED_STAGES:
             continue
 
-        last_activity, closed_cleanly = _job_last_activity(mode, slug, job.get("last_touched"))
+        last_activity, closed_cleanly = _job_last_activity(folder, slug, metadata.get("last_touched"))
         if closed_cleanly or last_activity is None:
             continue
         if now - last_activity <= STALE_THRESHOLD:
             continue
 
-        job_path = f"modes/{mode}/jobs/{slug}/context.md"
-        if not vault_io.file_exists(job_path):
-            continue
-
-        metadata, content = vault_io.read_frontmatter(job_path)
         metadata["flagged"] = True
         vault_io.write_frontmatter(job_path, metadata, content)
         newly_flagged.append(slug)
 
-    if newly_flagged:
-        _sync_flags_into_state(mode, newly_flagged)
-
     return newly_flagged
 
 
-def _sync_flags_into_state(mode: str, flagged_slugs: list[str]) -> None:
-    state_path = f"modes/{mode}/state.md"
-    state, content = vault_io.read_frontmatter(state_path)
-    for job in state.get("jobs", []):
-        if job.get("slug") in flagged_slugs:
-            job["flagged"] = True
-    vault_io.write_frontmatter(state_path, state, content)
+def flag_pass(now: datetime | None = None) -> dict[str, list[str]]:
+    """Every flaggable folder, once. What nightshift runs before its scan."""
+    return {folder: flag_stale_jobs(folder, now) for folder in FLAGGABLE}

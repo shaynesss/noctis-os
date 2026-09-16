@@ -399,8 +399,15 @@ def repos(cwd: list[str] = Query(min_length=1)) -> dict:
             outside.append(raw)
             continue
         groups.setdefault(Path(top), []).append(raw)
+    # Each repository is a dozen git calls; two projects open cost the sum.
+    # Read them at once -- subprocesses wait outside the GIL -- so the view
+    # costs the slowest repository, not all of them (2026-09-16).
+    from concurrent.futures import ThreadPoolExecutor
+    roots = list(groups)
+    with ThreadPoolExecutor(max_workers=max(1, min(4, len(roots)))) as pool:
+        read = list(pool.map(_repo_at, roots))
     return {
-        "repos": [{**_repo_at(root), "cwds": cwds} for root, cwds in groups.items()],
+        "repos": [{**r, "cwds": groups[root]} for root, r in zip(roots, read)],
         "outside": outside,
     }
 
@@ -433,6 +440,13 @@ def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
     """A repository's local state. With `paths`, the commits and dirty files
     are those touching them -- how the vault is read as one project's notes
     rather than as the whole vault."""
+    # The record is the vault's git, the project is its own; neither waits
+    # on the other, so the record's read starts now and is joined at the end
+    # (2026-09-16). It needs the project's newest commit only for `trails`.
+    notes_read = None
+    if paths is None:
+        from concurrent.futures import ThreadPoolExecutor
+        notes_read = ThreadPoolExecutor(max_workers=1).submit(_project_notes, root)
     branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
     if branch == "HEAD":
         branch = None  # detached: git's name for "no branch" is not a branch name
@@ -473,12 +487,15 @@ def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
         "ahead": ahead, "behind": behind, "dirty": dirty, "commits": commits,
         "remote": remote_url, "slug": slug, "github_reason": reason,
     }
-    if paths is None:
-        out["notes"] = _project_notes(root, commits[0]["at"] if commits else None)
+    if notes_read is not None:
+        notes = notes_read.result()
+        if notes:
+            notes["trails"] = _record_trails(commits[0]["at"] if commits else None, notes["commits"])
+        out["notes"] = notes
     return out
 
 
-def _project_notes(root: Path, project_newest_at: int | None = None) -> dict | None:
+def _project_notes(root: Path) -> dict | None:
     """The vault side of a project: commits and uncommitted files under the
     job's notes folder and job folder, read from the vault's repository.
 
@@ -488,13 +505,11 @@ def _project_notes(root: Path, project_newest_at: int | None = None) -> dict | N
     of work are one view. None for a repository no dev job owns, and for
     the vault itself.
 
-    Presented by file, not by commit (2026-09-15): the vault's own module
-    already lists its commits chronologically, and a second chronological
-    list under the project was the same twenty rows twice. What only this
-    fold can say is whether the *writing* about the project is current --
-    one row per record file with the commit that last touched it, and how
-    far the record trails the code (`trails`). The commits stay in the
-    payload for the figures.
+    Listed by commit, like the project (2026-09-16). A by-file view was
+    tried for a day and put twelve unpushed commits beside three rows,
+    because twelve commits had touched one file. `trails` -- how far the
+    record's newest commit sits behind the project's -- is set by the
+    caller, which has both.
     """
     import jobs
     slug = jobs.find_job_for_cwd("faber", root)
@@ -543,8 +558,7 @@ def _project_notes(root: Path, project_newest_at: int | None = None) -> dict | N
     notes["commits"] = merged[:20]
     notes["paths"] = paths
     notes["cwds"] = []
-    notes["files"] = _record_files(vault, paths, merged, notes["dirty"], unpushed)
-    notes["trails"] = _record_trails(project_newest_at, merged)
+    notes["trails"] = None
     # The record's figures are the record's, not the vault's (2026-09-16):
     # "not on GitHub" counts the record's own unpushed commits, the way
     # `dirty` already counts only files under the notes paths. The vault's
@@ -556,83 +570,6 @@ def _project_notes(root: Path, project_newest_at: int | None = None) -> dict | N
     if notes["upstream"]:
         notes["ahead"] = sum(1 for c in merged if not c["pushed"])
     return notes
-
-
-def _record_files(vault: Path, paths: list[str], commits: list[dict], dirty: list[str], unpushed: set[str]) -> list[dict]:
-    """One row per file of the record: every tracked file under the notes
-    paths, the shared record files a session-attributed commit touched, and
-    any uncommitted file under the notes paths. Each with the commit that
-    last touched it, so the row reads "SPEC.md, edited 5h ago by Faber,
-    pushed". A file never committed carries no commit and says so.
-
-    The shared files are the ones dev.md's Vault scope names as a build
-    session's writes outside its notes folder: the root `log.md` and
-    anything under `modes/` (the job context, the lesson, the state). Not
-    every file a session commit touched -- a session inside the project
-    that spends an hour tidying the whole vault commits thirty pages that
-    are not this project's record, and the first cut listed them all.
-    Files a commit deleted are not rows: the record is what exists.
-
-    Newest touch first; never-committed files before everything, because
-    they are the ones a session is working on right now.
-    """
-    # One walk of recent history with the names each commit touched, newest
-    # first. It answers both questions below -- which files a session
-    # commit touched, and which commit last touched each file -- where a
-    # `git show` per session commit and a `git log` per file cost 1.6s on
-    # the landing page. A commit or file older than the walk falls back to
-    # its own lookup.
-    touched_by: dict[str, list[str]] = {}
-    walk = _git(vault, "log", "-n", "400", "--format=%x1e%H", "--name-only") or ""
-    for block in walk.split("\x1e"):
-        lines = [l for l in block.splitlines() if l.strip()]
-        if lines:
-            touched_by[lines[0].strip()] = lines[1:]
-    tracked = set((_git(vault, "ls-files") or "").splitlines())
-    files: dict[str, None] = {}
-    if paths:
-        for f in (_git(vault, "ls-files", "--", *paths) or "").splitlines():
-            if f:
-                files[f] = None
-    shared = lambda f: f == "log.md" or f.startswith("modes/")  # noqa: E731
-    for c in commits:
-        if c.get("via") == "session":
-            names = touched_by.get(c["full"])
-            if names is None:
-                names = (_git(vault, "show", "--name-only", "--format=", c["full"]) or "").splitlines()
-            for f in names:
-                if f and f in tracked and shared(f):
-                    files.setdefault(f, None)
-    for f in dirty:
-        files.setdefault(f, None)
-    by_full = {c["full"]: c for c in commits}
-    keep = ("sha", "full", "subject", "body", "at", "pushed", "mode", "by", "via")
-    last_sha: dict[str, str] = {}
-    for sha, names in touched_by.items():
-        for f in names:
-            if f in files and f not in last_sha:
-                last_sha[f] = sha
-    fetched: dict[str, dict] = {}
-    rows = []
-    for f in files:
-        sha = last_sha.get(f)
-        if sha is None:
-            last = _commits(vault, 1, [f], unpushed)
-            c = last[0] if last else None
-        elif sha in by_full:
-            c = by_full[sha]
-        else:
-            if sha not in fetched:
-                one = _commits(vault, 1, None, unpushed, rev=sha)
-                fetched[sha] = one[0] if one else None
-            c = fetched[sha]
-        if c is not None:
-            if c["full"] not in by_full and "mode" not in c:
-                _mark_commit_modes(vault, [c])
-            c = {k: c.get(k) for k in keep}
-        rows.append({"path": f, "dirty": f in dirty, "commit": c})
-    rows.sort(key=lambda r: -(r["commit"]["at"] if r["commit"] else 2**62))
-    return rows
 
 
 def _record_trails(project_newest_at: int | None, commits: list[dict]) -> dict | None:
@@ -650,6 +587,11 @@ def _record_trails(project_newest_at: int | None, commits: list[dict]) -> dict |
 
 # full sha -> (looked up at, session row or None). See _mark_commit_modes.
 _AUTHOR_CACHE: dict[str, tuple[float, dict | None]] = {}
+
+
+import threading as _threading
+
+_STORE_LOCK = _threading.Lock()
 
 
 def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
@@ -688,7 +630,11 @@ def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
     # the VS Code session that built most of today was one. Each commit
     # also remembers where its author was, which is what lets a project's
     # Record claim the vault commits made from inside it.
-    store = ConversationStore()
+    # Built under a lock: repositories are read in parallel now, and two
+    # constructors on one fresh database raced the schema script against
+    # the WAL pragma ("database is locked").
+    with _STORE_LOCK:
+        store = ConversationStore()
     try:
         unresolved = []
         now = time.time()

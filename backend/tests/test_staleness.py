@@ -14,13 +14,6 @@ def _seed_job(vault, mode="dev", slug="noctis-build", last_touched=None, flagged
         metadata["flagged"] = True
     vault_io.write_frontmatter(f"modes/{mode}/jobs/{slug}/context.md", metadata, "")
 
-    state, content = vault_io.read_frontmatter(f"modes/{mode}/state.md")
-    entry = {"slug": slug, "name": "Noctis build", "stage": "Build", "status": "in progress", "flagged": flagged}
-    if last_touched:
-        entry["last_touched"] = last_touched
-    state["jobs"] = [entry]
-    vault_io.write_frontmatter(f"modes/{mode}/state.md", state, content)
-
 
 def test_recent_job_is_not_flagged(vault, monkeypatch, tmp_path):
     monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
@@ -44,8 +37,6 @@ def test_old_job_with_no_activity_gets_flagged(vault, monkeypatch, tmp_path):
     assert flagged == ["noctis-build"]
     metadata, _ = vault_io.read_frontmatter("modes/dev/jobs/noctis-build/context.md")
     assert metadata["flagged"] is True
-    state, _ = vault_io.read_frontmatter("modes/dev/state.md")
-    assert state["jobs"][0]["flagged"] is True
 
 
 def test_old_job_that_closed_cleanly_is_not_flagged(vault, monkeypatch, tmp_path):
@@ -95,13 +86,9 @@ def test_flagging_generalizes_to_non_dev_modes(vault, monkeypatch, tmp_path):
     assert flagged == ["deep-dive-x"]
     metadata, _ = vault_io.read_frontmatter("modes/learn/jobs/deep-dive-x/context.md")
     assert metadata["flagged"] is True
-    state, _ = vault_io.read_frontmatter("modes/learn/state.md")
-    assert state["jobs"][0]["flagged"] is True
 
     # dev's own state must be untouched -- proves the mode argument scopes
     # the write, not just the read.
-    dev_state, _ = vault_io.read_frontmatter("modes/dev/state.md")
-    assert dev_state.get("jobs", []) == []
 
 
 def test_session_end_substring_in_a_summary_does_not_count_as_clean_close(vault, monkeypatch, tmp_path):
@@ -166,3 +153,35 @@ def test_flag_stale_jobs_does_not_crash_on_bare_date_last_touched(vault, monkeyp
     flagged = staleness.flag_stale_jobs("research")
 
     assert isinstance(flagged, list)
+
+
+def test_shipped_job_is_never_flagged(vault, monkeypatch, tmp_path):
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
+    old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    _seed_job(vault, last_touched=old)
+    metadata, content = vault_io.read_frontmatter("modes/dev/jobs/noctis-build/context.md")
+    metadata["stage"] = "Ship"
+    vault_io.write_frontmatter("modes/dev/jobs/noctis-build/context.md", metadata, content)
+    assert staleness.flag_stale_jobs("dev") == []
+
+
+def test_a_hosted_sessions_log_counts_for_the_same_job(vault, monkeypatch, tmp_path):
+    """A hosted session logs as `faber__<slug>`, a VS Code session as
+    `dev__<slug>`; both are the job, and the newest line decides."""
+    runtime_dir = tmp_path / "runtime"; runtime_dir.mkdir()
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", runtime_dir)
+    old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    _seed_job(vault, last_touched=old)
+    (runtime_dir / "dev__noctis-build.log").write_text(f"{old} Read x\n", encoding="utf-8")
+    (runtime_dir / "faber__noctis-build.log").write_text(f"{recent} Edit y\n", encoding="utf-8")
+    assert staleness.flag_stale_jobs("dev") == [], "the hosted session's log is the newer activity"
+
+
+def test_flag_pass_covers_every_flaggable_folder(vault, monkeypatch, tmp_path):
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
+    old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    _seed_job(vault, mode="dev", slug="a", last_touched=old)
+    _seed_job(vault, mode="research", slug="b", last_touched=old)
+    out = staleness.flag_pass()
+    assert out["dev"] == ["a"] and out["research"] == ["b"] and out["learn"] == [] and out["maintenance"] == []

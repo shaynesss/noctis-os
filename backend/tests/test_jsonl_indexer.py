@@ -221,3 +221,30 @@ def test_the_recorder_row_carries_the_same_price(tmp_path):
     store.ingest(jsonl.read(p), "faber")
     assert store.lifetime_tokens()["list_cost"] == 5.0
     store.close()
+
+
+def test_scan_usage_resumes_where_it_left_off(tmp_path, monkeypatch):
+    """A live transcript grows by the turn; the lifetime figure reads only
+    what is new. Two reads across an append equal one read of the whole,
+    and a partial last line waits for the next read."""
+    from orchestrator import jsonl
+    monkeypatch.setattr(jsonl, "_usage_memo", {})
+    p = tmp_path / "s.jsonl"
+    rec = lambda n, ts: json.dumps({"type": "assistant", "timestamp": ts, "message": {
+        "role": "assistant", "model": "claude-haiku-4-5",
+        "content": [{"type": "text", "text": "x"}],
+        "usage": {"input_tokens": n, "output_tokens": 2 * n, "cache_read_input_tokens": 1, "cache_creation_input_tokens": 0}}})
+    p.write_text(rec(10, "2026-09-16T10:00:00Z") + "\n" + rec(20, "2026-09-16T10:01:00Z") + "\n", encoding="utf-8")
+    first = jsonl.scan_usage(p, resume=True)
+    assert first.turns == 2 and first.input_tokens == 30
+    # Append a whole turn and half of another.
+    with p.open("a", encoding="utf-8") as f:
+        f.write(rec(5, "2026-09-16T09:59:00Z") + "\n" + '{"type": "assistant", "mess')
+    second = jsonl.scan_usage(p, resume=True)
+    whole = jsonl.scan_usage(p)
+    assert (second.turns, second.input_tokens, second.output_tokens, second.started_at) == (3, 35, 70, "2026-09-16T09:59:00Z")
+    assert (whole.turns, whole.input_tokens, whole.output_tokens, whole.started_at) == (3, 35, 70, "2026-09-16T09:59:00Z")
+    # The partial line is finished; only it is read next time.
+    with p.open("a", encoding="utf-8") as f:
+        f.write('age": {"role": "assistant", "model": "claude-haiku-4-5", "content": [], "usage": {"input_tokens": 1, "output_tokens": 1}}}\n')
+    assert jsonl.scan_usage(p, resume=True).turns == 4

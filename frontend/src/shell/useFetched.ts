@@ -25,19 +25,34 @@ const RETRY_MS = [1000, 2000, 4000, 8000, 15000]
 const backoff = (attempt: number) =>
   RETRY_MS[Math.min(attempt, RETRY_MS.length - 1)]
 
+/* The last answer from each route, for the life of the page.
+ *
+ * A panel unmounts when you leave it and mounts again when you come back,
+ * and every mount began at "Loading…" for as long as the route took -- a
+ * second or two for the Repo view, whose git reads have not changed since
+ * you last looked. The remembered answer paints at once and the fresh one
+ * replaces it when it lands; only a route never asked before shows the
+ * loading state. Page-scoped on purpose: a reload starts clean. */
+const LAST = new Map<string, unknown>()
+
 /** Fetch a route, retrying while it fails. `null` while loading, `false`
  *  when the last attempt failed -- three states, because "loading" and "the
- *  backend is down" must not render the same way. */
+ *  backend is down" must not render the same way. A route asked before
+ *  starts from its last answer rather than from `null`. */
 export function useFetched<T>(path: string): T | null | false {
-  const [data, setData] = useState<T | null | false>(null)
+  const [data, setData] = useState<T | null | false>(() => (LAST.has(path) ? (LAST.get(path) as T) : null))
   useEffect(() => {
     let live = true
     let timer: ReturnType<typeof setTimeout> | undefined
     let attempt = 0
+    // The path changed under a mounted hook: show that path's last answer,
+    // or the loading state, never the previous path's data.
+    setData(LAST.has(path) ? (LAST.get(path) as T) : null)
 
     const read = () => {
       void get<T>(path).then((d) => {
         if (!live) return
+        if (d != null) LAST.set(path, d)
         setData(d ?? false)
         /* Keep trying while it is failing. The backend restarts on its own --
          * in development a single written file is enough -- and a panel that

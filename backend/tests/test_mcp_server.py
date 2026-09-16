@@ -97,15 +97,19 @@ def test_unknown_mode_is_reported_not_crashed(vault):
     assert "Unknown mode" in call(vault, "job_context", {"mode": "nonsense"})
 
 
-def test_worklist_reads_mode_state(vault):
-    assert "dev" in call(vault, "worklist")
+def test_worklist_lists_jobs_from_their_folders(vault):
+    job = vault / "modes" / "dev" / "jobs" / "thing"
+    job.mkdir(parents=True)
+    (job / "context.md").write_text("---\nname: The Thing\nstage: Build\nstatus: 'half done'\nflagged: true\n---\n\nprose\n", encoding="utf-8")
+    out = call(vault, "worklist")
+    assert "## faber" in out and "thing · Build · The Thing · FLAGGED" in out and "half done" in out
 
 
 def test_propose_stages_a_file_and_names_what_is_still_required(vault):
     out = call(vault, "propose", {
         "slug": "test-proposal", "target": "modes/dev/dev.md",
         "rationale": "because X", "evidence": "lessons entry Y", "body": "the diff"})
-    staged = vault / "modes" / "nightshift" / "inbox" / "test-proposal.md"
+    staged = vault / "maintenance" / "inbox" / "test-proposal.md"
     assert staged.exists() and "because X" in staged.read_text()
     # The index entry is deliberately not written here: doing both would let
     # a caller believe it had filed something reviewable when it had not.

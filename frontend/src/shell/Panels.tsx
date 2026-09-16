@@ -77,17 +77,15 @@ export interface RepoInfo {
   /** The open terminals' directories that resolve to this repository. */
   cwds: string[]
   /** For a dev job's project: the vault side -- the job's notes folder and
-   *  job folder, read as their own repository state. `files` is the record
-   *  by file (2026-09-15): each with the commit that last touched it, or
-   *  none for a file never committed; `trails` is how far the newest
-   *  record commit sits behind the newest project commit, in seconds. */
-  notes?: (RepoInfo & { paths: string[]; files: RecordFile[]; trails: RecordTrails | null; vault_ahead: number | null }) | null
+   *  job folder, read as their own repository state, its commits listed
+   *  like the project's. `trails` is how far the newest record commit sits
+   *  behind the newest project commit, in seconds. */
+  notes?: (RepoInfo & { paths: string[]; trails: RecordTrails | null; vault_ahead: number | null }) | null
   /** On a record: the whole vault's unpushed count, since a push is the
    *  repository's; `ahead` is the record's own. */
   vault_ahead?: number | null
 }
 
-export interface RecordFile { path: string; dirty: boolean; commit: RepoInfo['commits'][number] | null }
 export interface RecordTrails { project_at: number; record_at: number; behind: number }
 
 export interface GithubInfo {

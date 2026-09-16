@@ -28,22 +28,31 @@ def check_dev() -> list[SlackItem]:
     jobs only -- a session that died mid-build, marked flagged rather than
     silently frozen. Never code or branch work.
     """
-    state, _ = vault_io.read_frontmatter("modes/dev/state.md")
     items = []
-    for job in state.get("jobs", []):
-        if job.get("flagged"):
-            items.append(
-                SlackItem(
-                    mode="dev",
-                    kind="flagged-job",
-                    slug_hint=job["slug"],
-                    description=f"Faber: {job.get('name', job['slug'])} flagged mid-build",
-                    context=(
-                        f"job slug: {job['slug']}, stage: {job.get('stage')}, "
-                        f"status: {job.get('status')}, last_touched: {job.get('last_touched')}"
-                    ),
-                )
+    # The job folders, not state.md's `jobs` array: that array was v1's
+    # mirror of the folders and nothing has written it since the cutover.
+    base = "modes/dev/jobs"
+    if not vault_io.file_exists(base):
+        return items
+    for slug in vault_io.list_subdirs(base):
+        try:
+            job, _ = vault_io.read_frontmatter(f"{base}/{slug}/context.md")
+        except (FileNotFoundError, ValueError):
+            continue
+        if not job.get("flagged") or job.get("stage") == "Done":
+            continue
+        items.append(
+            SlackItem(
+                mode="dev",
+                kind="flagged-job",
+                slug_hint=slug,
+                description=f"Faber: {job.get('name', slug)} flagged mid-build",
+                context=(
+                    f"job slug: {slug}, stage: {job.get('stage')}, "
+                    f"status: {job.get('status')}, last_touched: {job.get('last_touched')}"
+                ),
             )
+        )
     return items
 
 

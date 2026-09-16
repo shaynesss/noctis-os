@@ -2,27 +2,22 @@ import vault_io
 from nightshift import slack_surface
 
 
+def _job(slug, **meta):
+    vault_io.write_frontmatter(f"modes/dev/jobs/{slug}/context.md", {"name": slug, "stage": "Build", "status": "in progress", **meta}, "")
+
+
 def test_check_dev_ignores_unflagged_jobs(vault):
-    vault_io.write_frontmatter(
-        "modes/dev/state.md",
-        {"mode": "dev", "busy": False, "jobs": [{"slug": "a", "name": "A", "status": "in progress"}]},
-        "",
-    )
+    _job("a")
+    assert slack_surface.check_dev() == []
+
+
+def test_check_dev_ignores_a_flagged_job_that_is_done(vault):
+    _job("finished", flagged=True, stage="Done")
     assert slack_surface.check_dev() == []
 
 
 def test_check_dev_surfaces_flagged_job(vault):
-    vault_io.write_frontmatter(
-        "modes/dev/state.md",
-        {
-            "mode": "dev",
-            "busy": False,
-            "jobs": [
-                {"slug": "noctis-build", "name": "Noctis build", "stage": "Build", "status": "stalled", "flagged": True}
-            ],
-        },
-        "",
-    )
+    _job("noctis-build", name="Noctis build", status="stalled", flagged=True)
     items = slack_surface.check_dev()
     assert len(items) == 1
     assert items[0].mode == "dev"

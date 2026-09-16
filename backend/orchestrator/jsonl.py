@@ -25,6 +25,7 @@ while a guard still required it and broke every spawn.
 """
 from __future__ import annotations
 
+import dataclasses as _dc
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -128,7 +129,47 @@ class Usage:
                 + self.cache_write_tokens)
 
 
-def scan_usage(path: Path) -> Usage:
+def _records_from(path: Path, offset: int, partial: bool) -> "tuple[list[dict[str, Any]], int]":
+    """Records from a byte offset, and the offset of the last complete line.
+
+    The file is appended live, so a read can land mid-write. A resumed read
+    (`partial=False`) leaves a final line with no newline for the next read
+    rather than counting a truncated record now and its whole self later; a
+    one-off read takes it if it parses, as `_records` always has. Binary,
+    because a byte offset only means something in bytes; each line is
+    decoded on its own.
+    """
+    records: list[dict[str, Any]] = []
+    end = offset
+    try:
+        with path.open("rb") as f:
+            f.seek(offset)
+            for raw in f:
+                if not raw.endswith(b"\n"):
+                    if not partial:
+                        break
+                else:
+                    end += len(raw)
+                line = raw.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        return [], offset
+    return records, end
+
+
+# One transcript's usage, and how far into the file it was read. A live
+# session's transcript grows by the turn and the biggest is 70MB; rescanning
+# every file on every Stats visit cost a second, almost all of it the three
+# files still being written. Each file resumes from where it was left.
+_usage_memo: dict[Path, tuple[int, Usage]] = {}
+
+
+def scan_usage(path: Path, resume: bool = False) -> Usage:
     """The token figures of one transcript, without building the conversation.
 
     `read` reconstructs every message body, which is what indexing needs and
@@ -137,9 +178,22 @@ def scan_usage(path: Path) -> Usage:
     in memory on the way to four integers. This walks the same records and
     keeps the integers. It must agree with `read` to the token --
     `test_jsonl_indexer` holds the two together.
+
+    With `resume`, the scan continues from where the last one stopped and
+    the totals carry over -- every field is a sum or a minimum, so a file
+    read in two halves gives the same answer as one read whole. A file that
+    shrank (rotated, rewritten) starts again.
     """
-    u = Usage()
-    for r in _records(path):
+    offset, u = 0, Usage()
+    if resume and (memo := _usage_memo.get(path)):
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        if size >= memo[0]:
+            offset, u = memo[0], _dc.replace(memo[1])
+    records, end = _records_from(path, offset, partial=not resume)
+    for r in records:
         if ts := r.get("timestamp"):
             if not u.started_at or ts < u.started_at:
                 u.started_at = ts
@@ -159,6 +213,8 @@ def scan_usage(path: Path) -> Usage:
                 u.unpriced_turns += 1
             else:
                 u.list_cost += price
+    if resume:
+        _usage_memo[path] = (end, _dc.replace(u))
     return u
 
 
@@ -269,7 +325,7 @@ def lifetime_tokens() -> dict[str, Any]:
     cost = 0.0
     since = ""
     for p in PROJECTS.glob("**/*.jsonl"):
-        u = scan_usage(p)
+        u = scan_usage(p, resume=True)
         if not u.turns:
             continue
         sessions += 1
