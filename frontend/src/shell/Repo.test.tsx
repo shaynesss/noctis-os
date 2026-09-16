@@ -116,10 +116,11 @@ describe('Repo view', () => {
     expect(t).toContain('it asks twice')
     expect(t).toContain('2 files changed and not committed')
     expect(text({ ahead: 5 })).toContain('5 commits on this machine only. Push puts them on GitHub as you')
-    // The dirty files ride on the figure's title, not in a fold of their own
-    // (2026-09-16): the count is on the lid, and "Uncommitted · 0" was a row
-    // that said nothing on most modules.
-    expect(t).not.toContain('a.ts'); expect(t).not.toContain('Uncommitted ·')
+    // The dirty files sit under the sentence that counts them, not in a fold
+    // of their own (2026-09-16): "Uncommitted · 0" was a row that said nothing
+    // on most modules, and a module with none shows no list at all.
+    expect(t).toContain('a.ts'); expect(t).toContain('b.ts'); expect(t).not.toContain('Uncommitted ·')
+    expect(text({ dirty: [] })).not.toContain('a.ts')
     expect(t).toContain('● abc1234 newest, local only 1m')
     expect(t).toContain('● def5678 older, on GitHub 2h')
   })

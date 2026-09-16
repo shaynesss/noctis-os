@@ -14,8 +14,9 @@ scheduler, which is the only feature left in the build order.
 - **No Record fold on a repository that is not a dev job's project.** The
   vault module carried a disabled "Record · not a job's project" row that
   explained an absence.
-- **No Uncommitted fold.** The count is on the lid; the file list rides
-  on it as a tooltip. "Uncommitted · 0" was a row that said nothing on
+- **No Uncommitted fold.** The count is on the lid; the files are listed
+  under the next-step sentence whenever there are any, and not at all
+  when there are none. "Uncommitted · 0" was a row that said nothing on
   most modules.
 - **No "Not in a repository" section.** Every mode starts in a repository
   now, and the section told the reader nothing they could act on here.

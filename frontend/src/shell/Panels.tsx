@@ -614,12 +614,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         ) : (
           <span className="text-ink-faint">no upstream</span>
         )}
-        {/* The list rides on the figure rather than in a fold of its own
-            (2026-09-16): a fold reading "Uncommitted · 0" was a row that
-            said nothing on most modules, and the count is already here. */}
-        <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'} title={r.dirty.length ? r.dirty.join('\n') : undefined}>
-          {r.dirty.length} uncommitted
-        </span>
+        <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'}>{r.dirty.length} uncommitted</span>
       </div>
       {/* Three lines' worth of height whatever the sentence needs, so the
           folds below sit at the same height in every module on the row. */}
@@ -627,6 +622,14 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         <span className="min-w-0 flex-1">{nextStep(r)}</span>
         <PushButton r={r} onPushed={onChanged} />
       </div>
+      {/* The uncommitted files, right under the sentence that counts them,
+          and only when there are any (2026-09-16). A fold of their own read
+          "0" on most modules; a tooltip put them nowhere a reader looks. */}
+      {r.dirty.length > 0 && (
+        <div className="max-h-[160px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7] text-ink-dim">
+          {r.dirty.map((f) => <div key={f}>{f}</div>)}
+        </div>
+      )}
 
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
             open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)} right={commitsOpen ? <Legend /> : undefined}>
