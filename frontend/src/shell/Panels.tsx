@@ -508,7 +508,7 @@ function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
           <span>{title}</span>
           {meta && <span className="font-normal normal-case tracking-normal text-ink-faint">· {meta}</span>}
         </button>
-        {right && <span className="flex shrink-0 items-center gap-[10px] pr-4 font-mono text-[11px]">{right}</span>}
+        {right && <span className="flex shrink-0 flex-col items-end gap-[6px] py-[6px] pr-4 font-mono text-[11px]">{right}</span>}
       </div>
       {open && !empty && children}
     </div>
@@ -588,45 +588,41 @@ const Legend = () => (
  * commits, the record (for a dev job's project), GitHub -- each a fold
  * inside the same border, so the grouping is the box and not the reader's
  * inference. */
-/* The lid: name, branch, the terminals in it, the GitHub link. No path
- * -- that opens the block under it (2026-09-16). */
+/* The lid: name, branch (the branch the repository is on -- a job branch
+ * would show here) and the terminals in it on one line, the GitHub link
+ * under the title (2026-09-16). No path: that opens the block under it. */
 function Lid({ name, branch, slug, chips }: { name: string; branch: string | null; slug: string | null; chips?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[4px] px-4 py-[10px]">
-      <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{name}</span>
-      <span className="font-mono text-[11px] text-ink-faint">· {branch ?? 'detached'}</span>
-      {chips}
-      {slug && <Ext href={`https://github.com/${slug}`} className="ml-auto font-mono text-[11px] text-ink-dim hover:text-ink">{slug} ↗</Ext>}
+    <div className="px-4 py-[10px]">
+      <div className="flex flex-wrap items-center gap-x-[10px] gap-y-[4px]">
+        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{name}</span>
+        <span className="font-mono text-[11px] text-ink-faint">· {branch ?? 'detached'}</span>
+        {chips}
+      </div>
+      {slug && <Ext href={`https://github.com/${slug}`} className="mt-[4px] inline-block font-mono text-[11px] text-ink-dim hover:text-ink">{slug} ↗</Ext>}
     </div>
   )
 }
 
-/* The row that opens a block: the full path of what the block is about,
- * and for the record the vault's link, since the record has no lid. */
-function PathRow({ path, slug }: { path: string; slug?: string | null }) {
-  return (
-    <div className="flex items-baseline gap-[10px] border-t border-line px-4 py-[8px] font-mono text-[11px] text-ink-faint">
-      <span className="min-w-0 flex-1 truncate" title={path}>{path}</span>
-      {slug && <Ext href={`https://github.com/${slug}`} className="shrink-0 text-ink-dim hover:text-ink">{slug} ↗</Ext>}
-    </div>
-  )
-}
-
-/* Where a repository stands: not on GitHub, behind, uncommitted. A
- * non-zero figure is ink; zero is faint. */
-function Figures({ r }: { r: RepoInfo }) {
+/* Where a block stands: the full path of what it is about, and under it
+ * the figures -- not on GitHub, behind, uncommitted. One cell, two
+ * lines (2026-09-16); the uncommitted files are the cell below. */
+function Stand({ path, r }: { path: string; r: RepoInfo }) {
   const unpushed = r.ahead ?? 0
   return (
-    <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[9px] font-mono text-[11.5px]">
-      {r.upstream ? (
-        <>
-          <span className={unpushed ? 'text-ink' : 'text-ink-faint'}>↑ {unpushed} not on GitHub</span>
-          <span className={r.behind ? 'text-ink' : 'text-ink-faint'}>↓ {r.behind ?? 0} behind</span>
-        </>
-      ) : (
-        <span className="text-ink-faint">no upstream</span>
-      )}
-      <Uncommitted n={r.dirty.length} />
+    <div className="border-t border-line px-4 py-[8px] font-mono">
+      <div className="truncate text-[11px] text-ink-faint" title={path}>{path}</div>
+      <div className="mt-[6px] flex flex-wrap items-center gap-x-[14px] gap-y-[4px] text-[11.5px]">
+        {r.upstream ? (
+          <>
+            <span className={unpushed ? 'text-ink' : 'text-ink-faint'}>↑ {unpushed} not on GitHub</span>
+            <span className={r.behind ? 'text-ink' : 'text-ink-faint'}>↓ {r.behind ?? 0} behind</span>
+          </>
+        ) : (
+          <span className="text-ink-faint">no upstream</span>
+        )}
+        <Uncommitted n={r.dirty.length} />
+      </div>
     </div>
   )
 }
@@ -648,12 +644,11 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
     <section className="flex flex-col rounded-card border border-line bg-surface">
       <Lid name={r.name} branch={r.branch} slug={r.slug} chips={terminals.map((t) => <TerminalChip key={t.id} t={t} />)} />
 
-      <PathRow path={r.root} />
-      <Figures r={r} />
+      <Stand path={r.root} r={r} />
       <Dirty files={r.dirty} />
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
             open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)}
-            right={<>{commitsOpen && <Legend />}<PushButton r={r} onPushed={onChanged} /></>}>
+            right={<><PushButton r={r} onPushed={onChanged} />{commitsOpen && <Legend />}</>}>
         <CommitList commits={r.commits} />
       </Fold>
 
@@ -661,13 +656,12 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         <>
           {/* The record: the same block, for the notes path. Its figures are
               the record's own -- the vault's whole count beside a fold of
-              three read as a contradiction -- and its fold is called Commits
-              too, since it is the same shape: the record's commits, shown by
-              the file each last touched. */}
-          <PathRow path={`${rec.root}/${rec.paths[0]}`} slug={rec.slug} />
-          <Figures r={rec} />
+              three read as a contradiction -- and its fold is Commits too,
+              with the same meta as the project's: the record's commits,
+              shown by the file each last touched. */}
+          <Stand path={`${rec.root}/${rec.paths[0]}`} r={rec} />
           <Dirty files={rec.dirty} />
-          <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub · ${plural(rec.files.length, 'file')}` : `${rec.commits.length}, all on GitHub · ${plural(rec.files.length, 'file')}`}
+          <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}, all on GitHub`}
                 open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}
                 right={<PushButton r={rec} onPushed={onChanged} />}>
             <div className="border-t border-line px-4 py-[8px] text-[12px] leading-[1.5] text-ink-dim">{trailsLine(rec.trails)}</div>

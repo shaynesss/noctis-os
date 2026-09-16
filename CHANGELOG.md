@@ -9,6 +9,15 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### The card, settled (2026-09-16)
+
+- **Lid:** name, branch and the terminals' sprites on one line, aligned;
+  the GitHub link under the title. **Block:** the path with the figures
+  under it in one cell, the uncommitted files in the next, then Commits.
+  The fold's right edge stacks the push button over the legend so the
+  title stays on one line when open. The record's path is shown in full
+  (its link went); both Commits folds carry the same meta.
+
 ### The lid, then two blocks that open with their path (2026-09-16)
 
 - **The lid is name, branch, sprites, link — no path.** Each block under
