@@ -1,12 +1,12 @@
 # STATUS.md
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 Current state, not aspirational. History lives in [`CHANGELOG.md`](CHANGELOG.md); the reference is [`DOCUMENTATION.md`](DOCUMENTATION.md).
 
 ## Current state
 
-**v2 is the daily driver, and the session is a real terminal.** The app hosts the interactive Claude Code CLI in a pseudo-terminal per tab; the `-p` orchestrator that preceded it is deleted. Stage 1 complete; Stage 2 items 1–5, 7, 8 and 9 closed; item 6 done except its scheduler. v1 is gone entirely.
+**v2 is the daily driver, and the session is a real terminal.** The app hosts the interactive Claude Code CLI in a pseudo-terminal per tab; the `-p` orchestrator that preceded it is deleted. Stage 1 complete; Stage 2 items 1–9 closed, and nothing is left in the build order — the `launchd`-on-wake scheduler that was item 6's last piece was closed on 2026-09-15 rather than built, because the commit log is the record. v1 is gone entirely.
 
 **Verified 2026-09-15 (night):** 303 backend tests, 76 frontend, `tsc -b` and `cargo check` clean, `make doctor` reporting both halves up and no capability gaps, `npm audit` and `pip-audit` clean. A Playwright pass over every rail tab, the launcher, the palette and the split keys reports no page errors.
 

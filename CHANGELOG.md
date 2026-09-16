@@ -5,9 +5,11 @@
 **v2 replaces Claude Desktop as the entry point. The app drives Claude Code as
 a subprocess, so it runs on the existing subscription with no API billing.**
 
-Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
-7, 8 and 9 are complete and verified live. Item 6 is done except its
-scheduler, which is the only feature left in the build order.
+Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-9
+are complete and verified live. Nothing is left in the build order: the
+`launchd`-on-wake scheduler that was item 6's last piece was closed on
+2026-09-15 rather than built, because the commit log is the record and needs
+no writer.
 
 ### The card, settled (2026-09-16)
 

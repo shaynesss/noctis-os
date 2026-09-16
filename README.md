@@ -232,7 +232,7 @@ for a file-watching reloader, which are alternatives rather than layers.
 
 ## Status
 
-**v2 is the daily driver.** Stage 1 complete; Stage 2 items 1–5, 7, 8 and 9 closed, item 6 outstanding on its `launchd`-on-wake scheduler. v1 is gone.
+**v2 is the daily driver.** Stage 1 complete; Stage 2 items 1–9 closed, and nothing is left in the build order — the `launchd`-on-wake scheduler that was item 6's last piece was closed on 2026-09-15 rather than built, because the commit log is the record. v1 is gone.
 
 | | |
 |---|---|
