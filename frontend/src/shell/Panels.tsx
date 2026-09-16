@@ -7,7 +7,7 @@
  * here -- counts composed into sentences, no model in the loop -- and then
  * what is waiting on you.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Unreachable } from './Async'
 import { Pools, type PoolTone } from './Pools'
 import { get, post, put } from './engine'
@@ -410,20 +410,11 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
    * every mode starts in a repository now, and a section saying "not in
    * a repository" told the reader nothing they could act on here. */
   const many = groups.length > 1
-  /* Modules in a row share a height while every fold is closed, so the
-   * row reads as equals. The moment one opens a fold the row lets each
-   * take its own height (2026-09-16): stretching the others to a list
-   * they do not have put a screen of empty card beside it. */
-  const [opened, setOpened] = useState<Set<string>>(() => new Set())
-  const onOpenChange = useCallback((root: string, has: boolean) => setOpened((s) => {
-    if (s.has(root) === has) return s
-    const n = new Set(s); if (has) n.add(root); else n.delete(root); return n
-  }), [])
   return (
-    <div className={`grid gap-6 ${opened.size ? 'items-start' : 'items-stretch'}`}
+    <div className="grid items-stretch gap-6"
          style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
       {groups.map((r) => (
-        <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged} onOpenChange={onOpenChange}
+        <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
                     terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
       ))}
     </div>
@@ -500,8 +491,12 @@ function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
 
 /* A section inside a module: a fold with a title and a count, the body
  * under it. Folded, it says how many; open, it shows them. */
-function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
+function Fold({ title, meta, open, onToggle, right, empty = false, grow = false, children }: {
   title: string; meta?: React.ReactNode; open: boolean; onToggle: () => void; right?: React.ReactNode
+  /** Take the card's spare height, with the header centred in it while closed
+   *  (2026-09-16): modules in a row share a height, and the last fold is
+   *  where a shorter card's space goes. */
+  grow?: boolean
   /** Nothing to open: the row stays, so modules keep the same rows, but it does not fold. */
   empty?: boolean; children?: React.ReactNode
 }) {
@@ -509,7 +504,7 @@ function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
    * button now (2026-09-16), and a button inside a button is invalid and
    * would toggle the fold on every push. */
   return (
-    <div className="border-t border-line">
+    <div className={`border-t border-line ${grow ? 'flex flex-1 flex-col justify-center' : ''}`}>
       <div className="flex items-center">
         <button type="button" onClick={empty ? undefined : onToggle} disabled={empty}
                 className="flex min-w-0 flex-1 items-center gap-[8px] px-4 py-[9px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint enabled:hover:text-ink disabled:cursor-default">
@@ -636,13 +631,10 @@ function Stand({ path, r }: { path: string; r: RepoInfo }) {
   )
 }
 
-function RepoModule({ r, terminals, folded, onChanged, onOpenChange }: {
-  r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void; onOpenChange?: (root: string, has: boolean) => void
-}) {
+function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void }) {
   // One Commits fold open at a time: opening the record's closes the
   // code's and back (2026-09-16), so the card never holds two long lists.
   const [open, setOpen] = useState<'code' | 'record' | null>(folded ? null : 'code')
-  useEffect(() => { onOpenChange?.(r.root, open !== null) }, [open, r.root, onOpenChange])
   const commitsOpen = open === 'code', recordOpen = open === 'record'
   const toggle = (which: 'code' | 'record') => setOpen((o) => (o === which ? null : which))
   const [githubOpen, setGithubOpen] = useState(false)
@@ -659,14 +651,10 @@ function RepoModule({ r, terminals, folded, onChanged, onOpenChange }: {
     <section className="flex flex-col rounded-card border border-line bg-surface">
       <Lid name={r.name} branch={r.branch} slug={r.slug} chips={terminals.map((t) => <TerminalChip key={t.id} t={t} />)} />
 
-      {/* The blocks sit centred between the lid and GitHub (2026-09-16):
-          in a row of equal heights, a shorter card's spare space splits
-          above and below its blocks rather than pooling under them. */}
-      <div className="my-auto">
       <Stand path={r.root} r={r} />
       <Dirty files={r.dirty} />
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
-            open={commitsOpen} onToggle={() => toggle('code')}
+            open={commitsOpen} onToggle={() => toggle('code')} grow={!rec}
             right={<><PushButton r={r} onPushed={onChanged} /><span className={commitsOpen ? 'mt-[6px]' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
         <CommitList commits={r.commits} />
       </Fold>
@@ -681,14 +669,18 @@ function RepoModule({ r, terminals, folded, onChanged, onOpenChange }: {
           <Stand path={`${rec.root}/${rec.paths[0]}`} r={rec} />
           <Dirty files={rec.dirty} />
           <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}, all on GitHub`}
-                open={recordOpen} onToggle={() => toggle('record')}
+                open={recordOpen} onToggle={() => toggle('record')} grow
                 right={<><PushButton r={rec} onPushed={onChanged} /><span className={recordOpen ? 'mt-[6px]' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
-            <FileList files={rec.files} />
+            {/* Commits, like the project's (2026-09-16): a list of files
+                with the commit that last touched each put twelve unpushed
+                commits beside three red rows, because twelve commits had
+                touched one file. Rows and figures now count the same thing;
+                a session's commit wears "from here". */}
+            <CommitList commits={rec.commits} paths={rec.paths} />
           </Fold>
         </>
       )}
 
-      </div>
       <div>
       <Fold title="GitHub" meta={r.slug ? r.slug : `not available: ${r.github_reason ?? 'unknown'}`}
             open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>
@@ -757,51 +749,6 @@ export function GithubCard({ gh, reason, pending = false }: { gh: GithubInfo | n
 
 /** What to do next, from the numbers -- the sentence a person new to git
  *  needs and a person used to it can skim past. */
-/** One row per record file: the dot and sprite of the commit that last
- * touched it, the path, that commit's subject, and when. A click opens the
- * commit's body, another closes it. A file never committed says so and
- * comes first: it is the one being worked on now. */
-function FileList({ files }: { files: RecordFile[] }) {
-  const [open, setOpen] = useState<Set<string>>(() => new Set())
-  if (files.length === 0) {
-    return <div className="border-t border-line px-4 py-[9px] text-[12px] text-ink-faint">no record files yet — Setup creates the notes folder</div>
-  }
-  const toggle = (p: string) => setOpen((o) => { const n = new Set(o); if (n.has(p)) n.delete(p); else n.add(p); return n })
-  return (
-    <div className="max-h-[420px] overflow-y-auto">
-      {files.map((f) => {
-        const c = f.commit
-        const shown = open.has(f.path)
-        return (
-          <div key={f.path} className="border-t border-line">
-            <button type="button" onClick={() => c && toggle(f.path)} disabled={!c}
-                    className="flex w-full items-baseline gap-[10px] px-4 py-[7px] text-left font-mono text-[11.5px] enabled:hover:bg-elevated/40">
-              <span className="w-[8px] shrink-0 text-center" title={!c ? 'never committed' : c.pushed ? 'on GitHub' : 'not on GitHub yet'}
-                    style={{ color: !c ? 'var(--color-ink-faint)' : c.pushed ? 'var(--color-good)' : 'var(--color-faber)' }}>{c ? '●' : '○'}</span>
-              <span className="grid w-[14px] shrink-0 place-items-center self-center">
-                {c?.mode && c.mode in MODE_LABEL && <ModeMark mode={c.mode as Mode} size={12} />}
-              </span>
-              <span className="min-w-0 shrink-0 text-ink">{f.path}</span>
-              <span className="min-w-0 flex-1 truncate text-ink-faint">{c ? c.subject : 'never committed'}</span>
-              {f.dirty && <span className="shrink-0 text-[10px] text-ink-faint" title="changed on disk and not committed">uncommitted</span>}
-              {c?.via === 'session' && <span className="shrink-0 text-[10px] text-ink-faint" title="a shared file; here because a session inside this project last touched it">from here</span>}
-              <span className="shrink-0 text-ink-faint">{c ? ago(c.at) : ''}</span>
-            </button>
-            {shown && c && (
-              <div className="px-4 pb-[10px] pl-[52px] font-mono text-[11.5px] leading-[1.6] text-ink-dim">
-                <div className="mb-[6px] text-ink-faint">{c.sha} · {c.subject}</div>
-                {c.body
-                  ? reflow(c.body).map((p, i) => <p key={i} className={`m-0 whitespace-pre-wrap break-words${i ? ' mt-[9px]' : ''}`}>{p}</p>)
-                  : <span className="text-ink-faint">no body — a subject alone; the record starts with the next commit</span>}
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 /* The uncommitted count and the files it counts wear one colour, ink,
  * like every other non-zero figure, so the eye ties them together across
  * the rule between them (2026-09-16). Zero is faint and lists nothing. The sentence that used

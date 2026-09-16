@@ -11,11 +11,14 @@ scheduler, which is the only feature left in the build order.
 
 ### The card, settled (2026-09-16)
 
-- **Equal at rest, free when open.** Modules in a row share a height while
-  every fold is closed, with a shorter card's blocks centred between its
-  lid and GitHub; the moment one opens a fold the row lets each take its
-  own height, so nothing stretches to a list it does not have. The push
-  button sits centred in a closed fold with no gap reserved under it.
+- **Equal, open or closed.** Modules in a row always share a height; the
+  spare space a shorter card has goes to its last Commits fold, whose
+  header sits centred in it while closed. The push button sits centred in
+  a closed fold with no gap reserved under it.
+- **The record's fold lists commits**, like the project's. A list of files
+  with the commit that last touched each put twelve unpushed commits
+  beside three red rows, because twelve commits had touched one file;
+  figures, meta and rows now count the same thing.
 - **Stats' activity grid sizes from the card**: one column per week
   across the full width, square cells, so the wider column is used.
 
