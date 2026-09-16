@@ -464,7 +464,7 @@ function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
     onPushed?.()
   }
   return (
-    <span className="ml-auto flex items-center gap-[8px] font-mono text-[11px]">
+    <span className="flex items-center gap-[8px] font-mono text-[11px]">
       {note && <span className={`max-w-[360px] truncate ${state === 'failed' ? '' : 'text-ink-dim'}`}
                      style={state === 'failed' ? { color: 'var(--color-faber)' } : undefined} title={note}>{note}</span>}
       {state === 'confirm-force' ? (
@@ -508,7 +508,7 @@ function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
           <span>{title}</span>
           {meta && <span className="font-normal normal-case tracking-normal text-ink-faint">· {meta}</span>}
         </button>
-        {right && <span className="flex shrink-0 flex-col items-end gap-[6px] py-[6px] pr-4 font-mono text-[11px]">{right}</span>}
+        {right && <span className="flex shrink-0 flex-col items-center gap-[6px] py-[6px] pr-4 font-mono text-[11px]">{right}</span>}
       </div>
       {open && !empty && children}
     </div>
@@ -628,8 +628,11 @@ function Stand({ path, r }: { path: string; r: RepoInfo }) {
 }
 
 function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void }) {
-  const [commitsOpen, setCommitsOpen] = useState(!folded)
-  const [recordOpen, setRecordOpen] = useState(false)
+  // One Commits fold open at a time: opening the record's closes the
+  // code's and back (2026-09-16), so the card never holds two long lists.
+  const [open, setOpen] = useState<'code' | 'record' | null>(folded ? null : 'code')
+  const commitsOpen = open === 'code', recordOpen = open === 'record'
+  const toggle = (which: 'code' | 'record') => setOpen((o) => (o === which ? null : which))
   const [githubOpen, setGithubOpen] = useState(false)
   const local = r.commits.filter((c) => !c.pushed).length
   const rec = r.notes
@@ -647,7 +650,7 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
       <Stand path={r.root} r={r} />
       <Dirty files={r.dirty} />
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
-            open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)}
+            open={commitsOpen} onToggle={() => toggle('code')}
             right={<><PushButton r={r} onPushed={onChanged} />{commitsOpen && <Legend />}</>}>
         <CommitList commits={r.commits} />
       </Fold>
@@ -662,9 +665,8 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
           <Stand path={`${rec.root}/${rec.paths[0]}`} r={rec} />
           <Dirty files={rec.dirty} />
           <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}, all on GitHub`}
-                open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}
-                right={<PushButton r={rec} onPushed={onChanged} />}>
-            <div className="border-t border-line px-4 py-[8px] text-[12px] leading-[1.5] text-ink-dim">{trailsLine(rec.trails)}</div>
+                open={recordOpen} onToggle={() => toggle('record')}
+                right={<><PushButton r={rec} onPushed={onChanged} />{recordOpen && <Legend />}</>}>
             <FileList files={rec.files} />
           </Fold>
         </>
@@ -736,19 +738,6 @@ export function GithubCard({ gh, reason, pending = false }: { gh: GithubInfo | n
 
 /** What to do next, from the numbers -- the sentence a person new to git
  *  needs and a person used to it can skim past. */
-/** How far the record trails the code, as a sentence. Positive `behind` is
- * the newest project commit sitting after the newest record commit; the
- * record is current when the vault was written to last. Under an hour is
- * "current" too -- a session commits code and then its log entry, and the
- * minutes between are not a record falling behind. */
-export function trailsLine(t: RecordTrails | null): string {
-  if (!t) return 'No record commits yet — nothing in the vault says where this project stands.'
-  if (t.behind < 3600) return 'The record is current: the vault was written to after the newest code commit.'
-  const h = Math.floor(t.behind / 3600)
-  const span = h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`
-  return `The record is ${span} behind the code — the newest project commit has no vault entry after it.`
-}
-
 /** One row per record file: the dot and sprite of the commit that last
  * touched it, the path, that commit's subject, and when. A click opens the
  * commit's body, another closes it. A file never committed says so and

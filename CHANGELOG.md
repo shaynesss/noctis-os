@@ -11,6 +11,11 @@ scheduler, which is the only feature left in the build order.
 
 ### The card, settled (2026-09-16)
 
+- **One Commits fold open at a time.** Opening the record's closes the
+  code's and back, so the card never holds two long lists. The legend
+  shows on both, under a push button centred over it. The "record is
+  current" sentence went: the rows say it.
+
 - **Lid:** name, branch and the terminals' sprites on one line, aligned;
   the GitHub link under the title. **Block:** the path with the figures
   under it in one cell, the uncommitted files in the next, then Commits.
