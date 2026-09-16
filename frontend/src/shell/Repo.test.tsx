@@ -87,13 +87,12 @@ describe('Repo view', () => {
   it('with no upstream, offers to publish the branch', () => {
     const t = text({ upstream: null, ahead: null, behind: null, branch: 'job/12-thing' })
     expect(t).toContain('no upstream')
-    expect(t).toContain('Publish puts it on origin')
     expect(t).toContain('publish job/12-thing')
   })
 
   it('offers a force push only when the histories disagree, and a plain one otherwise', () => {
     const diverged = text({ ahead: 281, behind: 280 })
-    expect(diverged).toContain('281 commits here and 280 on GitHub that disagree')
+    expect(diverged).toContain('↑ 281 not on GitHub'); expect(diverged).toContain('↓ 280 behind')
     expect(diverged).toContain('push · force')
     const plain = text({ ahead: 3, behind: 0 })
     expect(plain).toContain('push 3')
@@ -101,7 +100,7 @@ describe('Repo view', () => {
     expect(text({})).not.toContain('push ')
   })
 
-  it('counts what is not on GitHub, what is behind, and what is uncommitted -- and says what to do', () => {
+  it('counts what is not on GitHub, what is behind, and what is uncommitted -- figures and files, no sentence', () => {
     const t = text({
       ahead: 201, behind: 2, dirty: ['a.ts', 'b.ts'],
       commits: [
@@ -112,21 +111,22 @@ describe('Repo view', () => {
     expect(t).toContain('↑ 201 not on GitHub')
     expect(t).toContain('↓ 2 behind')
     expect(t).toContain('2 uncommitted')
-    expect(t).toContain('201 commits here and 2 on GitHub that disagree')
-    expect(t).toContain('it asks twice')
-    expect(t).toContain('2 files changed and not committed')
-    expect(text({ ahead: 5 })).toContain('5 commits on this machine only. Push puts them on GitHub as you')
-    // The dirty files sit under the sentence that counts them, not in a fold
-    // of their own (2026-09-16): "Uncommitted · 0" was a row that said nothing
-    // on most modules, and a module with none shows no list at all.
+    // No sentence between the figures and the files (2026-09-16): the count
+    // and the list are the fact, and the push button sits on the Commits
+    // fold, the thing it pushes. A module with nothing uncommitted lists
+    // nothing.
+    expect(t).not.toContain('files changed and not committed'); expect(t).not.toContain('Push puts')
+    expect(text({ ahead: 5 })).toContain('push 5')
     expect(t).toContain('a.ts'); expect(t).toContain('b.ts'); expect(t).not.toContain('Uncommitted ·')
     expect(text({ dirty: [] })).not.toContain('a.ts')
     expect(t).toContain('● abc1234 newest, local only 1m')
     expect(t).toContain('● def5678 older, on GitHub 2h')
   })
 
-  it('says everything is on GitHub when it is', () => {
-    expect(text({})).toContain('Everything here is on GitHub and nothing is uncommitted')
+  it('says nothing at all when everything is on GitHub and committed', () => {
+    const t = text({})
+    expect(t).toContain('↑ 0 not on GitHub'); expect(t).toContain('0 uncommitted')
+    expect(t).not.toContain('Everything here'); expect(t).not.toContain('push ')
   })
 
   it('says why there is no GitHub half when the remote is not there', () => {

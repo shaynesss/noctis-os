@@ -492,15 +492,20 @@ function Fold({ title, meta, open, onToggle, right, empty = false, children }: {
   /** Nothing to open: the row stays, so modules keep the same rows, but it does not fold. */
   empty?: boolean; children?: React.ReactNode
 }) {
+  /* `right` sits beside the toggle, not inside it: it holds the push
+   * button now (2026-09-16), and a button inside a button is invalid and
+   * would toggle the fold on every push. */
   return (
     <div className="border-t border-line">
-      <button type="button" onClick={empty ? undefined : onToggle} disabled={empty}
-              className="flex w-full items-center gap-[8px] px-4 py-[9px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint enabled:hover:text-ink disabled:cursor-default">
-        <span className="inline-block w-[10px] text-center">{empty ? '·' : open ? '▾' : '▸'}</span>
-        <span>{title}</span>
-        {meta && <span className="font-normal normal-case tracking-normal text-ink-faint">· {meta}</span>}
-        {right && <span className="ml-auto font-normal normal-case tracking-normal">{right}</span>}
-      </button>
+      <div className="flex items-center">
+        <button type="button" onClick={empty ? undefined : onToggle} disabled={empty}
+                className="flex min-w-0 flex-1 items-center gap-[8px] px-4 py-[9px] text-left font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint enabled:hover:text-ink disabled:cursor-default">
+          <span className="inline-block w-[10px] text-center">{empty ? '·' : open ? '▾' : '▸'}</span>
+          <span>{title}</span>
+          {meta && <span className="font-normal normal-case tracking-normal text-ink-faint">· {meta}</span>}
+        </button>
+        {right && <span className="flex shrink-0 items-center gap-[10px] pr-4 font-mono text-[11px]">{right}</span>}
+      </div>
       {open && !empty && children}
     </div>
   )
@@ -614,35 +619,28 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
         ) : (
           <span className="text-ink-faint">no upstream</span>
         )}
-        <span className={r.dirty.length ? 'text-ink' : 'text-ink-faint'}>{r.dirty.length} uncommitted</span>
+        <Uncommitted n={r.dirty.length} />
       </div>
-      {/* Three lines' worth of height whatever the sentence needs, so the
-          folds below sit at the same height in every module on the row. */}
-      <div className="flex min-h-[72px] items-center gap-[12px] border-t border-line px-4 py-[9px] text-[12px] leading-[1.5] text-ink-dim">
-        <span className="min-w-0 flex-1">{nextStep(r)}</span>
-        <PushButton r={r} onPushed={onChanged} />
-      </div>
-      {/* The uncommitted files, right under the sentence that counts them,
-          and only when there are any (2026-09-16). A fold of their own read
-          "0" on most modules; a tooltip put them nowhere a reader looks. */}
-      {r.dirty.length > 0 && (
-        <div className="max-h-[160px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7] text-ink-dim">
-          {r.dirty.map((f) => <div key={f}>{f}</div>)}
-        </div>
-      )}
+      <Dirty files={r.dirty} />
 
+      {/* The push button lives on the Commits fold, the thing it pushes
+          (2026-09-16); the sentence that used to sit beside it went with the
+          row. The legend shows only while the list is open. */}
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
-            open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)} right={commitsOpen ? <Legend /> : undefined}>
+            open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)}
+            right={<>{commitsOpen && <Legend />}<PushButton r={r} onPushed={onChanged} /></>}>
         <CommitList commits={r.commits} />
       </Fold>
 
       {rec ? (
         <Fold title="Record" meta={`${rec.name} · ${rec.paths[0]} · ${plural(rec.files.length, 'file')}${recLocal ? ` · ${recLocal} not on GitHub` : ''}`}
-              open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}>
+              open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}
+              right={<PushButton r={rec} onPushed={onChanged} />}>
           {/* The same figures and the same button the project has, pointed
               at the vault (2026-09-15): the record is the other half of the
               work, and it stands or pushes on the same terms. The push is
-              the whole vault's -- a repository pushes as one. */}
+              the whole vault's -- a repository pushes as one -- and sits on
+              the fold's lid like the project's sits on Commits. */}
           <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[9px] font-mono text-[11.5px]">
             {rec.upstream ? (
               <>
@@ -652,14 +650,9 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
             ) : (
               <span className="text-ink-faint">no upstream</span>
             )}
-            <span className={rec.dirty.length ? 'text-ink' : 'text-ink-faint'}>{rec.dirty.length} uncommitted</span>
+            <Uncommitted n={rec.dirty.length} />
           </div>
-          <div className="flex items-center gap-[12px] border-t border-line px-4 py-[9px] text-[12px] leading-[1.5] text-ink-dim">
-            <span className="min-w-0 flex-1">
-              {nextStep(rec).replace(/on this machine only\./, 'on this machine only, the whole vault\'s.')}
-            </span>
-            <PushButton r={rec} onPushed={onChanged} />
-          </div>
+          <Dirty files={rec.dirty} />
           {/* By file, not by commit (2026-09-15): the vault's own module
               lists the commits; this fold says whether the writing about
               the project is current -- one row per record file, and how
@@ -796,15 +789,22 @@ function FileList({ files }: { files: RecordFile[] }) {
   )
 }
 
-function nextStep(r: RepoInfo): string {
-  if (!r.upstream) return 'This branch has no upstream. Publish puts it on origin.'
-  const parts: string[] = []
-  if (r.dirty.length) parts.push(`${r.dirty.length} file${r.dirty.length === 1 ? '' : 's'} changed and not committed — a session commits as it goes, so this is either in progress or forgotten.`)
-  if (r.ahead && r.behind) parts.push(`${r.ahead} commit${r.ahead === 1 ? '' : 's'} here and ${r.behind} on GitHub that disagree — a rewritten history. Only a force push replaces GitHub's; it is your hand, and it asks twice.`)
-  else if (r.ahead) parts.push(`${r.ahead} commit${r.ahead === 1 ? '' : 's'} on this machine only. Push puts ${r.ahead === 1 ? 'it' : 'them'} on GitHub as you — a session never pushes; the button is yours.`)
-  if (r.behind && !r.ahead) parts.push(`${r.behind} commit${r.behind === 1 ? '' : 's'} on GitHub that this machine does not have — \`git pull\` before building on it.`)
-  if (!parts.length) parts.push('Everything here is on GitHub and nothing is uncommitted.')
-  return parts.join(' ')
+/* The uncommitted count and the files it counts wear one colour, the
+ * signature, so the eye ties them together across the rule between them
+ * (2026-09-16). Zero is faint and lists nothing. The sentence that used
+ * to sit between them -- "N files changed and not committed, a session
+ * commits as it goes…" -- is gone: the figure and the list are the fact. */
+function Uncommitted({ n }: { n: number }) {
+  return <span className={n ? '' : 'text-ink-faint'} style={n ? { color: 'var(--sig-text)' } : undefined}>{n} uncommitted</span>
+}
+
+function Dirty({ files }: { files: string[] }) {
+  if (files.length === 0) return null
+  return (
+    <div className="max-h-[160px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7]" style={{ color: 'var(--sig-text)' }}>
+      {files.map((f) => <div key={f}>{f}</div>)}
+    </div>
+  )
 }
 
 function Tag({ children, tone }: { children: React.ReactNode; tone?: 'good' | 'bad' }) {

@@ -14,10 +14,12 @@ scheduler, which is the only feature left in the build order.
 - **No Record fold on a repository that is not a dev job's project.** The
   vault module carried a disabled "Record · not a job's project" row that
   explained an absence.
-- **No Uncommitted fold.** The count is on the lid; the files are listed
-  under the next-step sentence whenever there are any, and not at all
-  when there are none. "Uncommitted · 0" was a row that said nothing on
-  most modules.
+- **No Uncommitted fold, and no sentence.** The count is on the lid; the
+  files are the row under it whenever there are any, count and files in
+  the signature colour so they read as one thing; nothing when there are
+  none. The next-step sentence went with the row, and the push button now
+  sits on the Commits fold's lid (the Record fold's, on the vault side).
+  "Uncommitted · 0" was a row that said nothing on most modules.
 - **No "Not in a repository" section.** Every mode starts in a repository
   now, and the section told the reader nothing they could act on here.
   `outside` stays in the payload; the view ignores it.
