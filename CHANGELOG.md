@@ -9,6 +9,20 @@ Stage 1 (foundation, prompts, retrieval eval, bootstrap) and Stage 2 items 1-5,
 7, 8 and 9 are complete and verified live. Item 6 is done except its
 scheduler, which is the only feature left in the build order.
 
+### One anatomy, twice (2026-09-16)
+
+- **A module is a lid, figures, uncommitted files, and a fold with the
+  push on it** — and for a dev job's project that anatomy appears twice:
+  the project (Commits) and, stacked under it, its record (a lid naming
+  the vault, its branch and the notes path; a Record fold of the files).
+  The terminals' sprite chips moved onto the lid. The Record fold's meta
+  no longer counts "N not on GitHub" from its listed commits beside the
+  vault's own figure, which disagreed (3 against 4) because they counted
+  different things.
+- **Figures in ink, the push button in the signature colour.** The
+  uncommitted count and its files are ink like every other non-zero
+  figure; the button is the one thing in the signature.
+
 ### Three rows fewer on the Repo view (2026-09-16)
 
 - **No Record fold on a repository that is not a dev job's project.** The

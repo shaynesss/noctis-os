@@ -476,8 +476,8 @@ function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
       ) : state === 'done' ? null : (
         <button type="button" disabled={state === 'pushing'}
                 onClick={() => (diverged ? setState('confirm-force') : void run(false))}
-                className="rounded-control border px-[9px] py-[2px] text-ink transition-colors hover:bg-elevated disabled:opacity-40"
-                style={{ borderColor: diverged ? 'var(--color-faber)' : 'var(--color-line)' }}>
+                className="rounded-control px-[9px] py-[2px] text-ink transition-opacity hover:opacity-90 disabled:opacity-40"
+                style={{ background: 'var(--color-sig)', outline: diverged ? '1px solid var(--color-faber)' : undefined }}>
           {state === 'pushing' ? 'pushing…' : !r.upstream ? `publish ${r.branch ?? 'branch'}` : diverged ? 'push · force' : `push ${ahead}`}
         </button>
       )}
@@ -584,86 +584,89 @@ const Legend = () => (
  * commits, the record (for a dev job's project), GitHub -- each a fold
  * inside the same border, so the grouping is the box and not the reader's
  * inference. */
-function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void }) {
+/* The lid of a block: name, branch, an optional note (the record's notes
+ * path), the terminals in it, the GitHub link, and the path underneath. */
+function Lid({ name, branch, slug, chips, path, note }: {
+  name: string; branch: string | null; slug: string | null; chips?: React.ReactNode; path?: string; note?: string
+}) {
+  return (
+    <div className="px-4 py-[9px]">
+      <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[4px]">
+        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{name}</span>
+        <span className="font-mono text-[11px] text-ink-faint">· {branch ?? 'detached'}</span>
+        {note && <span className="font-mono text-[11px] text-ink-faint">· {note}</span>}
+        {chips}
+        {slug && <Ext href={`https://github.com/${slug}`} className="ml-auto font-mono text-[11px] text-ink-dim hover:text-ink">{slug} ↗</Ext>}
+      </div>
+      {path && <div className="mt-[3px] truncate font-mono text-[11px] text-ink-faint" title={path}>{path}</div>}
+    </div>
+  )
+}
+
+/* Where a repository stands: not on GitHub, behind, uncommitted. A
+ * non-zero figure is ink; zero is faint. */
+function Figures({ r }: { r: RepoInfo }) {
   const unpushed = r.ahead ?? 0
+  return (
+    <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[9px] font-mono text-[11.5px]">
+      {r.upstream ? (
+        <>
+          <span className={unpushed ? 'text-ink' : 'text-ink-faint'}>↑ {unpushed} not on GitHub</span>
+          <span className={r.behind ? 'text-ink' : 'text-ink-faint'}>↓ {r.behind ?? 0} behind</span>
+        </>
+      ) : (
+        <span className="text-ink-faint">no upstream</span>
+      )}
+      <Uncommitted n={r.dirty.length} />
+    </div>
+  )
+}
+
+function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminals: RepoTerminal[]; folded: boolean; onChanged?: () => void }) {
   const [commitsOpen, setCommitsOpen] = useState(!folded)
   const [recordOpen, setRecordOpen] = useState(false)
   const [githubOpen, setGithubOpen] = useState(false)
   const local = r.commits.filter((c) => !c.pushed).length
   const rec = r.notes
-  const recLocal = rec ? rec.commits.filter((c) => !c.pushed).length : 0
-  // No pools here: they were tried on the modules (2026-09-15) and looked
-  // wrong against the folds and the push row. The Repo view will get its
-  // own treatment.
+  /* A repository as one thing (2026-09-16): a lid naming it, who is in it
+   * and where it is; its figures; its uncommitted files; the fold of what
+   * it holds, with the push on the fold's lid. The project and its record
+   * are two of these stacked in one module -- the same anatomy twice, so
+   * the record reads the way the code does. The record's lid names the
+   * vault, its branch and the notes path; its fold is the files. No pools
+   * here: tried on the modules 2026-09-15, wrong against the folds. */
   return (
     <section className="flex flex-col rounded-card border border-line bg-surface">
-      <div className="flex items-baseline gap-[10px] px-4 py-[10px]">
-        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink">{r.name}</span>
-        <span className="font-mono text-[11px] text-ink-faint">· {r.branch ?? 'detached'}</span>
-        {r.slug && (
-          <Ext href={`https://github.com/${r.slug}`} className="ml-auto font-mono text-[11px] text-ink-dim hover:text-ink">{r.slug} ↗</Ext>
-        )}
-      </div>
-      <div className="border-t border-line px-4 py-[8px]">
-        <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px]">
-          {terminals.map((t) => <TerminalChip key={t.id} t={t} />)}
-        </div>
-        <div className="mt-[3px] truncate font-mono text-[11px] text-ink-faint" title={r.root}>{r.root}</div>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[9px] font-mono text-[11.5px]">
-        {r.upstream ? (
-          <>
-            <span className={unpushed ? 'text-ink' : 'text-ink-faint'}>↑ {unpushed} not on GitHub</span>
-            <span className={r.behind ? 'text-ink' : 'text-ink-faint'}>↓ {r.behind ?? 0} behind</span>
-          </>
-        ) : (
-          <span className="text-ink-faint">no upstream</span>
-        )}
-        <Uncommitted n={r.dirty.length} />
-      </div>
+      <Lid name={r.name} branch={r.branch} slug={r.slug} path={r.root}
+           chips={terminals.map((t) => <TerminalChip key={t.id} t={t} />)} />
+      <Figures r={r} />
       <Dirty files={r.dirty} />
-
-      {/* The push button lives on the Commits fold, the thing it pushes
-          (2026-09-16); the sentence that used to sit beside it went with the
-          row. The legend shows only while the list is open. */}
       <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
             open={commitsOpen} onToggle={() => setCommitsOpen((o) => !o)}
             right={<>{commitsOpen && <Legend />}<PushButton r={r} onPushed={onChanged} /></>}>
         <CommitList commits={r.commits} />
       </Fold>
 
-      {rec ? (
-        <Fold title="Record" meta={`${rec.name} · ${rec.paths[0]} · ${plural(rec.files.length, 'file')}${recLocal ? ` · ${recLocal} not on GitHub` : ''}`}
-              open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}
-              right={<PushButton r={rec} onPushed={onChanged} />}>
-          {/* The same figures and the same button the project has, pointed
-              at the vault (2026-09-15): the record is the other half of the
-              work, and it stands or pushes on the same terms. The push is
-              the whole vault's -- a repository pushes as one -- and sits on
-              the fold's lid like the project's sits on Commits. */}
-          <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[4px] border-t border-line px-4 py-[9px] font-mono text-[11.5px]">
-            {rec.upstream ? (
-              <>
-                <span className={rec.ahead ? 'text-ink' : 'text-ink-faint'}>↑ {rec.ahead ?? 0} not on GitHub</span>
-                <span className={rec.behind ? 'text-ink' : 'text-ink-faint'}>↓ {rec.behind ?? 0} behind</span>
-              </>
-            ) : (
-              <span className="text-ink-faint">no upstream</span>
-            )}
-            <Uncommitted n={rec.dirty.length} />
+      {rec && (
+        <>
+          <div className="border-t border-line bg-elevated/30">
+            <Lid name={rec.name} branch={rec.branch} slug={rec.slug} note={rec.paths[0]} />
           </div>
+          <Figures r={rec} />
           <Dirty files={rec.dirty} />
-          {/* By file, not by commit (2026-09-15): the vault's own module
-              lists the commits; this fold says whether the writing about
-              the project is current -- one row per record file, and how
-              far the record trails the code. */}
-          <div className="border-t border-line px-4 py-[8px] text-[12px] leading-[1.5] text-ink-dim">{trailsLine(rec.trails)}</div>
-          <FileList files={rec.files} />
-        </Fold>
-      ) : null}
-      {/* No Record fold at all on a repository that is not a dev job's
-          project (2026-09-16): "Record · not a job's project" on the vault
-          module was a disabled row explaining an absence. */}
+          <Fold title="Record" meta={plural(rec.files.length, 'file')}
+                open={recordOpen} onToggle={() => setRecordOpen((o) => !o)}
+                right={<PushButton r={rec} onPushed={onChanged} />}>
+            {/* By file, not by commit (2026-09-15): the vault's own module
+                lists the commits; this fold says whether the writing about
+                the project is current -- one row per record file, and how
+                far the record trails the code. The push is the whole
+                vault's: a repository pushes as one. */}
+            <div className="border-t border-line px-4 py-[8px] text-[12px] leading-[1.5] text-ink-dim">{trailsLine(rec.trails)}</div>
+            <FileList files={rec.files} />
+          </Fold>
+        </>
+      )}
 
       <Fold title="GitHub" meta={r.slug ? r.slug : `not available: ${r.github_reason ?? 'unknown'}`}
             open={githubOpen} onToggle={() => setGithubOpen((o) => !o)}>
@@ -789,19 +792,19 @@ function FileList({ files }: { files: RecordFile[] }) {
   )
 }
 
-/* The uncommitted count and the files it counts wear one colour, the
- * signature, so the eye ties them together across the rule between them
- * (2026-09-16). Zero is faint and lists nothing. The sentence that used
+/* The uncommitted count and the files it counts wear one colour, ink,
+ * like every other non-zero figure, so the eye ties them together across
+ * the rule between them (2026-09-16). Zero is faint and lists nothing. The sentence that used
  * to sit between them -- "N files changed and not committed, a session
  * commits as it goes…" -- is gone: the figure and the list are the fact. */
 function Uncommitted({ n }: { n: number }) {
-  return <span className={n ? '' : 'text-ink-faint'} style={n ? { color: 'var(--sig-text)' } : undefined}>{n} uncommitted</span>
+  return <span className={n ? 'text-ink' : 'text-ink-faint'}>{n} uncommitted</span>
 }
 
 function Dirty({ files }: { files: string[] }) {
   if (files.length === 0) return null
   return (
-    <div className="max-h-[160px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7]" style={{ color: 'var(--sig-text)' }}>
+    <div className="max-h-[160px] overflow-y-auto border-t border-line px-4 py-[7px] font-mono text-[11.5px] leading-[1.7] text-ink">
       {files.map((f) => <div key={f}>{f}</div>)}
     </div>
   )
