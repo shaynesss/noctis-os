@@ -249,8 +249,11 @@ export function App() {
     /* A handoff carries a summary the person wrote in the launcher; it
        arrives as the new session's first message rather than through a
        clipboard. An empty launch just opens the terminal and waits. */
-    const prompt = req.prompt.trim() || req.from?.carried.trim() || undefined
-    open(newSlot(req.mode, req.cwd, { prompt }))
+    // Only a handoff carries a first message now: the launcher's own
+    // opening-prompt box went on 2026-09-16, and a fresh session opens on
+    // the backend's prompt instead.
+    const prompt = req.from?.carried.trim() || undefined
+    open(newSlot(req.mode, req.cwd, { prompt, effort: req.effort }))
     setLauncher(null)
   }, [open])
 

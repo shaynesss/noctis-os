@@ -32,6 +32,10 @@ export interface Slot {
   resumeId?: string
   /** A first message, submitted as the session opens -- a handoff's carry. */
   prompt?: string
+  /** How hard it thinks, from the launcher. Omitted leaves the engine's own
+   *  configured level alone. Not remembered across a reload: a slot coming
+   *  back reattaches to a live session or resumes one, and neither respawns. */
+  effort?: string
   /** Slots sharing a group are shown side by side. Never a group of one:
    *  the shell clears a group the moment it has a single member. */
   group?: string
@@ -263,7 +267,7 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
               )}
               <div className="min-h-0 flex-1">
                 <Terminal id={s.id} mode={s.mode} cwd={s.cwd} accent={accent}
-                          resumeId={s.resumeId} prompt={s.prompt} />
+                          resumeId={s.resumeId} prompt={s.prompt} effort={s.effort} />
               </div>
             </div>
           )

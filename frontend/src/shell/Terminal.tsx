@@ -108,7 +108,7 @@ function spawnTurn(): Promise<void> {
 }
 
 export function Terminal({
-  id, mode, cwd, accent, resumeId, prompt, onExit,
+  id, mode, cwd, accent, resumeId, prompt, effort, onExit,
 }: {
   id: string
   mode: Mode
@@ -120,6 +120,7 @@ export function Terminal({
   /** A first message, submitted as the session opens. A handoff's carried
    *  summary arrives this way rather than through a clipboard. */
   prompt?: string
+  effort?: string
   onExit?: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
@@ -466,7 +467,8 @@ export function Terminal({
         const fetched = await getResult<{ binary: string; args: string[]; env?: Record<string, string> }>(
           `/v2/sessions/interactive-args?mode=${mode}&cwd=${encodeURIComponent(cwd)}&slot=${encodeURIComponent(id)}`
           + (resumeRef.current ? `&resume_id=${encodeURIComponent(resumeRef.current)}` : '')
-          + (prompt ? `&prompt=${encodeURIComponent(prompt)}` : ''))
+          + (prompt ? `&prompt=${encodeURIComponent(prompt)}` : '')
+          + (effort ? `&effort=${encodeURIComponent(effort)}` : ''))
         if (!live) return
         if (!fetched.ok) {
           // Two different failures that the first version reported as one.

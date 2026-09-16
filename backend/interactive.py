@@ -77,8 +77,16 @@ OPENING_PROMPT = (
 )
 
 
+# What `claude --effort` accepts. Listed rather than passed through, because
+# an unknown level is rejected by the CLI *after* the terminal has opened:
+# the pane shows a usage error where a session should be, which reads as the
+# app being broken rather than as a bad argument.
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
 def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
-               slot: str | None = None, prompt: str | None = None) -> dict:
+               slot: str | None = None, prompt: str | None = None,
+               effort: str | None = None) -> dict:
     """Everything the shell needs to open one interactive session.
 
     Returns the binary separately from the arguments because the Rust side
@@ -89,6 +97,16 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
         raise ValueError(f"unknown mode {mode!r}")
 
     args: list[str] = ["--model", MODE_MODELS[mode]]
+
+    # How hard the session thinks, chosen at the launcher rather than typed
+    # as `/effort` once it is already running. Omitted when not given, which
+    # leaves the CLI's own configured level in place: this is an override,
+    # and a default sent as an override would quietly outrank
+    # `~/.claude/settings.json` for every session the app starts.
+    if effort:
+        if effort not in EFFORTS:
+            raise ValueError(f"unknown effort {effort!r}; expected one of {', '.join(EFFORTS)}")
+        args += ["--effort", effort]
 
     # The job whose project_path is this directory is the job this session is
     # about to work on, and its brief rides in the overlay. Resolved here

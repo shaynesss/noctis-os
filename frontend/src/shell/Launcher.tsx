@@ -13,8 +13,16 @@
  * quietly became the other.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ModeMark } from './Chrome'
 import { useFetched } from './useFetched'
 import { MODE_ACCENT, MODE_INFO, MODE_LABEL, type Mode } from './domain'
+
+/* How hard the session thinks, chosen before it starts rather than typed as
+ * `/effort` once it is already running. The levels are the CLI's own; the
+ * chooser opens on what this mode's model is configured to do, so leaving it
+ * alone sends an override identical to the default and changes nothing. */
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+export type Effort = (typeof EFFORTS)[number]
 
 /* Maintenance is deliberately absent.
  *
@@ -28,7 +36,8 @@ const MODES: Mode[] = ['general', 'faber', 'noctua', 'vesper']
 export interface LaunchRequest {
   mode: Mode
   cwd: string
-  prompt: string
+  /** Omitted when the mode's configured level was left alone. */
+  effort?: Effort
   /** Set when this launch came from a handoff, for the provenance block. */
   from?: { mode: Mode; label: string; carried: string }
 }
@@ -67,7 +76,7 @@ export function Launcher({
    * whichever directory was used last regardless of mode, which put a
    * Noctua session in the home folder — nobody's sensible starting point,
    * and the reason it opened by remarking on where it was. */
-  const defaults = useFetched<{ dirs: Record<string, string> }>('/v2/mode-dirs')
+  const defaults = useFetched<{ dirs: Record<string, string>; effort: Record<string, Effort | null> }>('/v2/mode-defaults')
   const [cwd, setCwd] = useState(handoff?.cwd ?? '')
   const [touched, setTouched] = useState(false)
 
@@ -79,29 +88,43 @@ export function Launcher({
     const suggested = (defaults ? defaults.dirs[mode] : undefined) ?? dirs[0]
     if (suggested) setCwd(suggested)
   }, [mode, defaults, dirs, touched, handoff])
-  const [prompt, setPrompt] = useState('')
   const [carried, setCarried] = useState(handoff?.carried ?? '')
-  const promptRef = useRef<HTMLTextAreaElement>(null)
 
+  /* Follows the mode too, until you pick one. Each mode has its own model
+   * and models are configured separately, so the level that is already true
+   * for Faber is not the one that is true for Noctua. */
+  const [effort, setEffort] = useState<Effort | null>(null)
+  const [effortTouched, setEffortTouched] = useState(false)
+  const configured = defaults ? defaults.effort?.[mode] ?? null : null
   useEffect(() => {
-    promptRef.current?.focus()
+    if (!effortTouched) setEffort(configured)
+  }, [configured, effortTouched])
+
+  /* The dialog takes focus itself, rather than a field inside it.
+   *
+   * It used to focus the opening-prompt textarea, which is gone; focusing
+   * the directory instead would put a cursor in a field nobody usually
+   * touches and mark it edited on the first keystroke. Focus still has to
+   * land inside the dialog, because Escape, ⌘↵ and ⌘1–4 are handled here. */
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    dialogRef.current?.focus()
   }, [])
 
-  /* An opening prompt is optional.
+  /* Nothing to type here.
    *
-   * Requiring one meant the Start button silently did nothing when it was
-   * empty — no message, no reason, just an unresponsive button, which reads
-   * as the app being unable to start a session at all. And the requirement
-   * was never real: a new tab can open and wait for you to type, which is
-   * exactly what the General tab does. With no prompt the backend supplies
-   * one: the session opens by saying which mode it is and where it is, so
-   * no terminal ever sits at a bare prompt looking like nothing loaded. */
+   * There was an opening-prompt box, optional, and it went (2026-09-16):
+   * the session opens by saying which mode it is and where it is, from the
+   * backend's own prompt, and anything else is a first message better typed
+   * into the terminal that is about to have focus anyway. A handoff still
+   * carries its summary, which is not the same thing: that is the previous
+   * session's words, and it is shown above for editing. */
   const launch = () => {
     if (full) return
     onLaunch({
       mode,
       cwd,
-      prompt: prompt.trim(),
+      effort: effort ?? undefined,
       from: handoff ? { mode: handoff.mode, label: handoff.label, carried } : undefined,
     })
   }
@@ -114,9 +137,10 @@ export function Launcher({
       onClose()
       return
     }
-    // Cmd+Enter, not bare Enter: the prompt is a textarea and newlines in an
-    // opening instruction are normal, so Enter must stay a newline here.
-    if (e.key === 'Enter' && e.metaKey) {
+    // Cmd+Enter, and bare Enter too once nothing here takes a newline: the
+    // carried summary is the one field that does, and it is a textarea that
+    // stops the event before this sees it.
+    if (e.key === 'Enter') {
       e.preventDefault()
       launch()
       return
@@ -139,8 +163,10 @@ export function Launcher({
       role="presentation"
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
+        tabIndex={-1}
         aria-label={handoff ? 'Hand off session' : 'New session'}
         onKeyDown={onKey}
         className="w-[560px] max-w-[calc(100%-32px)] overflow-hidden rounded-sheet border border-line bg-sheet shadow-[0_18px_50px_rgba(0,0,0,0.55)]"
@@ -151,10 +177,7 @@ export function Launcher({
           {handoff && (
             <span className="flex items-center gap-[6px] normal-case tracking-normal">
               <span className="text-ink-faint">from</span>
-              <span
-                className="h-[7px] w-[7px] rounded-[2px]"
-                style={{ background: MODE_ACCENT[handoff.mode] }}
-              />
+              <ModeMark mode={handoff.mode} size={13} />
               <span className="text-ink-dim">{handoff.label}</span>
             </span>
           )}
@@ -184,10 +207,12 @@ export function Launcher({
                       : undefined
                   }
                 >
-                  <span
-                    className="h-[8px] w-[8px] shrink-0 rounded-[2px]"
-                    style={{ background: MODE_ACCENT[m], opacity: selected ? 1 : 0.55 }}
-                  />
+                  {/* The character, not a colour chip: the same mark the tab
+                      strip and the Repo view use, so a mode is one picture
+                      everywhere (2026-09-16). */}
+                  <span className="shrink-0" style={{ opacity: selected ? 1 : 0.6 }}>
+                    <ModeMark mode={m} size={18} />
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span
                       className="block font-mono text-[12px]"
@@ -249,24 +274,46 @@ export function Launcher({
             </datalist>
           </label>
 
-          <label className="mt-[12px] block">
-            <span className="mb-[5px] block font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-faint">
-              Opening prompt
+          <div className="mt-[12px]">
+            <span className="mb-[5px] flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-faint">
+              Effort
+              <span className="normal-case tracking-normal">
+                {configured ? `— ${MODE_LABEL[mode]} runs at ${configured} unless you say otherwise` : '— the engine\'s own setting'}
+              </span>
             </span>
-            <textarea
-              ref={promptRef}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={3}
-              spellCheck={false}
-              className="w-full resize-none rounded-control border border-line bg-ground px-[10px] py-[8px] font-mono text-[12px] leading-[1.6] text-ink outline-none focus:border-[var(--accent)]"
-            />
-          </label>
+            <div className="flex gap-[3px]" role="group" aria-label="Effort">
+              {EFFORTS.map((level) => {
+                const on = effort === level
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => { setEffortTouched(true); setEffort(level) }}
+                    aria-pressed={on}
+                    className={`flex-1 rounded-control border px-[8px] py-[6px] font-mono text-[11.5px] transition-colors ${
+                      on ? '' : 'border-line text-ink-faint hover:bg-elevated hover:text-ink-dim'
+                    }`}
+                    style={
+                      on
+                        ? {
+                            background: `color-mix(in srgb, ${MODE_ACCENT[mode]} 14%, var(--color-surface))`,
+                            borderColor: `color-mix(in srgb, ${MODE_ACCENT[mode]} 35%, var(--color-surface))`,
+                            color: MODE_ACCENT[mode],
+                          }
+                        : undefined
+                    }
+                  >
+                    {level}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-[10px] border-t border-line px-[14px] py-[10px]">
           <span className={`font-mono text-[10.5px] ${full ? 'text-ink' : 'text-ink-faint'}`}>
-          {full ?? `⌘↵ to start · ⌘1–${choices.length} to pick${prompt.trim() ? '' : ' · opens by saying what it is'}`}
+          {full ?? `↵ to start · ⌘1–${choices.length} to pick · opens by saying what it is`}
         </span>
           <button
             type="button"

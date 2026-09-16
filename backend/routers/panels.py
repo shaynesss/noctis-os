@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 import vault_io
 from jobs import MAINTENANCE, MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
 from nightshift import apply as proposals
+import interactive
 from engine import MODE_MODELS
 
 router = APIRouter(prefix="/v2", tags=["panels"])
@@ -1050,9 +1051,29 @@ def regression_status() -> dict:
         return dict(_regression_run)
 
 
-@router.get("/mode-dirs")
-def mode_dirs() -> dict:
-    """Where each mode should start, when you have not said otherwise.
+def _configured_effort(model: str) -> str | None:
+    """What the CLI would run this model at if Noctis passed no `--effort`.
+
+    Read from the same `settings.json` a session would, so the launcher's
+    chooser opens on the truth: picking the level already shown sends an
+    override identical to the default, and changes nothing. A chooser that
+    opened on a guess would silently outrank the machine's own setting the
+    first time anyone pressed Start.
+    """
+    import capabilities
+    try:
+        settings = json.loads((capabilities.config_root() / "settings.json").read_text())
+    except (OSError, ValueError):
+        return None
+    per_model = (settings.get("modelSettings") or {}).get(model) or {}
+    level = per_model.get("effortLevel") or settings.get("effortLevel")
+    return level if level in interactive.EFFORTS else None
+
+
+@router.get("/mode-defaults")
+def mode_defaults() -> dict:
+    """What the launcher fills in for each mode: where it starts, and how
+    hard it thinks.
 
     Noctua, Vesper and Maintenance work across the vault, so they start at
     its root — not in their own `modes/<name>/` folder, which would be
@@ -1092,6 +1113,7 @@ def mode_dirs() -> dict:
         last_project = next((d for d in recent if d != vault), None)
         projects = str(Path(last_project).parent) if last_project else str(home)
     return {
+        "effort": {mode: _configured_effort(model) for mode, model in MODE_MODELS.items()},
         "dirs": {
             "general": vault,
             "faber": projects,

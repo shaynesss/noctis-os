@@ -690,7 +690,7 @@ def test_vault_modes_start_at_the_vault_root_not_their_own_folder(client, monkey
     """Tidier and worse: the engine scopes reads to the working directory,
     so a Noctua session confined to modes/learn/ could not read wiki/ --
     which is most of what there is to learn from."""
-    dirs = client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]
+    dirs = client.get("/v2/mode-defaults", headers=AUTH).json()["dirs"]
     import vault_io
 
     vault = str(vault_io.get_vault_path())
@@ -711,7 +711,7 @@ def test_faber_starts_in_the_projects_directory_and_general_at_the_vault(client,
     monkeypatch.setattr("orchestrator.store.ConversationStore.recent_cwds",
                         lambda self, limit=8: ["/vault", "/repo/project"])
     monkeypatch.setenv("PROJECTS_DIR", "/repo")
-    dirs = client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]
+    dirs = client.get("/v2/mode-defaults", headers=AUTH).json()["dirs"]
     assert dirs["faber"] == "/repo"
     assert dirs["general"] == "/vault"
 
@@ -720,17 +720,17 @@ def test_faber_starts_in_the_projects_directory_and_general_at_the_vault(client,
     monkeypatch.delenv("PROJECTS_DIR")
     home = tmp_path / "home"; (home / "Developer" / "projects").mkdir(parents=True)
     monkeypatch.setattr(panels.Path, "home", classmethod(lambda cls: home))
-    assert client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]["faber"] == str(home / "Developer" / "projects")
+    assert client.get("/v2/mode-defaults", headers=AUTH).json()["dirs"]["faber"] == str(home / "Developer" / "projects")
 
     # And with neither (no ~/Developer at all), the parent of the last
     # project used is the best available answer.
     monkeypatch.setattr(panels.Path, "home", classmethod(lambda cls: Path("/nowhere")))
-    dirs = client.get("/v2/mode-dirs", headers=AUTH).json()["dirs"]
+    dirs = client.get("/v2/mode-defaults", headers=AUTH).json()["dirs"]
     assert dirs["faber"] == "/repo"
 
 
 def test_mode_dirs_requires_auth(client):
-    assert client.get("/v2/mode-dirs").status_code == 401
+    assert client.get("/v2/mode-defaults").status_code == 401
 
 
 # --------------------------------------------------------- inbox actions

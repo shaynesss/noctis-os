@@ -984,6 +984,7 @@ interface RegressionStatus {
   scope: string | null
   done: number
   total: number
+  started_at?: string
   results: { id: string; mode: string; rule: string | null; passed: boolean; why: string; attempts: number }[]
 }
 
@@ -1005,31 +1006,57 @@ function Regression() {
   // results; the query string changes nothing on the server.
   const view = useFetched<{ cases: RegressionCase[]; scopes: Record<string, number>; sessions: number; path: string }>(`/v2/regression?t=${tick}`)
 
-  // Poll the run while one is going -- every two seconds is plenty for
-  // cases that take twenty each -- and stop, re-reading the record, when
-  // it ends.
+  /* Ask on mount, not only after clicking Run.
+   *
+   * The run is the backend's, not this component's: it survives leaving
+   * Settings, and this card used to forget it the moment it unmounted. A
+   * run started here, then looked at from the Terminal tab and back, showed
+   * "run 13" beside a suite that was busy running 13 -- the only way to see
+   * progress was to keep reopening the tab and watch the pass count move
+   * (2026-09-16). Polled every two seconds while one is going, which is
+   * plenty for cases that take twenty each, and once on arrival so the card
+   * is right whoever started it. */
   useEffect(() => {
-    if (!status?.running) return
-    const id = setInterval(async () => {
+    let alive = true
+    let id: ReturnType<typeof setInterval> | undefined
+    const read = async () => {
       const s = await get<RegressionStatus>('/v2/regression/status')
-      if (!s) return
-      setStatus(s)
-      if (!s.running) { clearInterval(id); setTick((t) => t + 1) }
-    }, 2000)
-    return () => clearInterval(id)
-  }, [status?.running])
+      if (!alive || !s) return
+      setStatus((was) => {
+        // A run that has just ended: re-read the record, which is where the
+        // per-case results and their staleness live.
+        if (was?.running && !s.running) setTick((n) => n + 1)
+        return s
+      })
+      if (!s.running && id) { clearInterval(id); id = undefined }
+      if (s.running && !id) id = setInterval(() => void read(), 2000)
+    }
+    void read()
+    return () => { alive = false; if (id) clearInterval(id) }
+  }, [])
 
   if (view === false) return <Unreachable what="the regression suite" />
   if (view === null) return <Loading />
 
   const cost = view.scopes[scope] ?? 0
+  /* The tally counts what has landed, including results from a run that is
+   * still going: they are in the status payload before they are in the
+   * record, and a number that only moves when the run finishes is how this
+   * looked frozen while it was working. */
+  const landed = new Map((status?.results ?? []).map((r) => [r.id, r]))
   const tally = (cs: RegressionCase[]) => ({
-    passed: cs.filter((c) => c.last?.passed && !c.last.stale).length,
-    failed: cs.filter((c) => c.last && !c.last.passed && !c.last.stale).length,
-    stale: cs.filter((c) => c.last?.stale).length,
-    never: cs.filter((c) => !c.last).length,
+    passed: cs.filter((c) => landed.get(c.id)?.passed ?? (c.last?.passed && !c.last.stale)).length,
+    failed: cs.filter((c) => (landed.has(c.id) ? !landed.get(c.id)!.passed : c.last && !c.last.passed && !c.last.stale)).length,
+    stale: cs.filter((c) => !landed.has(c.id) && c.last?.stale).length,
+    never: cs.filter((c) => !landed.has(c.id) && !c.last).length,
   })
   const t = tally(view.cases)
+  /* When the record last changed, from the cases themselves rather than
+   * from the run: a scoped run updates the cases it covered and leaves the
+   * rest alone, so the newest case result is the honest answer to "has this
+   * been run". */
+  const lastRun = view.cases.map((c) => c.last?.ran_at).filter(Boolean).sort().pop()
+  const needsRun = t.stale + t.never
   const dot = (c: RegressionCase) =>
     !c.last ? 'var(--color-line)' : c.last.stale ? 'var(--color-ink-faint)' : c.last.passed ? 'var(--color-good)' : 'var(--color-faber)'
 
@@ -1048,6 +1075,18 @@ function Regression() {
             failures, results the prompt has moved past, never run. */}
         <span className="font-mono text-[11px] text-ink-faint">
           <span style={{ color: 'var(--color-good)' }}>{t.passed} pass</span> · <span style={{ color: t.failed ? 'var(--color-faber)' : undefined }}>{t.failed} fail</span> · {t.stale} stale · {t.never} never run
+        </span>
+        {/* Whether the record speaks for the prompts as they are now. A
+            tally alone never answered "do I need to run this", which is the
+            only question the card is asked between runs (2026-09-16). */}
+        <span className="font-mono text-[11px]"
+              style={{ color: needsRun ? 'var(--color-sig-6)' : 'var(--color-ink-faint)' }}>
+          {status?.running
+            ? 'running now'
+            : needsRun
+              ? `${plural(needsRun, 'case')} not current`
+              : 'every case current'}
+          {lastRun && !status?.running && ` · last run ${sinceLabel(lastRun).replace(/^since /, '')}`}
         </span>
         <button type="button" onClick={() => setOpen(!open)}
                 className="ml-auto font-mono text-[11px] text-ink-faint underline decoration-line underline-offset-2 hover:text-ink-dim">
@@ -1092,9 +1131,27 @@ function Regression() {
         </select>
         <span className="text-ink-faint">affects — {plural(cost, 'session')} on production models</span>
         {status?.running ? (
-          <span className="ml-auto text-ink-dim">
-            running {status.scope} · {status.done}/{status.total}
-            {status.results.length > 0 && ` · ${status.results.filter((r) => r.passed).length} pass, ${status.results.filter((r) => !r.passed).length} fail`}
+          /* The run, while it is going: which scope, how far, and a bar,
+              because a pair of numbers that changes every twenty seconds
+              does not read as motion. */
+          <span className="ml-auto flex items-center gap-[8px] text-ink-dim">
+            <span
+              aria-hidden
+              className="inline-block h-[3px] w-[70px] overflow-hidden rounded-full"
+              style={{ background: 'var(--color-line)' }}
+            >
+              <span
+                className="block h-full transition-[width] duration-500"
+                style={{
+                  width: `${status.total ? Math.round((status.done / status.total) * 100) : 0}%`,
+                  background: 'var(--color-sig)',
+                }}
+              />
+            </span>
+            <span role="status">
+              running {status.scope} · {status.done}/{status.total}
+              {status.results.length > 0 && ` · ${status.results.filter((r) => r.passed).length} pass, ${status.results.filter((r) => !r.passed).length} fail`}
+            </span>
           </span>
         ) : (
           <button type="button" onClick={() => void start()} disabled={cost === 0}

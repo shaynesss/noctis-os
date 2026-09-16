@@ -7,6 +7,16 @@ import interactive
 from engine import MODE_MODELS
 
 
+@pytest.fixture(autouse=True)
+def _vault_for_every_argv(vault):
+    """Every test here builds an argv, and an argv names the vault.
+
+    Without this the file passes only when something else has imported
+    `main` first, which loads `../.env` and sets VAULT_PATH process-wide:
+    the suite was green and the file alone was nine failures.
+    """
+
+
 def test_it_is_not_a_print_spawn():
     """The whole point of the difference.
 
@@ -99,3 +109,22 @@ def test_a_fresh_session_opens_by_saying_what_it_is_and_a_resume_does_not():
     assert "--" not in resumed and interactive.OPENING_PROMPT not in resumed
     given = interactive.spawn_args("general", "/tmp", prompt="hello")["args"]
     assert given[-2:] == ["--", "hello"]
+
+
+def test_effort_is_passed_when_chosen_and_omitted_when_not(vault, tmp_path):
+    """The launcher's chooser, as a flag. Omitted when nothing was chosen,
+    because a default sent as an override would outrank the machine's own
+    `~/.claude/settings.json` for every session the app starts."""
+    plain = interactive.spawn_args("faber", str(tmp_path))
+    assert "--effort" not in plain["args"]
+
+    chosen = interactive.spawn_args("faber", str(tmp_path), effort="xhigh")
+    args = chosen["args"]
+    assert args[args.index("--effort") + 1] == "xhigh"
+
+
+def test_an_unknown_effort_is_refused_before_the_terminal_opens(vault, tmp_path):
+    """The CLI rejects a bad level after the pane has opened, so the error
+    lands where a session should be. Caught here instead, as a 400."""
+    with pytest.raises(ValueError, match="unknown effort"):
+        interactive.spawn_args("faber", str(tmp_path), effort="maximum")
