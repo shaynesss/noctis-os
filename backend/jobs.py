@@ -17,6 +17,7 @@ rather than by raising, which reads as an empty backlog instead of a bug.
 from __future__ import annotations
 
 import logging
+import subprocess
 from pathlib import Path
 
 import vault_io
@@ -159,12 +160,80 @@ def job_notes_paths(mode: str, slug: str) -> list[str]:
     return [notes, f"{base}/{slug}"]
 
 
+def _git(root: Path, *args: str) -> str | None:
+    """One git read, or None. Never raises: a brief is orientation, and a
+    session that fails to open because git was slow is worse than a session
+    that opens without knowing its branch."""
+    try:
+        out = subprocess.run(["git", "-C", str(root), *args],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
+
+
+def repo_facts(project_path: str | Path) -> list[str]:
+    """Branch, unpushed, uncommitted and last commit, read now.
+
+    These four are the facts a resuming session most needs and the ones a
+    closing session most often writes into its prose, where they rot: a job
+    brief on 2026-09-17 said seventeen commits were unpushed when two were,
+    and a session repeated it to the person who could see otherwise. Prose
+    written at a session's close is a snapshot; the repository is the fact.
+    `deterministic-where-possible` (CLAUDE.md) already covers exactly this
+    and had never been pointed at the brief itself.
+
+    Empty list when the path is missing or is not a git repository, so a
+    job whose work is not in a repo simply gets no block.
+    """
+    # Explicitly, before Path touches it: `Path("").resolve()` is the process's
+    # own working directory, so a job with no `project_path` would silently be
+    # briefed on whatever repository the backend happens to be running from.
+    # That is this function's own failure mode, one line from the inside.
+    if not str(project_path).strip():
+        return []
+    try:
+        root = Path(str(project_path)).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return []
+    if not root.is_dir() or _git(root, "rev-parse", "--git-dir") is None:
+        return []
+
+    facts: list[str] = []
+    if branch := _git(root, "rev-parse", "--abbrev-ref", "HEAD"):
+        facts.append(f"- branch: `{branch}`")
+
+    # No upstream is a real state, not a failure: a branch that has never
+    # been pushed has nothing to count against, and saying "0 unpushed"
+    # there would be the same class of lie this function exists to stop.
+    ahead = _git(root, "rev-list", "--count", "@{u}..HEAD")
+    if ahead is None:
+        facts.append("- unpushed: no upstream set for this branch")
+    else:
+        n = int(ahead) if ahead.isdigit() else 0
+        facts.append(f"- unpushed: {n} commit{'' if n == 1 else 's'}"
+                     + (" (Shayne pushes, Repo tab)" if n else ""))
+
+    status = _git(root, "status", "--porcelain")
+    if status is not None:
+        n = len([ln for ln in status.splitlines() if ln.strip()])
+        facts.append(f"- uncommitted: {'clean' if not n else f'{n} file' + ('' if n == 1 else 's')}")
+
+    if last := _git(root, "log", "-1", "--format=%h %s (%cr)"):
+        facts.append(f"- last commit: {last}")
+    return facts
+
+
 def job_brief(mode: str, cwd: str | Path) -> str | None:
     """Orientation for the job at `cwd`, or None if there isn't one.
 
     Frontmatter first — stage and status are the two things a session needs
-    before it does anything — then the tail of the prose, cut at a paragraph
-    boundary so the block never opens mid-sentence.
+    before it does anything — then the repository as it is right now, then
+    the tail of the prose, cut at a paragraph boundary so the block never
+    opens mid-sentence.
+
+    The computed block sits above the prose and says so, because the two can
+    disagree and the session has to know which wins. See `repo_facts`.
     """
     slug = find_job_for_cwd(mode, cwd)
     if not slug:
@@ -182,6 +251,11 @@ def job_brief(mode: str, cwd: str | Path) -> str | None:
             lines.append(f"- {field}: {meta[field]}")
     if meta.get("flagged"):
         lines.append("- flagged: this job was left stale and has not been cleared")
+
+    if facts := repo_facts(meta.get("project_path") or ""):
+        lines.append("\n**The repository, read just now.** Where these and the notes "
+                     "below disagree, these are true and the notes are out of date.")
+        lines += facts
 
     body = body.strip()
     if body:

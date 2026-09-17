@@ -14,7 +14,7 @@ import { get, post, put } from './engine'
 import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
 import { MODE_ACCENT, MODE_LABEL, VAULT_MODE, type Mode } from './domain'
-import { ModeMark, Pill, usePill } from './Chrome'
+import { ModeMark, Pill, usePill, type PillRect } from './Chrome'
 import { gridColumns } from './Terminals'
 import { openExternal } from './host'
 
@@ -1017,6 +1017,39 @@ interface RegressionStatus {
   results: { id: string; mode: string; rule: string | null; passed: boolean; why: string; attempts: number }[]
 }
 
+/* An outline that travels, rather than the filled pill.
+ *
+ * The filled tint is right on the Prompts tabs, where the row is the whole
+ * control and the pill is the file you are looking at. Here the row sits
+ * inside a sentence, and a block of colour mid-line reads as a second
+ * background rather than as a choice: it filled the line it was supposed to
+ * annotate. A one-pixel ring marks the same thing and leaves the words on
+ * the card's own ground.
+ *
+ * Moved by transform and sized by width, with a 300ms
+ * cubic-bezier(0.33, 0.55, 0.2, 1) -- the marker travels rather than
+ * teleporting, and a composited move never relayouts the sentence it sits
+ * in. The ring is inset so it adds nothing to the box, and drawn in the
+ * signature like every other reading the interface makes about itself.
+ */
+function ScopeMark({ at }: { at: PillRect | null }) {
+  if (!at) return null
+  const glide = '300ms cubic-bezier(0.33, 0.55, 0.2, 1)'
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute left-0 top-0 rounded-control"
+      style={{
+        width: at.width,
+        height: at.height,
+        transform: `translate(${at.left}px, ${at.top}px)`,
+        boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-sig) 62%, transparent)',
+        transition: `transform ${glide}, width ${glide}, height ${glide}`,
+      }}
+    />
+  )
+}
+
 /* The regression suite, scoped and recorded.
  *
  * Reading it is free; running it is one real session per case on production
@@ -1200,7 +1233,7 @@ function Regression() {
             to it, which is the question the row is for. */}
         <div ref={scopes.list} onMouseLeave={scopes.leave}
              className="relative flex items-center gap-[2px]" role="group" aria-label="Scope">
-          <Pill at={scopes.pill} />
+          <ScopeMark at={scopes.pill} />
           {Object.keys(view.scopes).map((s) => (
             <button
               key={s}

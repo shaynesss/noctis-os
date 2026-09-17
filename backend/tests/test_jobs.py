@@ -161,3 +161,84 @@ def test_a_directory_that_is_not_a_project_sends_no_job_context(vault, tmp_path,
 
     overlay = _overlay(_args_for(elsewhere))
     assert "a distinctive status line" not in overlay
+
+
+def _init_repo(path: Path, *, commits: int = 1) -> None:
+    """A real git repo, because `repo_facts` shells out to real git and a
+    mock of git would only pin the mock."""
+    import subprocess
+    run = lambda *a: subprocess.run(["git", "-C", str(path), *a],  # noqa: E731
+                                    capture_output=True, check=True)
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "t@t.t")
+    run("config", "user.name", "t")
+    for i in range(commits):
+        (path / f"f{i}.txt").write_text(str(i))
+        run("add", "-A")
+        run("commit", "-q", "-m", f"commit {i}")
+
+
+def test_repo_facts_reads_the_repository_not_the_notes(tmp_path):
+    project = tmp_path / "proj"
+    project.mkdir()
+    _init_repo(project, commits=2)
+    facts = "\n".join(jobs.repo_facts(project))
+    assert "branch: `main`" in facts
+    assert "uncommitted: clean" in facts
+    assert "commit 1" in facts
+
+
+def test_repo_facts_says_no_upstream_rather_than_zero(tmp_path):
+    """A branch that has never been pushed has nothing to count against, and
+    "0 unpushed" there is the same class of false statement as a stale note."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    _init_repo(project)
+    assert "unpushed: no upstream set" in "\n".join(jobs.repo_facts(project))
+
+
+def test_repo_facts_counts_uncommitted_files(tmp_path):
+    project = tmp_path / "proj"
+    project.mkdir()
+    _init_repo(project)
+    (project / "dirty.txt").write_text("x")
+    assert "uncommitted: 1 file" in "\n".join(jobs.repo_facts(project))
+
+
+@pytest.mark.parametrize("path", ["", "   ", "/does/not/exist"])
+def test_repo_facts_is_empty_for_a_path_that_is_not_a_repo(path, tmp_path):
+    """The empty string is the one that matters: `Path("").resolve()` is the
+    process's own cwd, so an unset `project_path` would otherwise brief the
+    session on whichever repository the backend happens to be running from."""
+    assert jobs.repo_facts(path) == []
+
+
+def test_repo_facts_is_empty_for_a_directory_with_no_git(tmp_path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    assert jobs.repo_facts(plain) == []
+
+
+def test_brief_puts_the_computed_facts_above_the_prose_and_says_they_win(vault, tmp_path):
+    """The whole point: a closing session's prose and the repository can
+    disagree, and the brief has to say which one a reader should believe."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    _init_repo(project)
+    _write_job(tmp_path, "dev", "proj", project,
+               _body="Open: 17 commits unpushed.")
+    brief = jobs.job_brief("faber", project)
+    assert "read just now" in brief
+    assert brief.index("read just now") < brief.index("17 commits unpushed")
+    assert "these are true and the notes are out of date" in brief
+
+
+def test_brief_without_a_project_path_has_no_repository_block(vault, tmp_path):
+    project = tmp_path / "proj"
+    project.mkdir()
+    _write_job(tmp_path, "dev", "proj", project)
+    (tmp_path / "modes" / "dev" / "jobs" / "proj" / "context.md").write_text(
+        "---\nname: No path\nstage: Build\nproject_path: " + str(project) + "\n---\n\nBody.\n")
+    # The lookup needs project_path to find the job at all; what is asserted
+    # here is that a directory which is not a repository contributes nothing.
+    assert "read just now" not in jobs.job_brief("faber", project)

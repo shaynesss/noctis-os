@@ -139,6 +139,20 @@ What makes the app fit the folder rather than the other way round:
 | the backend | job contexts, lessons, `maintenance/state.md` and `maintenance/inbox/` |
 | the MCP server's search | every `.md` under `second-brain/` |
 
+**The order those arrive in is a cost decision, not a formatting one.** A session's prompt is assembled from the least changeable part to the most:
+
+| | Changes | Reaches a session |
+|---|---|---|
+| `prompts/system.md` | almost never | symlink, every session on the machine |
+| `prompts/overlays/<mode>.md` | when a mode is redefined | argv |
+| the project's own `CLAUDE.md` | per repository | read from the working directory |
+| `jobs/<slug>/context.md` | every launch | argv, last |
+| `wiki/` | constantly | never sent; searched |
+
+Each time a session speaks, the whole conversation is sent again. The provider keeps a copy of what it has already seen and bills a repeat at a fraction of the price, but it matches that copy from the first character forward and stops at the first difference. So anything volatile near the top throws away the discount on everything behind it. `backend/prompts/render.py` composes stable first and volatile last for that reason, and it is why there is no timestamp, no session id and no "rendered at" banner anywhere in a composed prompt.
+
+The same logic is why the wiki is searched rather than loaded. Years of pages cost nothing until something asks for twenty chunks of them, so the knowledge base can grow without the cost of having it growing too.
+
 ## The app, tab by tab
 
 The window opens on **Repo**.
