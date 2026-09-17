@@ -1041,6 +1041,13 @@ function Regression() {
   // Keyed by `tick`, so the record is re-read once a run has landed its
   // results; the query string changes nothing on the server.
   const view = useFetched<{ cases: RegressionCase[]; scopes: Record<string, number>; sessions: number; path: string }>(`/v2/regression?t=${tick}`)
+  /* Computed before the loading returns, because the pill below is a hook
+     and hooks cannot sit after one. `not current` leads when the payload
+     offers it, so an untouched card already points at the cheap run. */
+  const effectiveScope = scope ?? (view && 'not current' in view.scopes ? 'not current' : 'system')
+  // The same sliding pill as the Prompts tabs, the rail and the tab strip:
+  // one highlight that follows the pointer and rests where the choice is.
+  const scopes = usePill(effectiveScope)
 
   /* Ask on mount, not only after clicking Run.
    *
@@ -1074,7 +1081,6 @@ function Regression() {
   if (view === false) return <Unreachable what="the regression suite" />
   if (view === null) return <Loading />
 
-  const effectiveScope = scope ?? ('not current' in view.scopes ? 'not current' : 'system')
   const cost = view.scopes[effectiveScope] ?? 0
   /* The tally counts what has landed, including results from a run that is
    * still going: they are in the status payload before they are in the
@@ -1184,12 +1190,43 @@ function Regression() {
       {/* Run: the scope is what an edit can affect, and the cost is said
           before the click. */}
       <div className="flex flex-wrap items-center gap-[10px] border-t border-line px-4 py-[9px] font-mono text-[11px]">
-        <span className="text-ink-faint">run the cases an edit to</span>
-        <select value={effectiveScope} onChange={(e) => setScope(e.target.value)}
-                className="rounded-control border border-line bg-ground px-[6px] py-[2px] text-ink outline-none">
-          {Object.keys(view.scopes).map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <span className="text-ink-faint">affects — {plural(cost, 'session')} on production models</span>
+        <span className="shrink-0 text-ink-faint">run the cases an edit to</span>
+        {/* A row with a sliding pill, not a `select`.
+            The scopes are six or seven short words and all of them matter
+            to the sentence around them, so a native menu hid the choice
+            behind a click, drew macOS's own chrome in the middle of the
+            card, and took a red focus ring that belongs to no palette here.
+            Hovering one now tells you what it would cost before you commit
+            to it, which is the question the row is for. */}
+        <div ref={scopes.list} onMouseLeave={scopes.leave}
+             className="relative flex items-center gap-[2px]" role="group" aria-label="Scope">
+          <Pill at={scopes.pill} />
+          {Object.keys(view.scopes).map((s) => (
+            <button
+              key={s}
+              ref={scopes.row(s)}
+              type="button"
+              onMouseEnter={() => scopes.enter(s)}
+              onClick={() => setScope(s)}
+              aria-pressed={s === effectiveScope}
+              title={`${plural(view.scopes[s] ?? 0, 'session')} on production models`}
+              className={`relative rounded-control px-[7px] py-[3px] transition-colors ${
+                s === effectiveScope || scopes.hover === s ? 'text-ink' : 'text-ink-faint'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+        {/* The selected scope's cost, not the hovered one. Hover moves the
+            pill and nothing else, the way the Prompts tabs above do: with
+            the sentence following the pointer it read "affects 4 sessions"
+            beside a button saying "run 13", and moving to that button ran
+            the one the sentence had stopped describing. Each scope carries
+            its own cost as a tooltip, which previews without disagreeing. */}
+        <span className="shrink-0 text-ink-faint">
+          affects {plural(cost, 'session')} on production models
+        </span>
         {status?.running ? (
           /* The run, while it is going: which scope, how far, and a bar,
               because a pair of numbers that changes every twenty seconds
