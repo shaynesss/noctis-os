@@ -13,10 +13,15 @@ import { Pools, type PoolTone } from './Pools'
 import { get, post, put } from './engine'
 import { useFetched } from './useFetched'
 import { Markdown } from './Markdown'
-import { MODE_ACCENT, MODE_LABEL, VAULT_MODE, type Mode } from './domain'
+import { CARD_WIDTH, MODE_ACCENT, MODE_LABEL, VAULT_MODE, type Mode } from './domain'
 import { ModeMark, Pill, usePill, type PillRect } from './Chrome'
 import { gridColumns } from './Terminals'
 import { openExternal } from './host'
+
+/** Tailwind's gap-6 between the Repo view's modules, in pixels: the cap
+ *  below has to add the gaps back or two modules come out narrower than
+ *  one. Read it here, not from the class, so the two cannot disagree. */
+const GRID_GAP = 24
 
 /** Nightshift's newest run and how many nights in a row ended the same
  *  way; null until it has recorded one. `kind` is what happened: staged
@@ -446,10 +451,20 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
    * what the tab is for at a glance; the list is what you open. A terminal
    * in a directory outside any repository (`data.outside`) gets no module:
    * every mode starts in a repository now, and a section saying "not in a
-   * repository" told the reader nothing they could act on here. */
+   * repository" told the reader nothing they could act on here.
+   *
+   * The grid caps itself a column at a time: one module is the width of a
+   * card on Stats or Settings (CARD_WIDTH), two are two of those with the
+   * gap between them, and so on, centred in the pane. Full-bleed from
+   * 2026-09-16 until 2026-09-17, which fixed three narrow modules by
+   * stretching the common case -- one repository open -- across the whole
+   * window, four numbers in a card the width of the screen. Below the cap
+   * the columns still share the pane, so a narrow window is unchanged. */
+  const cols = gridColumns(groups.length)
   return (
-    <div className="grid items-stretch gap-6"
-         style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
+    <div className="mx-auto grid w-full items-stretch gap-6"
+         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                  maxWidth: cols * CARD_WIDTH + (cols - 1) * GRID_GAP }}>
       {groups.map((r) => (
         <RepoModule key={r.root} r={r} folded onChanged={onChanged}
                     terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />

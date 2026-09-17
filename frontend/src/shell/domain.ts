@@ -187,3 +187,15 @@ export const CHARACTERS: { mode: Mode }[] = [
   { mode: 'vesper' },
 ]
 
+
+/* The reading column, in pixels, and the card that sits inside it.
+ *
+ * Stats and Settings centre their page in a 1050px column with the pane's
+ * own 32px gutters inside it, so a card there is 986px wide. The Repo grid
+ * reads CARD_WIDTH to cap itself a column at a time (see Panels' Repo):
+ * one module is exactly a card, two are two of them side by side, and so
+ * on. Here rather than inline in each view because the same number in three
+ * files drifts, and the Repo cap is only right while it matches. */
+export const PANE_COLUMN = 1050
+export const PANE_GUTTER = 32
+export const CARD_WIDTH = PANE_COLUMN - PANE_GUTTER * 2

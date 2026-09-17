@@ -27,7 +27,7 @@ import { Reader } from './Reader'
 import { Terminals, newSlot, shortenHome, type Slot } from './Terminals'
 import { Transcript } from './Transcript'
 import { useFetched } from './useFetched'
-import { MODE_ACCENT, MODE_LABEL, recallDismissedRefusal, recallSlots, recallView, rememberDismissedRefusal, rememberSlots, rememberView, type Mode } from './domain'
+import { MODE_ACCENT, MODE_LABEL, PANE_COLUMN, recallDismissedRefusal, recallSlots, recallView, rememberDismissedRefusal, rememberSlots, rememberView, type Mode } from './domain'
 import './tokens.css'
 
 /** What a terminal's statusLine reports, the parts the shell reads. */
@@ -516,11 +516,13 @@ function Pane({ view, limits, terminals, onInboxDecided }: {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {/* Every view sits in the middle of the pane: auto vertical margins
           inside a flex column centre a short page and let a tall one flow
-          from the top, which justify-content would clip. Repo takes the
-          full width (2026-09-16) -- its modules are a grid that grows with
-          the repositories open, and a 1240px cap left three of them narrow
-          in a wide window; Settings keeps its reading column. */}
-      <div className={`my-auto w-full px-8 pb-8 pt-7 ${view === 'repo' ? '' : 'mx-auto max-w-[1050px]'}`}>
+          from the top, which justify-content would clip. Settings keeps the
+          reading column. Repo's pane is uncapped because its grid caps
+          itself: a column per repository, each the width of a card in this
+          column (2026-09-17), so one open repository is a card and not a
+          screen-wide banner, and three still get a wide window's room. */}
+      <div className="my-auto w-full px-8 pb-8 pt-7"
+           style={view === 'repo' ? undefined : { marginInline: 'auto', maxWidth: PANE_COLUMN }}>
         {view === 'repo' && <Fetched<RepoPayload> key={`${cwds}#${repoTick}`} path={`/v2/repos?${cwds}`} what="the repositories" render={(d) => <Repo data={d} terminals={terminals} onChanged={() => setRepoTick((t) => t + 1)} />} />}
         {view === 'settings' && <Settings onDecided={onInboxDecided} />}
       </div>
@@ -570,7 +572,7 @@ function Stats({ limits }: { limits?: { five_hour: Window; seven_day: Window } |
       {/* Centred the same way the Repo view is: auto vertical margins in a
           flex column sit the page in the middle when it is shorter than the
           window and let it scroll from the top when it is not. */}
-      <div className="mx-auto my-auto w-full max-w-[1050px] px-8 pb-8 pt-7">
+      <div className="mx-auto my-auto w-full px-8 pb-8 pt-7" style={{ maxWidth: PANE_COLUMN }}>
         <h2 className="m-0 mb-[14px] font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-ink-faint">
           Usage
         </h2>

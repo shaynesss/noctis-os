@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { GithubCard, Repo, type GithubInfo, type RepoInfo, type RepoTerminal } from './Panels'
+import { CARD_WIDTH } from './domain'
 
 const base: RepoInfo = {
   root: '/Users/me/Developer/x', name: 'x', branch: 'main', upstream: 'origin/main',
@@ -63,6 +64,21 @@ describe('Repo view', () => {
     expect(xBlock).toContain('faber · 1'); expect(xBlock).not.toContain('vesper · 3')
     // The terminal outside any repository appears nowhere (2026-09-16).
     expect(t).not.toContain('general · 4'); expect(t).not.toContain('Not in a repository')
+  })
+
+  it('caps the grid at one card per column, so one repository is not a screen-wide banner', () => {
+    // A module is as wide as a card on Stats or Settings, and the grid adds
+    // a column's width (plus the 24px gap) per repository open (2026-09-17).
+    const width = (n: number) => {
+      const repos = Array.from({ length: n }, (_, i) => ({ ...base, root: `/r${i}`, name: `r${i}`, cwds: [`/r${i}`] }))
+      const html = renderToStaticMarkup(<Repo data={{ repos, outside: [] }} terminals={[]} />)
+      return Number(/max-width:\s*(\d+)px/.exec(html)?.[1])
+    }
+    expect(width(1)).toBe(CARD_WIDTH)
+    expect(width(2)).toBe(CARD_WIDTH * 2 + 24)
+    expect(width(3)).toBe(CARD_WIDTH * 3 + 48)
+    // Four wrap to a 2x2, so the cap is two columns wide, not four.
+    expect(width(4)).toBe(CARD_WIDTH * 2 + 24)
   })
 
   it('folds every commit list, whatever is on screen, and still says how many', () => {
