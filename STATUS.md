@@ -35,7 +35,7 @@ Verified live, not only by tests.
 
 1. **The commit log as memory, in use.** It shipped 2026-09-15 evening; a week of mornings opening on Repo will say whether a commit body's last paragraph is enough to restart from, and whether the push's refusal of bodiless commits (from 2026-09-17) bites at the right moment.
 2. **The regression suite ran for the first time on 2026-09-16: 13 of 13 pass**, current against that evening's prompts. What it has not done is fail, so the assertions are unproven in the direction that matters: a deliberately broken prompt would say whether a case can catch anything.
-3. **Nightshift's distillation path** has still never executed on a night with undistilled lessons; the first one that does may surface bugs of its own. Watch the Maintenance line.
+3. **Nightshift's distillation has run and silently thrown its work away.** It is no longer true that it has never executed: 2026-09-16 recorded `seen: 3, staged: 0, failed: 0`, and 2026-09-17 08:36 the same for its distillation items. Three modes were over their cursor both nights (dev, research, maintenance), so the distiller subagent ran, a real model call each time, and every draft was dropped by one of three `continue` paths in `runner.py` that record nothing: no draft written, no `## Rationale`, no `## Confidence`. The run then reports a quiet night. Tonight will do it again. Until those three paths say which one fired, the middle improvement loop is spending model calls and producing nothing, invisibly.
 
 ## Known gaps, accepted
 
