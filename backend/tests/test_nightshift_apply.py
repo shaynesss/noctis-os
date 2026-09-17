@@ -202,23 +202,11 @@ def test_parse_job_origin_missing_marker_returns_none():
     assert apply.parse_job_origin("no marker here") is None
 
 
-def test_close_job_marks_context_and_state_entry_done(vault):
+def test_close_job_marks_the_job_folder_done(vault):
     vault_io.write_frontmatter(
         "maintenance/jobs/address-accumulation-20260722/context.md",
         {"name": "Address accumulation", "stage": "Propose", "status": "1 diff staged"},
         "some prose",
-    )
-    vault_io.write_frontmatter(
-        "maintenance/state.md",
-        {
-            "mode": "maintenance",
-            "busy": False,
-            "jobs": [
-                {"slug": "address-accumulation-20260722", "name": "Address accumulation", "stage": "Propose"},
-                {"slug": "other-job", "name": "Other job", "stage": "Audit"},
-            ],
-        },
-        "",
     )
 
     apply.close_job("maintenance", "address-accumulation-20260722", "Resolved: test.")
@@ -230,13 +218,25 @@ def test_close_job_marks_context_and_state_entry_done(vault):
     assert job_meta["status"] == "Resolved: test."
     assert job_content == "some prose"
 
-    # Stays visible in state.md's jobs list, marked Done -- not removed --
-    # so the card shows the resolution instead of the job just vanishing.
+
+def test_close_job_does_not_write_the_dead_state_jobs_array(vault):
+    """`state.md`'s `jobs` was v1's mirror of the job folders. The route that
+    maintained it went at the 2026-09-12 cutover and every reader was pointed
+    at the folders on 09-16, leaving this the sole writer of a structure
+    nothing reads -- and it had already drifted (learn held none against one
+    folder, maintenance twenty-six against twenty-seven). A stale mirror is
+    what three readers trusted for four days after it stopped being true."""
+    vault_io.write_frontmatter(
+        "maintenance/jobs/j/context.md", {"name": "J", "stage": "Propose"}, "")
+    before = [{"slug": "j", "name": "J", "stage": "Propose"}]
+    vault_io.write_frontmatter(
+        "maintenance/state.md", {"mode": "maintenance", "jobs": list(before)}, "")
+
+    apply.close_job("maintenance", "j", "Resolved: test.")
+
     state, _ = vault_io.read_frontmatter("maintenance/state.md")
-    jobs_by_slug = {j["slug"]: j for j in state["jobs"]}
-    assert jobs_by_slug["address-accumulation-20260722"]["stage"] == "Done"
-    assert jobs_by_slug["address-accumulation-20260722"]["status"] == "Resolved: test."
-    assert jobs_by_slug["other-job"]["stage"] == "Audit"
+    assert state["jobs"] == before, "state.md must be left exactly as it was found"
+    assert vault_io.read_frontmatter("maintenance/jobs/j/context.md")[0]["stage"] == "Done"
 
 
 def test_close_job_is_a_noop_when_job_context_missing(vault):

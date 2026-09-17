@@ -218,11 +218,21 @@ def close_job(mode: str, slug: str, resolution: str) -> None:
     "awaiting accept" after the accept had already happened) until some
     future session happened to re-audit it.
 
-    Marks the job `Done` in both its own context.md and the mode's
-    `state.md` jobs list -- kept visible (not removed) so the card shows
-    the resolution rather than the job just vanishing with no confirmation
-    it actually passed. The frontend collapses Done rows to a single line
-    (ProfileOverlay.tsx's JobRow) so this doesn't pile up as clutter.
+    Marks the job `Done` in its own context.md, which is the file every
+    reader uses: the launcher, the MCP `job_context` and `worklist` tools,
+    `staleness.flag_pass` and the Repo view's record all read the job
+    folders.
+
+    It also wrote the same resolution into the mode's `state.md` `jobs`
+    array until 2026-09-17. That array was v1's mirror of the folders, the
+    route that maintained it went at the 2026-09-12 cutover, and the
+    readers were pointed at the folders on 09-16 -- so this was the last
+    writer of a structure with no reader, and it had already drifted
+    (learn's held none against one folder, maintenance's twenty-six against
+    twenty-seven). Writing a stale mirror is how three readers came to trust
+    one for four days after it stopped being true; not writing it is the
+    whole fix. The Done row the old comment describes was `ProfileOverlay`,
+    which no longer exists either.
     """
     # Via jobs_dir rather than assembled here: maintenance's jobs live at
     # root-level `maintenance/jobs`, outside `modes/` entirely.
@@ -234,16 +244,4 @@ def close_job(mode: str, slug: str, resolution: str) -> None:
         job_meta["last_touched"] = datetime.now(timezone.utc).isoformat()
         vault_io.write_frontmatter(job_path, job_meta, job_content)
 
-    # Maintenance sits outside `modes/`; the other three do not.
-    state_path = (MAINTENANCE_STATE if mode == "maintenance"
-                  else f"modes/{mode}/state.md")
-    state_meta, state_content = vault_io.read_frontmatter(state_path)
-    jobs = state_meta.get("jobs", []) or []
-    for job in jobs:
-        if job.get("slug") == slug:
-            job["stage"] = "Done"
-            job["status"] = resolution
-            job["last_touched"] = datetime.now(timezone.utc).isoformat()
-            break
-    state_meta["jobs"] = jobs
-    vault_io.write_frontmatter(state_path, state_meta, state_content)
+
