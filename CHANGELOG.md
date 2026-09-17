@@ -11,6 +11,40 @@ are complete and verified live. Nothing is left in the build order: the
 2026-09-15 rather than built, because the commit log is the record and needs
 no writer.
 
+### A discarded draft is not a quiet night (2026-09-17, late)
+
+- **Nightshift records why a draft was dropped, and keeps it.** Three gates
+  sit between Advance and Stage and all three were a bare `continue`, so an
+  item that reached Advance, paid for a distiller call and then failed the
+  inbox contract counted in `seen` and appeared in neither `staged` nor
+  `failed`. `data/nightshift.json` holds `seen: 3, staged: 0, failed: 0` for
+  09-16 and `seen: 4, staged: 1, failed: 0` for 09-17: six discarded drafts,
+  six model calls, no record of either the reason or the text. Each gate now
+  names itself (`no-draft`, `no-rationale`, `no-confidence`), the rejected
+  draft moves to `backend/runtime/nightshift-drops/` instead of being
+  unlinked, and `quiet` means nothing was *seen* rather than nothing staged.
+  Older entries have no `dropped` key, so it is inferred from
+  `seen - staged - failed`; both nights on record now read `dropped: 3`.
+- **`jobs.lessons_path()` for the two call sites that hardcoded around it.**
+  Maintenance's lessons are at `maintenance/lessons.md`, not
+  `modes/maintenance/lessons.md`. The drafter's cursor marker would raise
+  `FileNotFoundError` on any maintenance draft and take the item down as a
+  failure; `advance_lessons_cursor` would find no file on accept and set that
+  mode's cursor to 0, leaving it permanently undistilled.
+- **`close_job` stops writing `state.md`'s `jobs` array.** No reader since
+  2026-09-16, and it had drifted from the folders on disk. The array is gone
+  from all four state files, with `triggers` and `trigger_modes`, which were
+  the badges `triggers.py` computed before the v2 cutover deleted it.
+- **`engine.settings_config()` loses a hooks block nothing has read** since
+  the `-p` orchestrator went. That dead block is why two documents said a
+  hosted session gets its telemetry hooks from `--settings`; it gets them
+  from the project's own `.claude/settings.local.json`.
+- Two more stale claims corrected in place: `apply.py` cited `triggers.py` as
+  a live pattern, and `slack_surface.py` said advance-on-accept was not wired
+  when it is. A proposal is staged against `maintenance/audit.md`, which
+  still opens by naming three triggers, two of which cannot fire.
+- 382 backend tests, 78 frontend, `tsc -b` clean.
+
 ### The brief computes what it used to claim, and a guard on the shared tree (2026-09-17, evening)
 
 - **A job brief no longer states what git can answer.** `jobs.repo_facts()`
