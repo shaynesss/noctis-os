@@ -69,6 +69,27 @@ class Boundary extends Component<{ children: ReactNode }, { error: Error | null 
   }
 }
 
+/* A file dropped on the window must do nothing.
+ *
+ * `dragDropEnabled: false` in tauri.conf hands drag and drop to the webview,
+ * which is what lets the tab strip reorder itself with ordinary HTML5 drags.
+ * The cost is the webview's own default for a dropped file: navigate to it.
+ * On 2026-09-17 a PDF dropped on the window replaced the whole app with the
+ * PDF, with no back item in the menu and no reload that returns here, so the
+ * only way out was the web inspector. The terminals survived -- they live in
+ * the Rust process, not the page -- but the window was gone.
+ *
+ * So: swallow any drag carrying files, at the window, in the capture phase.
+ * The strip's own drags carry no files and are untouched; its handlers run
+ * on the element and still see the events they need.
+ */
+const carriesFiles = (e: DragEvent) => e.dataTransfer?.types?.includes('Files') ?? false
+for (const type of ['dragover', 'drop'] as const) {
+  window.addEventListener(type, (e: DragEvent) => {
+    if (carriesFiles(e)) e.preventDefault()
+  }, { capture: true })
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Boundary>
