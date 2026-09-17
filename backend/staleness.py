@@ -4,14 +4,18 @@ backend code, never left to session judgment). Every mode whose methodology
 says "session death marks the job context stale-and-flagged" -- dev, learn,
 research, and maintenance's own jobs.
 
-A job is flagged when it looks like a session died mid-build: no activity
-(runtime log or last_touched) for longer than STALE_THRESHOLD, and no
-SESSION_END sentinel (backend/hooks/mark_session_end.py, a SessionEnd hook --
+A job is flagged when a session worked it, stopped without writing the
+SESSION_END sentinel (backend/hooks/mark_session_end.py, a SessionEnd hook,
 deliberately not Stop, which fires after every turn rather than on real
-session termination) ever closed it cleanly. A job someone paused on purpose
-for a day is not "stale" in this sense as long as it closed cleanly last
-time -- only an abrupt, never-closed session counts. A job already at Ship
-or Done did not die mid-build and is never flagged.
+session termination), that was longer ago than STALE_THRESHOLD, and nobody
+has written the job's own record since.
+
+Those are four separate facts and the last two carry the weight. The
+runtime log is the record of *sessions*; `last_touched` is the record of
+the *job*, written by whoever last looked at it. A job whose session died in
+August and whose status was updated in September to say it is deliberately
+on hold has been seen, and is not news. A job already at Ship or Done did
+not die mid-build and is never flagged either.
 
 Runs as nightshift's first step (`nightshift/runner.py`), so the flag is
 set the night after a session died and the flagged-job scan that follows
@@ -109,14 +113,15 @@ def _log_tail(log_path: Path) -> tuple[datetime | None, bool]:
         return None, closed
 
 
-def _job_last_activity(folder: str, slug: str, last_touched: object) -> tuple[datetime | None, bool]:
-    """Returns (last_activity_time, closed_cleanly). Runtime log activity
-    (if present) is a more precise signal than last_touched -- it reflects
-    real tool calls, not just whenever the job context happened to be
-    written. With two logs for one job, the newest line decides both.
+def _last_session(folder: str, slug: str) -> tuple[datetime | None, bool]:
+    """When a session last did anything on this job, and whether it closed
+    cleanly. `None` when no session ever has.
+
+    Only the runtime log, deliberately. It is the record of sessions, and
+    `last_touched` is the record of the job: mixing them was the bug. With
+    two logs for one job, the newest line decides both answers.
     """
     closed_cleanly = False
-    last_activity = _parse_last_touched(last_touched)
     newest_log: datetime | None = None
 
     for name in LOG_NAMES.get(folder, (folder,)):
@@ -129,9 +134,7 @@ def _job_last_activity(folder: str, slug: str, last_touched: object) -> tuple[da
         if newest_log is None or log_time > newest_log:
             newest_log, closed_cleanly = log_time, closed
 
-    if newest_log is not None and (last_activity is None or newest_log > last_activity):
-        last_activity = newest_log
-    return last_activity, closed_cleanly
+    return newest_log, closed_cleanly
 
 
 def flag_stale_jobs(folder: str, now: datetime | None = None) -> list[str]:
@@ -157,10 +160,31 @@ def flag_stale_jobs(folder: str, now: datetime | None = None) -> list[str]:
         if metadata.get("flagged") or metadata.get("stage") in SHIPPED_STAGES:
             continue
 
-        last_activity, closed_cleanly = _job_last_activity(folder, slug, metadata.get("last_touched"))
-        if closed_cleanly or last_activity is None:
+        # The log is the session; `last_touched` is you. Keeping them apart
+        # is the whole mechanism.
+        #
+        # No log means no session we can see ever worked this job, so there
+        # is no death to report: `last_touched` alone cannot tell a job
+        # parked in July from one abandoned in July.
+        died_at, closed_cleanly = _last_session(folder, slug)
+        if died_at is None or closed_cleanly:
             continue
-        if now - last_activity <= STALE_THRESHOLD:
+        if now - died_at <= STALE_THRESHOLD:
+            continue
+        # Written since: whoever wrote the job's own record after the
+        # session stopped has already dealt with it, whatever the session
+        # did. On its first run (2026-09-17) this pass flagged two jobs
+        # whose sessions had ended without a clean close in July and
+        # August, and whose status had been updated in September to say
+        # they were deliberately on hold. Taking the later of the two
+        # timestamps hid exactly the fact that answers this.
+        seen = _parse_last_touched(metadata.get("last_touched"))
+        if seen and seen >= died_at:
+            continue
+        # Or acknowledged from the Inbox, which is the same statement made
+        # by a button rather than by an edit.
+        acknowledged = _parse_last_touched(metadata.get("flag_acknowledged_at"))
+        if acknowledged and acknowledged >= died_at:
             continue
 
         metadata["flagged"] = True

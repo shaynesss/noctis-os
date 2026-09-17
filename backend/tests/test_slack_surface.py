@@ -6,23 +6,15 @@ def _job(slug, **meta):
     vault_io.write_frontmatter(f"modes/dev/jobs/{slug}/context.md", {"name": slug, "stage": "Build", "status": "in progress", **meta}, "")
 
 
-def test_check_dev_ignores_unflagged_jobs(vault):
-    _job("a")
-    assert slack_surface.check_dev() == []
-
-
-def test_check_dev_ignores_a_flagged_job_that_is_done(vault):
-    _job("finished", flagged=True, stage="Done")
-    assert slack_surface.check_dev() == []
-
-
-def test_check_dev_surfaces_flagged_job(vault):
+def test_dev_has_no_slack_surface(vault):
+    """A flagged job is not nightshift's to write about (2026-09-17). The
+    note it staged proposed nothing, said so itself, sat beside the same job
+    in the Inbox's own flagged list, and came back the night after it was
+    accepted because dedup only checks what is still pending. Nightshift's
+    part is setting the flag, which `staleness.flag_pass` does; the Inbox
+    reads the flags, and acknowledging clears one."""
     _job("noctis-build", name="Noctis build", status="stalled", flagged=True)
-    items = slack_surface.check_dev()
-    assert len(items) == 1
-    assert items[0].mode == "dev"
-    assert items[0].kind == "flagged-job"
-    assert items[0].slug_hint == "noctis-build"
+    assert slack_surface.check_dev() == []
 
 
 def test_check_settings_no_slack_when_cursor_matches_current_length(vault):

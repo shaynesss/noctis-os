@@ -4,15 +4,24 @@ import staleness
 import vault_io
 
 
-def _seed_job(vault, mode="dev", slug="noctis-build", last_touched=None, flagged=False):
+def _seed_job(vault, mode="dev", slug="noctis-build", last_touched=None, flagged=False, **extra):
     job_dir = vault / "modes" / mode / "jobs" / slug
     job_dir.mkdir(parents=True)
-    metadata = {"name": "Noctis build", "stage": "Build", "status": "in progress"}
+    metadata = {"name": "Noctis build", "stage": "Build", "status": "in progress", **extra}
     if last_touched:
         metadata["last_touched"] = last_touched
     if flagged:
         metadata["flagged"] = True
     vault_io.write_frontmatter(f"modes/{mode}/jobs/{slug}/context.md", metadata, "")
+
+
+def _died_here(runtime_dir, mode, slug, at, line="Edit x"):
+    """A runtime log ending in a tool call rather than the sentinel: a
+    session worked this job and stopped without closing. For it to count,
+    this has to be *after* the job's own `last_touched` -- a context written
+    later means somebody looked after the session stopped."""
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_dir / f"{mode}__{slug}.log").write_text(f"{at} {line}\n", encoding="utf-8")
 
 
 def test_recent_job_is_not_flagged(vault, monkeypatch, tmp_path):
@@ -27,10 +36,12 @@ def test_recent_job_is_not_flagged(vault, monkeypatch, tmp_path):
     assert not metadata.get("flagged")
 
 
-def test_old_job_with_no_activity_gets_flagged(vault, monkeypatch, tmp_path):
+def test_old_job_a_session_died_in_gets_flagged(vault, monkeypatch, tmp_path):
     monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
     old = (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat()
-    _seed_job(vault, last_touched=old)
+    older = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
+    _seed_job(vault, last_touched=older)
+    _died_here(tmp_path / "runtime", "dev", "noctis-build", old)
 
     flagged = staleness.flag_stale_jobs("dev")
 
@@ -79,7 +90,9 @@ def test_flagging_generalizes_to_non_dev_modes(vault, monkeypatch, tmp_path):
     silently ignored."""
     monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
     old = (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat()
-    _seed_job(vault, mode="learn", slug="deep-dive-x", last_touched=old)
+    _seed_job(vault, mode="learn", slug="deep-dive-x",
+              last_touched=(datetime.now(timezone.utc) - timedelta(days=4)).isoformat())
+    _died_here(tmp_path / "runtime", "learn", "deep-dive-x", old)
 
     flagged = staleness.flag_stale_jobs("learn")
 
@@ -98,7 +111,7 @@ def test_session_end_substring_in_a_summary_does_not_count_as_clean_close(vault,
     runtime_dir = tmp_path / "runtime"
     monkeypatch.setattr(staleness, "RUNTIME_DIR", runtime_dir)
     old = (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat()
-    _seed_job(vault, last_touched=old)
+    _seed_job(vault, last_touched=(datetime.now(timezone.utc) - timedelta(days=2)).isoformat())
 
     runtime_dir.mkdir(parents=True)
     # Three tokens, not the real two-token sentinel -- old unanchored code
@@ -172,7 +185,7 @@ def test_a_hosted_sessions_log_counts_for_the_same_job(vault, monkeypatch, tmp_p
     monkeypatch.setattr(staleness, "RUNTIME_DIR", runtime_dir)
     old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
     recent = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
-    _seed_job(vault, last_touched=old)
+    _seed_job(vault, last_touched=(datetime.now(timezone.utc) - timedelta(days=4)).isoformat())
     (runtime_dir / "dev__noctis-build.log").write_text(f"{old} Read x\n", encoding="utf-8")
     (runtime_dir / "faber__noctis-build.log").write_text(f"{recent} Edit y\n", encoding="utf-8")
     assert staleness.flag_stale_jobs("dev") == [], "the hosted session's log is the newer activity"
@@ -181,7 +194,59 @@ def test_a_hosted_sessions_log_counts_for_the_same_job(vault, monkeypatch, tmp_p
 def test_flag_pass_covers_every_flaggable_folder(vault, monkeypatch, tmp_path):
     monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
     old = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
-    _seed_job(vault, mode="dev", slug="a", last_touched=old)
-    _seed_job(vault, mode="research", slug="b", last_touched=old)
+    older = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
+    _seed_job(vault, mode="dev", slug="a", last_touched=older)
+    _seed_job(vault, mode="research", slug="b", last_touched=older)
+    _died_here(tmp_path / "runtime", "dev", "a", old)
+    _died_here(tmp_path / "runtime", "research", "b", old)
     out = staleness.flag_pass()
     assert out["dev"] == ["a"] and out["research"] == ["b"] and out["learn"] == [] and out["maintenance"] == []
+
+
+def test_a_job_no_session_ever_ran_is_not_flagged(vault, monkeypatch, tmp_path):
+    """The flag says a session died mid-build. With no runtime log there is
+    no session to have died, and `last_touched` cannot tell a job parked in
+    July from one abandoned in July. On its first run this pass flagged
+    three such jobs, two of which said in their own status that they were
+    deliberately on hold (2026-09-17)."""
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
+    old = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
+    _seed_job(vault, slug="parked-on-purpose", last_touched=old)
+
+    assert staleness.flag_stale_jobs("dev") == []
+
+
+def test_an_acknowledged_flag_does_not_come_back_on_its_own(vault, monkeypatch, tmp_path):
+    """Acknowledging is durable. Only work after the acknowledgement can
+    raise the flag again; the same old timestamp coming round tomorrow
+    cannot, which is what made the nightly note repeat."""
+    runtime = tmp_path / "runtime"
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", runtime)
+    died = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+    acked = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    older = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
+    _seed_job(vault, slug="seen-it", last_touched=older, flag_acknowledged_at=acked)
+    _died_here(runtime, "dev", "seen-it", died)
+
+    assert staleness.flag_stale_jobs("dev") == []
+
+    # A session works it again and dies again: that is new, and it flags.
+    later = (datetime.now(timezone.utc) - timedelta(hours=8)).isoformat()
+    _died_here(runtime, "dev", "seen-it", later)
+    assert staleness.flag_stale_jobs("dev") == ["seen-it"]
+
+
+def test_a_job_written_after_its_session_died_is_not_flagged(vault, monkeypatch, tmp_path):
+    """The log is the session; `last_touched` is you. A session that ended
+    without closing in August, and a status updated in September to say the
+    job is deliberately on hold, is a job somebody has already looked at.
+    Two real jobs were flagged this way on the pass's first run
+    (2026-09-17), both of which said so in their own status."""
+    runtime = tmp_path / "runtime"
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", runtime)
+    died = (datetime.now(timezone.utc) - timedelta(days=20)).isoformat()
+    looked = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+    _seed_job(vault, slug="on-hold", last_touched=looked)
+    _died_here(runtime, "dev", "on-hold", died)
+
+    assert staleness.flag_stale_jobs("dev") == []

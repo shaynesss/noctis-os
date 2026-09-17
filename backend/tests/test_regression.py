@@ -80,7 +80,11 @@ def test_status_marks_a_result_stale_when_the_prompt_moved(tmp_path, monkeypatch
     assert by["r01"]["last"]["passed"] and not by["r01"]["last"]["stale"]
     assert by["r07"]["last"]["stale"]                       # maintenance.md moved on
     assert by["r13"]["last"] is None                        # never run
-    assert s["scopes"] == {"system": 4, "faber": 2, "general": 1, "maintenance": 1}
+    # `not current` leads when there is anything in it: r07 went stale and
+    # two cases have never run, and that is the run worth spending on.
+    assert s["scopes"] == {"not current": 3, "system": 4, "faber": 2, "general": 1, "maintenance": 1}
+    assert list(s["scopes"])[0] == "not current"
+    assert {c["id"] for c in regression.cases_for("not current", CASES, tmp_path / "r.json")} == {"r02", "r07", "r13"}
     assert s["sessions"] == 4
 
 

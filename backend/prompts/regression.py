@@ -80,17 +80,43 @@ def load_cases(path: Path | None = None) -> list[dict]:
     return cases
 
 
-def cases_for(scope: str, cases: list[dict] | None = None) -> list[dict]:
+def cases_for(scope: str, cases: list[dict] | None = None,
+              results_path: Path | None = None) -> list[dict]:
     """The cases an edit to `scope` can affect. `system` and `all` are the
     whole suite; a mode is that mode's cases; a `rule:<name>` is every case
     guarding that rule across modes."""
     cases = load_cases() if cases is None else cases
     if scope in ("system", "all"):
         return cases
+    # What the record no longer speaks for: stale results and cases never
+    # run. The scope you want after an edit, because re-proving the nine
+    # cases an edit could not have touched costs nine sessions to learn
+    # nothing.
+    if scope == "not current":
+        # The results path travels with it. Reading the module-level RESULTS
+        # here regardless of what the caller passed made this the one scope
+        # whose answer depended on a file the caller had not named.
+        return _not_current(cases, results_path)
     if scope.startswith("rule:"):
         rule = scope[len("rule:"):]
         return [c for c in cases if c.get("rule") == rule]
     return [c for c in cases if c.get("mode") == scope]
+
+
+def _not_current(cases: list[dict], results_path: Path | None = None) -> list[dict]:
+    """Cases whose last result was run against a prompt that has since
+    changed, plus those never run at all."""
+    stored = _load_results(results_path or RESULTS)
+    out = []
+    for c in cases:
+        r = stored.get(c["id"])
+        if not r:
+            out.append(c)
+            continue
+        current = prompt_hash(c["mode"]) if (VAULT / "prompts" / "overlays" / f"{c['mode']}.md").exists() else None
+        if current and r.get("prompt_hash") != current:
+            out.append(c)
+    return out
 
 
 def prompt_hash(mode: str) -> str:
@@ -213,4 +239,9 @@ def status(results_path: Path | None = None, cases: list[dict] | None = None) ->
             },
         })
     scopes = {s: len(cases_for(s, cases)) for s in ["system", *sorted({c["mode"] for c in cases})]}
+    # Offered first when there is anything in it: it is the cheap run, and
+    # the one that answers "is the record true now".
+    not_current = len(_not_current(cases, results_path))
+    if not_current:
+        scopes = {"not current": not_current, **scopes}
     return {"cases": rows, "scopes": scopes, "path": "prompts/regression.jsonl", "sessions": len(cases)}

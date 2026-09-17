@@ -1163,6 +1163,38 @@ def _commit_vault(message: str, paths: list[str]) -> bool:
         return False
 
 
+@router.post("/flagged/{mode}/{slug}/acknowledge")
+def acknowledge_flag(mode: str, slug: str) -> dict:
+    """Clear a job's flag, and record that you cleared it.
+
+    A flag says a session died mid-build. Until 2026-09-17 there was no way
+    to say "I know", so a job stayed flagged forever and nightshift wrote a
+    note about it every night. Accepting that note archived the note and
+    left the flag exactly where it was.
+
+    Two writes, both durable: `flagged` goes false, and
+    `flag_acknowledged_at` records when. The staleness pass reads the second
+    one, so a job is flagged again only by work that happens *after* the
+    acknowledgement, never by the same old timestamp coming round again.
+    """
+    if not vault_io.is_safe_slug(mode) or not vault_io.is_safe_slug(slug):
+        raise HTTPException(status_code=400, detail=f"Invalid job: {mode}/{slug}")
+    context = f"modes/{mode}/jobs/{slug}/context.md"
+    if not vault_io.file_exists(context):
+        raise HTTPException(status_code=404, detail=f"No such job: {mode}/{slug}")
+    try:
+        meta, body = vault_io.read_frontmatter(context)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=f"Cannot read {context}: {exc}")
+    if not meta.get("flagged"):
+        raise HTTPException(status_code=409, detail=f"{mode}/{slug} is not flagged")
+    meta["flagged"] = False
+    meta["flag_acknowledged_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    vault_io.write_frontmatter(context, meta, body)
+    committed = _commit_vault(f"Acknowledge {mode}/{slug}'s flag", [context])
+    return {"acknowledged": f"{mode}/{slug}", "committed": committed}
+
+
 @router.post("/inbox/{item_id}/{decision}")
 def decide(item_id: str, decision: str) -> dict:
     """Accept or reject a staged proposal.

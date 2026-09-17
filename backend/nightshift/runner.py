@@ -59,24 +59,6 @@ def _slug_for(item: SlackItem) -> str:
     return f"{_identity_prefix(item)}{date}"
 
 
-def _draft_flagged_job_summary(item: SlackItem, vault_path: Path, inbox_path: Path) -> None:
-    """Dev's slack surface stays mechanical on purpose (dev.md's Failure
-    Behavior: highest blast radius in the system) -- a templated status/
-    staleness note, never a live subagent producing code or branch advice.
-    """
-    body = (
-        "## Rationale\n"
-        f"{item.description} and hasn't been touched since it was flagged. "
-        "Surfacing for a status check, not proposing any code or branch change "
-        "(dev's slack surface is deliberately read-only per dev.md's Failure Behavior).\n\n"
-        "## Diff\n"
-        "(none -- dev's nightshift advance never proposes code or branch changes)\n\n"
-        "## Evidence\n"
-        f"- {item.context}\n"
-    )
-    inbox_path.write_text(body, encoding="utf-8")
-
-
 def _draft_distillation(item: SlackItem, vault_path: Path, inbox_path: Path) -> None:
     """Maintenance's slack surface genuinely needs judgment (identify a
     recurring pattern, draft a diff candidate) -- borrows maintenance's own
@@ -154,10 +136,16 @@ Do not write anywhere else. Do not run any other tool besides Read/Grep/Write.
             f.write(f"\n<!-- cursor-advance: {target_mode}={line_count} -->\n")
 
 
+# What a kind of slack turns into. `flagged-job` was here until 2026-09-17:
+# it drafted a status note about a flagged job that proposed nothing, sat
+# beside the same job in the Inbox's flagged list, and came back the night
+# after it was accepted. The flag itself is the item; the Inbox shows it.
 ADVANCE = {
-    "flagged-job": _draft_flagged_job_summary,
     "undistilled-lessons": _draft_distillation,
 }
+
+# Kinds whose drafter is a template rather than a judgment.
+MECHANICAL_KINDS: frozenset[str] = frozenset()
 
 
 def run() -> tuple[list[str], list[dict], int]:
@@ -246,13 +234,16 @@ def _extract_confidence(proposal_text: str) -> str | None:
 
 
 def _confidence_for(item: SlackItem, proposal_text: str) -> str | None:
-    """Dev's flagged-job note is templated, read-only, no judgment call
-    ever made (dev.md's Failure Behavior) -- always high, never asked of
-    the mechanical drafter. Settings' distillation genuinely involves
-    judgment (pattern identification from lessons.md), so its confidence
-    is a real self-assessment parsed out of the proposal itself.
+    """A drafter that makes no judgment call is not asked for one.
+
+    Distillation genuinely involves judgment (finding a pattern across
+    lessons entries), so its confidence is a real self-assessment parsed out
+    of the proposal. A mechanical, templated drafter is `high` by
+    construction: there is nothing for it to be unsure about. None is
+    registered today; the branch stays because the contract is per kind,
+    not per drafter that happens to exist.
     """
-    if item.kind == "flagged-job":
+    if item.kind in MECHANICAL_KINDS:
         return "high"
     return _extract_confidence(proposal_text)
 

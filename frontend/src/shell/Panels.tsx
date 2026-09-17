@@ -259,6 +259,22 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
     setDecided((d) => new Set(d).add(id))
     onDecided?.()
   }
+
+  /* A flag is a statement that a session died mid-build. Saying "I know"
+   * is the only thing that was missing: until 2026-09-17 a flag could not
+   * be cleared from here, so a job parked on purpose asked the same
+   * question every night. The id is `<mode>/<slug>`, the route's shape. */
+  const acknowledge = async (id: string) => {
+    setBusy(id)
+    const out = await post<{ acknowledged: string }>(`/v2/flagged/${id}/acknowledge`, {})
+    setBusy(null)
+    if ('error' in out) {
+      setFailed((f) => ({ ...f, [id]: out.error }))
+      return
+    }
+    setDecided((d) => new Set(d).add(id))
+    onDecided?.()
+  }
   const toggle = (id: string) =>
     setOpen((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
@@ -317,6 +333,19 @@ export function Inbox({ data, onDecided }: { data: InboxPayload; onDecided?: () 
                   {item.confidence && <span>{item.confidence} confidence</span>}
                   {item.target && <span className="truncate text-ink-dim">{item.target}</span>}
                 </span>
+                {item.kind === 'flagged-job' && (
+                  <span className="ml-auto flex shrink-0 items-center gap-[5px]">
+                    <button
+                      type="button"
+                      disabled={busy === item.id}
+                      onClick={() => void acknowledge(item.id)}
+                      title="Clear the flag. Only work after this can raise it again."
+                      className="rounded-control border border-line px-[9px] py-[3px] text-ink-faint transition-colors hover:bg-elevated hover:text-ink disabled:opacity-40"
+                    >
+                      acknowledge
+                    </button>
+                  </span>
+                )}
                 {item.kind === 'proposal' && (
                   <span className="ml-auto flex shrink-0 items-center gap-[5px]">
                     {item.full && (
@@ -998,7 +1027,14 @@ interface RegressionStatus {
  * thirteen-session ceremony. A failing case reran once before it counted. */
 function Regression() {
   const [open, setOpen] = useState(false)
-  const [scope, setScope] = useState('system')
+  const [openCases, setOpenCases] = useState<Set<string>>(new Set())
+  const toggleCase = (id: string) =>
+    setOpenCases((o) => { const n = new Set(o); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  /* `not current` when the record has anything it no longer speaks for:
+   * that is the run you want after an edit, and re-proving the cases the
+   * edit could not have touched costs sessions to learn nothing. It is
+   * only offered when non-empty, so this falls back on a green suite. */
+  const [scope, setScope] = useState<string | null>(null)
   const [status, setStatus] = useState<RegressionStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tick, setTick] = useState(0)          // re-read the suite when a run ends
@@ -1038,7 +1074,8 @@ function Regression() {
   if (view === false) return <Unreachable what="the regression suite" />
   if (view === null) return <Loading />
 
-  const cost = view.scopes[scope] ?? 0
+  const effectiveScope = scope ?? ('not current' in view.scopes ? 'not current' : 'system')
+  const cost = view.scopes[effectiveScope] ?? 0
   /* The tally counts what has landed, including results from a run that is
    * still going: they are in the status payload before they are in the
    * record, and a number that only moves when the run finishes is how this
@@ -1056,15 +1093,20 @@ function Regression() {
    * rest alone, so the newest case result is the honest answer to "has this
    * been run". */
   const lastRun = view.cases.map((c) => c.last?.ran_at).filter(Boolean).sort().pop()
+  /* A date, not just a clock. "last run 22:27" was true yesterday and read
+     the same today; "yesterday 22:27" stops meaning anything after a week. */
+  const runStamp = lastRun
+    ? new Date(lastRun).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })
+    : null
   const needsRun = t.stale + t.never
   const dot = (c: RegressionCase) =>
     !c.last ? 'var(--color-line)' : c.last.stale ? 'var(--color-ink-faint)' : c.last.passed ? 'var(--color-good)' : 'var(--color-faber)'
 
   const start = async () => {
     setError(null)
-    const out = await post<{ started: string; sessions: number }>('/v2/regression/run', { scope })
+    const out = await post<{ started: string; sessions: number }>('/v2/regression/run', { scope: effectiveScope })
     if ('error' in out) { setError(out.error); return }
-    setStatus({ running: true, scope, done: 0, total: out.sessions, results: [] })
+    setStatus({ running: true, scope: effectiveScope, done: 0, total: out.sessions, results: [] })
   }
 
   return (
@@ -1086,7 +1128,7 @@ function Regression() {
             : needsRun
               ? `${plural(needsRun, 'case')} not current`
               : 'every case current'}
-          {lastRun && !status?.running && ` · last run ${sinceLabel(lastRun).replace(/^since /, '')}`}
+          {runStamp && !status?.running && ` · last run ${runStamp}`}
         </span>
         <button type="button" onClick={() => setOpen(!open)}
                 className="ml-auto font-mono text-[11px] text-ink-faint underline decoration-line underline-offset-2 hover:text-ink-dim">
@@ -1113,7 +1155,25 @@ function Regression() {
                 </div>
                 <div className="mt-[2px] text-[12px] leading-[1.5] text-ink-dim">{c.tests}</div>
                 {c.last && !c.last.passed && !c.last.stale && (
-                  <div className="mt-[3px] font-mono text-[11px]" style={{ color: 'var(--color-faber)' }}>{c.last.why}</div>
+                  <>
+                    <div className="mt-[3px] font-mono text-[11px]" style={{ color: 'var(--color-faber)' }}>{c.last.why}</div>
+                    {/* What the session actually said. The assertion names
+                        the rule it broke; only the reply says how, and it
+                        sat in the payload rendered nowhere. */}
+                    {c.last.reply && (
+                      <>
+                        <button type="button" onClick={() => toggleCase(c.id)}
+                                className="mt-[3px] font-mono text-[10.5px] text-ink-faint underline decoration-line underline-offset-2 hover:text-ink-dim">
+                          {openCases.has(c.id) ? 'hide the reply' : 'read the reply'}
+                        </button>
+                        {openCases.has(c.id) && (
+                          <pre className="mt-[4px] max-h-[220px] overflow-auto whitespace-pre-wrap rounded-control border border-line bg-ground px-[9px] py-[7px] font-mono text-[11px] leading-[1.6] text-ink-dim">
+                            {c.last.reply}
+                          </pre>
+                        )}
+                      </>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -1125,7 +1185,7 @@ function Regression() {
           before the click. */}
       <div className="flex flex-wrap items-center gap-[10px] border-t border-line px-4 py-[9px] font-mono text-[11px]">
         <span className="text-ink-faint">run the cases an edit to</span>
-        <select value={scope} onChange={(e) => setScope(e.target.value)}
+        <select value={effectiveScope} onChange={(e) => setScope(e.target.value)}
                 className="rounded-control border border-line bg-ground px-[6px] py-[2px] text-ink outline-none">
           {Object.keys(view.scopes).map((s) => <option key={s} value={s}>{s}</option>)}
         </select>

@@ -94,10 +94,9 @@ def _hunks(diff_text: str) -> list[str]:
 
 def apply_proposal(proposal_text: str) -> str | None:
     """Returns the target file path if a diff was applied, or None if the
-    proposal had no diff to apply (e.g. dev's flagged-job status notes,
-    which never propose code/branch changes -- see runner.py's
-    _draft_flagged_job_summary). Raises DiffApplyError rather than
-    guessing when a diff exists but can't be applied unambiguously.
+    proposal had no diff to apply: a note that proposes nothing is still a
+    decidable item. Raises DiffApplyError rather than guessing when a diff
+    exists but cannot be applied unambiguously.
     """
     diff_text = _section(proposal_text, "## diff")
     if not diff_text or diff_text.lower().startswith("(none"):

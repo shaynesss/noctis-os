@@ -23,37 +23,20 @@ class SlackItem:
 
 
 def check_dev() -> list[SlackItem]:
-    """Dev's slack surface, deliberately near-empty (dev.md's Failure
-    Behavior / highest blast radius in the system): flagged-not-frozen
-    jobs only -- a session that died mid-build, marked flagged rather than
-    silently frozen. Never code or branch work.
+    """Dev has no slack surface, and that is the whole of it (2026-09-17).
+
+    It used to stage a status note for every flagged job. The note proposed
+    nothing, said so itself ("Accepting archives this note. Nothing in
+    Noctis changes."), and appeared beside the same job in the Inbox's own
+    flagged list: one fact rendered twice, with an accept button that
+    cleared neither. Worse, accepting archived it and the next run staged
+    it again, because dedup only checks what is still pending.
+
+    Nightshift's part in this is setting the flag, which `staleness.flag_pass`
+    does at the top of a run. The Inbox reads the flags directly, and the
+    acknowledge button is what clears one.
     """
-    items = []
-    # The job folders, not state.md's `jobs` array: that array was v1's
-    # mirror of the folders and nothing has written it since the cutover.
-    base = "modes/dev/jobs"
-    if not vault_io.file_exists(base):
-        return items
-    for slug in vault_io.list_subdirs(base):
-        try:
-            job, _ = vault_io.read_frontmatter(f"{base}/{slug}/context.md")
-        except (FileNotFoundError, ValueError):
-            continue
-        if not job.get("flagged") or job.get("stage") == "Done":
-            continue
-        items.append(
-            SlackItem(
-                mode="dev",
-                kind="flagged-job",
-                slug_hint=slug,
-                description=f"Faber: {job.get('name', slug)} flagged mid-build",
-                context=(
-                    f"job slug: {slug}, stage: {job.get('stage')}, "
-                    f"status: {job.get('status')}, last_touched: {job.get('last_touched')}"
-                ),
-            )
-        )
-    return items
+    return []
 
 
 def check_settings() -> list[SlackItem]:
