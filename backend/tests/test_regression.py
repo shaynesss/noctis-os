@@ -107,3 +107,43 @@ def test_reading_never_runs_and_running_is_one_at_a_time(client, auth_headers, m
         time.sleep(0.02)
     assert started == ["faber"]
     assert client.post("/v2/regression/run").status_code == 401
+
+
+def test_the_fingerprint_covers_the_methodology_the_overlay_points_at(tmp_path, monkeypatch):
+    """Most of the rules under test live in the methodology, which a session
+    reads on demand rather than being handed at startup. Hashing only the
+    composed prompt left every case reading "current" after `dev.md` changed
+    (fixed 2026-09-17)."""
+    from prompts import render
+    monkeypatch.setattr(regression, "VAULT", tmp_path)
+    monkeypatch.setattr(render, "PROMPTS", tmp_path / "prompts")
+    (tmp_path / "prompts" / "overlays").mkdir(parents=True)
+    (tmp_path / "prompts" / "system.md").write_text("universal")
+    (tmp_path / "prompts" / "overlays" / "faber.md").write_text("read modes/dev/dev.md")
+    (tmp_path / "prompts" / "overlays" / "general.md").write_text("no method, by design")
+    (tmp_path / "modes" / "dev").mkdir(parents=True)
+    method = tmp_path / "modes" / "dev" / "dev.md"
+    method.write_text("# the method\nplan before code\n")
+
+    before_faber, before_general = regression.prompt_hash("faber"), regression.prompt_hash("general")
+    method.write_text("# the method\nship first, plan later\n")
+    after_faber, after_general = regression.prompt_hash("faber"), regression.prompt_hash("general")
+
+    assert after_faber != before_faber, "editing dev.md must stale Faber's cases"
+    assert after_general == before_general, "General has no methodology, so nothing moved for it"
+
+
+def test_a_mode_that_gains_a_methodology_is_not_still_current(tmp_path, monkeypatch):
+    """An absent methodology contributes nothing and its arrival changes the
+    fingerprint, which is the right way round."""
+    from prompts import render
+    monkeypatch.setattr(regression, "VAULT", tmp_path)
+    monkeypatch.setattr(render, "PROMPTS", tmp_path / "prompts")
+    (tmp_path / "prompts" / "overlays").mkdir(parents=True)
+    (tmp_path / "prompts" / "system.md").write_text("universal")
+    (tmp_path / "prompts" / "overlays" / "faber.md").write_text("read modes/dev/dev.md")
+
+    without = regression.prompt_hash("faber")
+    (tmp_path / "modes" / "dev").mkdir(parents=True)
+    (tmp_path / "modes" / "dev" / "dev.md").write_text("# a method, at last\n")
+    assert regression.prompt_hash("faber") != without

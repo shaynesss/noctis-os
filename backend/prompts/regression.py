@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Callable
 
 from orchestrator.store import DATA_DIR
+import jobs
 from prompts.render import MODES, VAULT, compose
 
 REGRESSION = VAULT / "prompts" / "regression.jsonl"
@@ -120,9 +121,31 @@ def _not_current(cases: list[dict], results_path: Path | None = None) -> list[di
 
 
 def prompt_hash(mode: str) -> str:
-    """The composed prompt a case runs against, as a fingerprint. Changes
-    when `system.md` or the mode's overlay changes; nothing else moves it."""
-    return hashlib.sha256(compose(mode).encode("utf-8")).hexdigest()[:16]
+    """Everything that could change this case's answer, as a fingerprint.
+
+    Two inputs, not one. The composed prompt (`system.md` plus the mode's
+    overlay) is what a session is handed at startup. The methodology that
+    overlay points at (`modes/dev/dev.md` and its siblings) is read by the
+    session on demand, and it is where most of the rules under test actually
+    live: `plan-before-code`, `confusion-protocol` and
+    `commit-first-log-second` are all `dev.md`'s.
+
+    Only the first was hashed until 2026-09-17, so editing a methodology
+    left every case reading "current" while the thing under test had moved.
+    It was like checking whether an exam is out of date by the cover sheet
+    while half the questions come from a chapter the cover sheet points to.
+
+    A methodology that is absent contributes nothing, and its arrival
+    changes the fingerprint, which is the right way round: a mode that
+    gained a method is a mode whose cases should be re-run.
+    """
+    parts = [compose(mode)]
+    if path := jobs.methodology_path(mode):
+        try:
+            parts.append((VAULT / path).read_text())
+        except OSError:
+            pass
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------- running

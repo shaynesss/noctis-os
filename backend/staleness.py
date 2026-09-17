@@ -33,7 +33,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import vault_io
-from jobs import MAINTENANCE_JOBS
+from jobs import JOB_FOLDERS
 
 RUNTIME_DIR = Path(__file__).parent / "runtime"
 
@@ -42,13 +42,9 @@ RUNTIME_DIR = Path(__file__).parent / "runtime"
 # session shows up the same day rather than waiting for a nightly sweep.
 STALE_THRESHOLD = timedelta(hours=6)
 
-# Vault folder -> where its jobs live.
-FLAGGABLE = {
-    "dev": "modes/dev/jobs",
-    "learn": "modes/learn/jobs",
-    "research": "modes/research/jobs",
-    "maintenance": MAINTENANCE_JOBS,
-}
+# Every folder that holds jobs. Shared with the Inbox and the acknowledge
+# route, so what can be flagged is exactly what can be seen and cleared.
+FLAGGABLE = JOB_FOLDERS
 
 # The runtime log is named by whoever launched the session. A hosted session
 # logs under its mode's name (`faber__<slug>.log`, from NOCTIS_MODE); a

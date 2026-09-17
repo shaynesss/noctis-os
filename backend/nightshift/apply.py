@@ -6,11 +6,16 @@ is not a general unified-diff/patch implementation, it's a literal
 find-the-old-block-and-replace-it applier, deliberately refusing to guess
 when the match isn't unique.
 
-Writes the target file only -- does NOT run `git commit` in the vault, even
-though settings.md's stage-3 text says "and commits." Caught by the
-2026-07-21 ship-gate review as a stale/aspirational claim in this
-docstring, not a regression: the commit half was never actually built.
-Flagged in STATUS.md as a real follow-up rather than rushed in here.
+Writes the target file; it does not commit, and that is the split rather
+than a gap. The commit belongs to the decision, not to the diff: the accept
+route (`routers/panels.py`, `_commit_vault`) stages the proposal, the
+archive, `state.md` and this module's target together in one commit, so a
+rejection is on the record too and an accept is never half-written. A commit
+here would cover the target file alone.
+
+Until 2026-09-17 this docstring said the commit half "was never actually
+built" -- true when the 2026-07-21 ship-gate review wrote it, stale from
+442a752 onward, and still being read as a live gap two months later.
 """
 
 import re

@@ -32,8 +32,7 @@ Verified live, not only by tests.
 
 1. **The commit log as memory, in use.** It shipped 2026-09-15 evening; a week of mornings opening on Repo will say whether a commit body's last paragraph is enough to restart from, and whether the push's refusal of bodiless commits (from 2026-09-17) bites at the right moment.
 2. **The regression suite ran for the first time on 2026-09-16: 13 of 13 pass**, current against that evening's prompts. What it has not done is fail, so the assertions are unproven in the direction that matters: a deliberately broken prompt would say whether a case can catch anything.
-3. **A case's staleness does not see the methodology files.** The recorded hash is over `compose(mode)`, which is `system.md` plus the mode's overlay. The methodology the overlay points at (`dev.md` and its siblings) is read by the session on demand and is not in the hash, so editing `dev.md` leaves every case reading "current" while four of them are testing rules that live in exactly that file. Hash the methodology alongside the prompt.
-4. **Nightshift's distillation path** has still never executed on a night with undistilled lessons; the first one that does may surface bugs of its own. Watch the Maintenance line.
+3. **Nightshift's distillation path** has still never executed on a night with undistilled lessons; the first one that does may surface bugs of its own. Watch the Maintenance line.
 
 ## Known gaps, accepted
 

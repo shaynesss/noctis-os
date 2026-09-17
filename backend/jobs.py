@@ -54,6 +54,19 @@ MAINTENANCE_INBOX = f"{MAINTENANCE}/inbox"
 MAINTENANCE_ARCHIVE = f"{MAINTENANCE}/archive"
 MAINTENANCE_JOBS = f"{MAINTENANCE}/jobs"
 
+# Vault folder -> where that folder's jobs live. The folders, not the
+# character names: this is what reads context files off disk. Maintenance is
+# the reason it exists as a map at all, being the one that is not under
+# `modes/`, and the reason it is shared: the staleness pass flagged
+# maintenance jobs while the Inbox scanned only `modes/*/jobs`, so a flagged
+# maintenance job was invisible and could not be cleared (2026-09-17).
+JOB_FOLDERS = {
+    "dev": "modes/dev/jobs",
+    "learn": "modes/learn/jobs",
+    "research": "modes/research/jobs",
+    "maintenance": MAINTENANCE_JOBS,
+}
+
 # The prompt gets orientation, not the archive. A job context grows without
 # bound — noctis-os's is already ~20KB of prose — and pasting all of it into
 # every launch spends tokens on history the session can fetch when it wants

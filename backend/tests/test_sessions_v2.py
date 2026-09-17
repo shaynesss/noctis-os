@@ -174,8 +174,10 @@ def test_one_unparseable_job_does_not_take_down_the_panel(monkeypatch):
     file in modes/dev/jobs was failing exactly that way."""
     from routers import panels
 
+    # One job, in one folder. The listing walks every job folder now
+    # (maintenance included), so a blanket ["broken"] would seed four.
     monkeypatch.setattr(panels.vault_io, "list_subdirs",
-                        lambda p: ["dev"] if p == "modes" else ["broken"])
+                        lambda p: ["broken"] if p == "modes/dev/jobs" else [])
     monkeypatch.setattr(panels.vault_io, "file_exists", lambda p: True)
     monkeypatch.setattr(panels, "_safe_frontmatter", lambda p: None)
 

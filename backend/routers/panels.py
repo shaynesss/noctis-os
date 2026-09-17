@@ -26,6 +26,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import vault_io
+import jobs
 from jobs import MAINTENANCE, MAINTENANCE_ARCHIVE, MAINTENANCE_INBOX
 from nightshift import apply as proposals
 import interactive
@@ -65,8 +66,10 @@ def _flagged_jobs() -> list[dict]:
     disagree with it.
     """
     out: list[dict] = []
-    for mode in vault_io.list_subdirs("modes"):
-        jobs_dir = f"modes/{mode}/jobs"
+    # The same map the staleness pass flags from. Scanning `modes/*` instead
+    # missed `maintenance/jobs`, which that pass does flag: a flagged
+    # maintenance job was invisible here and unclearable (2026-09-17).
+    for mode, jobs_dir in jobs.JOB_FOLDERS.items():
         if not vault_io.file_exists(jobs_dir):
             continue
         for slug in vault_io.list_subdirs(jobs_dir):
@@ -1179,7 +1182,10 @@ def acknowledge_flag(mode: str, slug: str) -> dict:
     """
     if not vault_io.is_safe_slug(mode) or not vault_io.is_safe_slug(slug):
         raise HTTPException(status_code=400, detail=f"Invalid job: {mode}/{slug}")
-    context = f"modes/{mode}/jobs/{slug}/context.md"
+    base = jobs.JOB_FOLDERS.get(mode)
+    if not base:
+        raise HTTPException(status_code=404, detail=f"No such mode: {mode}")
+    context = f"{base}/{slug}/context.md"
     if not vault_io.file_exists(context):
         raise HTTPException(status_code=404, detail=f"No such job: {mode}/{slug}")
     try:
