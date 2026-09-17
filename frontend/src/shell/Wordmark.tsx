@@ -1,54 +1,53 @@
-/* Noctis wordmark — the name, drawn.
+/* Noctis wordmark — the name, set rather than drawn.
  *
- * Six letters on one grid: cap height 12, letter box 8, advance 11, stroked
- * at 1.7 so the word carries the same weight as the rail icons beside it.
- * The O is the app's own star, and it is the *same path* as `Logo.tsx`
- * rather than a redrawing of it, so the mark in the name and the mark
- * everywhere else are one shape.
+ * Five letters of Cascadia Code and one star. The star stands where the O
+ * would be and occupies exactly `1ch`, one monospace cell, so the letter
+ * rhythm survives the substitution: the word is the interface's own face
+ * with a single glyph swapped, not a picture of a word placed next to it.
  *
- * Drawn rather than set, for three reasons that only a wordmark gets to
- * claim: there is no font to load before the app can say its own name, no
- * fallback face to flash on a cold start, and no trailing letter-space to
- * compensate for (the text version sat a fraction left of centre because
- * CSS tracks after the final letter as well as between).
+ * It was drawn first, on its own geometric grid, and read as a foreign
+ * object in a column of Cascadia (2026-09-17) -- different proportions,
+ * different stroke logic, different rhythm. Two things followed from that,
+ * and the second is less obvious: a solid SVG stroke at `--color-ink`
+ * renders *brighter* than antialiased text at the same hex, because text is
+ * softened at every edge and a filled path is not. The mark was lighter
+ * than its neighbours twice over, being both solid and a step up the ramp
+ * from the dim grey most of this interface actually speaks in.
  *
- * Takes `currentColor`. It is plain ink in the rail; a caller that wants it
- * to carry the session's accent only has to set a colour.
+ * So: `--color-ink-dim`, weight 400, set by the caller. The star is the
+ * same path as `Logo.tsx` rather than a redrawing of it, so the mark in the
+ * name and the mark everywhere else are one shape.
  */
 export function Wordmark({
-  width = 88,
+  size = 15,
   className = '',
   style,
 }: {
-  width?: number
+  /** Font size in px. The word is six cells wide, so it grows from here. */
+  size?: number
   className?: string
   style?: React.CSSProperties
 }) {
   return (
-    <svg
-      viewBox="0 0 65.4 16"
-      width={width}
-      height={(width * 16) / 65.4}
+    <span
       role="img"
       aria-label="Noctis"
-      className={className}
-      style={{ display: 'block', ...style }}
+      className={`font-mono ${className}`}
+      style={{ fontSize: size, letterSpacing: '0.06em', whiteSpace: 'nowrap', ...style }}
     >
-      <title>Noctis</title>
-      {/* N, C, T, I, S. The O's slot is left empty for the star. */}
-      <path
-        d="M1.2,14.0 V2.0 L9.2,14.0 V2.0 M29.66,3.27 A4.00,6.00 0 1 0 29.66,12.73 M34.2,2.0 H42.2 M38.2,2.0 V14.0 M46.800000000000004,2.0 H51.6 M49.2,2.0 V14.0 M46.800000000000004,14.0 H51.6 M63.6,4.2 C63.6,2.6 61.800000000000004,2.0 60.2,2.0 C57.800000000000004,2.0 56.400000000000006,3.1 56.400000000000006,4.8 C56.400000000000006,6.6 58.2,7.4 60.2,8.0 C62.2,8.6 64.0,9.4 64.0,11.2 C64.0,12.9 62.6,14.0 60.2,14.0 C58.6,14.0 56.800000000000004,13.4 56.800000000000004,11.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {/* The star, a little past the cap height: it is a mark standing in
-          for a letter, not a letter. */}
-      <g transform="translate(9.60 1.40) scale(0.5500)">
-        <path d="M12 0 Q12.7 9.3 21.5 12 Q12.7 14.7 12 24 Q11.3 14.7 2.5 12 Q11.3 9.3 12 0 Z" fill="currentColor" />
-      </g>
-    </svg>
+      N
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden
+        className="inline-block w-[1ch] align-[-0.1em]"
+        style={{ height: '0.88em' }}
+      >
+        <path
+          d="M12 0 Q12.7 9.3 21.5 12 Q12.7 14.7 12 24 Q11.3 14.7 2.5 12 Q11.3 9.3 12 0 Z"
+          fill="currentColor"
+        />
+      </svg>
+      CTIS
+    </span>
   )
 }

@@ -137,7 +137,7 @@ export function Rail({ view, onView, badges }: {
             wordmark each time, and the name of the app is the one thing in
             here that should not move. Sized to the rows below it: smaller
             than the thing it sits above reads as a caption for them. */}
-        <Wordmark width={88} className="text-ink" />
+        <Wordmark size={15} className="text-ink-dim" />
       </div>
 
       <div className="h-[10px] shrink-0" />
