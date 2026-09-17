@@ -1,6 +1,7 @@
 /* Rail, title strip, status bar, characters — the shell around the terminals. */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Logo } from './Logo'
+import { Wordmark } from './Wordmark'
 import { CHARACTERS, MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
 /* ------------------------------------------------------------------ rail */
@@ -120,7 +121,7 @@ export function Rail({ view, onView, badges }: {
   // floats over the content at the top-left. They cannot be moved to the
   // right on macOS, so the rail moves out from under them instead.
   return (
-    <nav className="flex w-[74px] shrink-0 flex-col border-r border-line">
+    <nav className="flex w-[104px] shrink-0 flex-col border-r border-line">
       {/* The wordmark alone, no star beside it (2026-09-17). With the rows
           reduced to icons the header is the only place the app says what it
           is, so it says it in words; the star was a second mark competing
@@ -136,18 +137,12 @@ export function Rail({ view, onView, badges }: {
             wordmark each time, and the name of the app is the one thing in
             here that should not move. Sized to the rows below it: smaller
             than the thing it sits above reads as a caption for them. */}
-        {/* The negative margin cancels the tracking CSS adds *after* the
-            last letter: the box measures 52px while the ink measures 50.6,
-            so centring the box left the word a fraction left of centre. */}
-        <span className="font-mono text-[12.5px] font-bold uppercase tracking-[0.11em] text-ink"
-              style={{ marginRight: '-0.11em' }}>
-          Noctis
-        </span>
+        <Wordmark width={88} className="text-ink" />
       </div>
 
       <div className="h-[10px] shrink-0" />
 
-      <div ref={list} className="relative mx-auto flex w-[52px] flex-col gap-[2px]" onMouseLeave={leave}>
+      <div ref={list} className="relative mx-auto flex w-[76px] flex-col gap-[2px]" onMouseLeave={leave}>
         <Pill at={pill} />
         {RAIL.map((item) => {
           const active = view === item.id
@@ -167,13 +162,13 @@ export function Rail({ view, onView, badges }: {
               }`}
             >
               {'src' in item ? (
-                <img src={item.src} alt="" aria-hidden className="h-[17px] w-[17px] shrink-0"
+                <img src={item.src} alt="" aria-hidden className="h-[19px] w-[19px] shrink-0"
                      style={{ opacity: lit ? 1 : 0.75 }} />
               ) : (
                 <svg
                   viewBox={item.viewBox}
                   aria-hidden
-                  className="h-[16px] w-[16px] shrink-0"
+                  className="h-[18px] w-[18px] shrink-0"
                   style={item.fill
                     ? { fill: 'currentColor' }
                     : { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 }}
