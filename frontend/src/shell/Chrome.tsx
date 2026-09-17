@@ -117,7 +117,7 @@ export function Rail({ view, onView, badges }: {
   // floats over the content at the top-left. They cannot be moved to the
   // right on macOS, so the rail moves out from under them instead.
   return (
-    <nav className="flex w-[58px] shrink-0 flex-col border-r border-line">
+    <nav className="flex w-[74px] shrink-0 flex-col border-r border-line">
       {/* The wordmark alone, no star beside it (2026-09-17). With the rows
           reduced to icons the header is the only place the app says what it
           is, so it says it in words; the star was a second mark competing
@@ -127,15 +127,20 @@ export function Rail({ view, onView, badges }: {
           so the two bottom rules meet and the header reads as one band
           split by the rail rather than two boxes of different sizes. */}
       <div className="flex h-[var(--head-band)] shrink-0 items-center justify-center border-b border-line">
-        <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.1em]"
-              style={{ color: 'var(--accent)' }}>
+        {/* Plain ink, not the session's accent (2026-09-17). The star it
+            replaced took the accent because a mark can carry a colour and
+            still be itself; a wordmark that changes colour is a different
+            wordmark each time, and the name of the app is the one thing in
+            here that should not move. Sized to the rows below it: smaller
+            than the thing it sits above reads as a caption for them. */}
+        <span className="font-mono text-[12.5px] font-bold uppercase tracking-[0.11em] text-ink">
           Noctis
         </span>
       </div>
 
       <div className="h-[10px] shrink-0" />
 
-      <div ref={list} className="relative mx-auto flex w-[42px] flex-col gap-[2px]" onMouseLeave={leave}>
+      <div ref={list} className="relative mx-auto flex w-[52px] flex-col gap-[2px]" onMouseLeave={leave}>
         <Pill at={pill} />
         {RAIL.map((item) => {
           const active = view === item.id
@@ -150,7 +155,7 @@ export function Rail({ view, onView, badges }: {
               aria-current={active}
               aria-label={item.label}
               title={item.label}
-              className={`relative flex h-[34px] w-full items-center justify-center rounded-control transition-colors duration-150 ${
+              className={`relative flex h-[38px] w-full items-center justify-center rounded-control transition-colors duration-150 ${
                 lit ? 'text-ink' : 'text-ink-dim'
               }`}
             >
