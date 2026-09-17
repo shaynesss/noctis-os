@@ -97,3 +97,65 @@ def test_reject_archives_and_changes_nothing(vault, client, auth_headers):
     assert vault_io.file_exists("maintenance/archive/faber-pivot-track-20260914.md")
     meta, _ = vault_io.read_frontmatter("maintenance/state.md")
     assert meta["inbox"] == []
+
+
+def _body_of(text: str, decision="accept", applied="modes/dev/dev.md", closed=None) -> str:
+    from routers.panels import _decision_body
+    return _decision_body("faber-pivot-track-20260914", decision, text, applied, closed)
+
+
+def test_a_decision_commit_has_a_body_because_the_push_refuses_one_without(vault):
+    """The app is not exempt from its own rule. `_recordless` refuses to push a
+    commit dated after 2026-09-17 with no body, and until that day this route
+    wrote a subject alone: the rule began at 00:00, two proposals were accepted
+    that afternoon, and the push then refused the app's own two commits."""
+    body = _body_of(PROPOSAL)
+    assert body.strip(), "a decision commit with no body cannot be pushed"
+    # The argument survives verbatim; paraphrasing it at the moment of deciding
+    # is how the reason gets lost.
+    assert "no track for a **mid-build** re-route" in body
+    assert "Applied 1 hunk to modes/dev/dev.md." in body
+    assert "Leaves" in body and "Next:" in body
+
+
+def test_a_rejection_keeps_the_argument_it_turned_down(vault):
+    body = _body_of(PROPOSAL, decision="reject", applied=None)
+    assert "no track for a **mid-build** re-route" in body
+    assert "nothing was applied" in body
+
+
+def test_a_proposal_with_no_diff_says_so_rather_than_claiming_a_change(vault):
+    body = _body_of("## Rationale\nA cursor advance, no methodology change.\n",
+                    applied=None)
+    assert "no diff" in body
+    assert "Applied" not in body
+
+
+def test_the_closed_job_is_named_in_the_body(vault):
+    assert "Closed maintenance/address-accumulation-20260917" in _body_of(
+        PROPOSAL, closed="maintenance/address-accumulation-20260917")
+
+
+def test_the_real_commit_passes_the_real_push_check(vault, client, auth_headers):
+    """End to end against `_recordless` itself, not a re-implementation of it:
+    accept a proposal, then read the commit the route made and run the push's
+    own body check over it."""
+    import subprocess
+
+    from routers.panels import _recordless
+    root = vault_io.get_vault_path()
+    for args in (["init", "-q", "-b", "main"], ["config", "user.email", "t@t.t"],
+                 ["config", "user.name", "t"], ["add", "-A"],
+                 ["commit", "-q", "-m", "base", "-m", "a body, so the base is clean too"]):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+    # Staged but never committed, which is how nightshift and the MCP
+    # `propose` tool leave a proposal: neither commits what it stages.
+    _stage()
+    assert client.post("/v2/inbox/faber-pivot-track-20260914/accept",
+                       headers=auth_headers).json()["committed"] is True
+
+    subject = subprocess.run(["git", "-C", str(root), "log", "-1", "--format=%s"],
+                             capture_output=True, text=True).stdout.strip()
+    assert subject.startswith("Accept faber-pivot-track-20260914")
+    assert _recordless(root, "HEAD~1..HEAD") == [], "the push would refuse the app's own commit"

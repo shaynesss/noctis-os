@@ -1149,13 +1149,47 @@ def _drop_index_entry(slug: str) -> None:
     vault_io.write_frontmatter(MAINTENANCE_STATE, meta, body)
 
 
-def _commit_vault(message: str, paths: list[str]) -> bool:
+def _stageable(root: Path, paths: list[str]) -> list[str]:
+    """The paths git can resolve: on disk now, or tracked and since deleted.
+
+    A path that is neither is not a change git has any record of, so asking it
+    to stage one is asking about a file that never existed as far as the
+    repository is concerned. Dropping it is not hiding a failure; keeping it
+    turned every other path's change into a failure too.
+    """
+    listed = _git(root, "ls-files", "-z", "--", *paths) or ""
+    tracked = {p for p in listed.split("\0") if p}
+    return [p for p in paths if p in tracked or (root / p).exists()]
+
+
+def _commit_vault(subject: str, body: str, paths: list[str]) -> bool:
     """A decision is a commit. The vault is a git repo and applying a diff is
     deterministic backend work (`audit.md`, "Apply + verify"); leaving the
     result uncommitted would make the next session's `git status` the only
     record that anything was decided. Never pushes. Returns False rather than
-    failing the decision when git itself cannot run."""
+    failing the decision when git itself cannot run.
+
+    **The body is required, not decoration.** `_recordless` refuses to push a
+    commit dated after `RECORD_RULE_SINCE` that has none, and until 2026-09-17
+    this function wrote a subject alone: the rule began at 00:00 that day, two
+    proposals were accepted that afternoon, and the push then refused the
+    app's own commits. A rule the app writes and does not keep is worse than
+    no rule, because the only person who can unblock it is the one who
+    trusted it.
+    """
     root = vault_io.get_vault_path()
+    message = f"{subject}\n\n{body.strip()}\n" if body.strip() else subject
+    # `git add -A -- <path>` fatals on a pathspec that matches nothing, and one
+    # of the paths handed here routinely matches nothing: the staged proposal
+    # has just been moved to the archive, and nightshift and the MCP `propose`
+    # tool never commit what they stage, so at accept time it is a file that is
+    # both gone and untracked. The whole add then failed, the commit never ran,
+    # and the route returned `committed: false` to a screen that showed the
+    # accept had worked. Every nightshift proposal ever accepted went this way
+    # (found 2026-09-17). Ask git only for paths it can resolve.
+    paths = _stageable(root, paths)
+    if not paths:
+        return False
     try:
         subprocess.run(["git", "-C", str(root), "add", "-A", "--", *paths],
                        check=True, capture_output=True, timeout=20)
@@ -1197,8 +1231,60 @@ def acknowledge_flag(mode: str, slug: str) -> dict:
     meta["flagged"] = False
     meta["flag_acknowledged_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     vault_io.write_frontmatter(context, meta, body)
-    committed = _commit_vault(f"Acknowledge {mode}/{slug}'s flag", [context])
+    committed = _commit_vault(
+        f"Acknowledge {mode}/{slug}'s flag",
+        "A flag says a session died mid-build: the job's runtime log went six hours\n"
+        "without a clean SESSION_END. This one was read and cleared by hand in\n"
+        "Settings, so nightshift stops staging a note about it every night.\n\n"
+        "The job keeps its stage and status; only `flagged` goes false, and\n"
+        "`flag_acknowledged_at` records when.\n\n"
+        f"Leaves {mode}/{slug} unflagged and otherwise untouched. Next: whether the\n"
+        "job is actually stale is a separate question from whether its last session\n"
+        "ended cleanly, and this answers only the second.",
+        [context])
     return {"acknowledged": f"{mode}/{slug}", "committed": committed}
+
+
+def _decision_body(item_id: str, decision: str, text: str,
+                   applied: str | None, closed: str | None) -> str:
+    """The commit body for an accept or a reject.
+
+    A generated message is still the record, so it answers the same questions
+    a written one does: why this was proposed (the proposal's own rationale,
+    verbatim, since paraphrasing an argument at the moment of deciding it is
+    how the reason gets lost), what the decision changed on disk, and what it
+    leaves. `_recordless` refuses to push a body-less commit, and the app is
+    not exempt from its own rule.
+    """
+    rationale = (proposals._section(text, "## rationale") or "").strip()
+    lines = [rationale] if rationale else []
+
+    did = []
+    if applied:
+        hunks = len(proposals._hunks(proposals._section(text, "## diff") or ""))
+        did.append(f"Applied {hunks} hunk{'' if hunks == 1 else 's'} to {applied}.")
+    elif decision == "accept":
+        did.append("Nothing to apply: the proposal carried no diff, which is a "
+                   "decidable item all the same.")
+    else:
+        did.append("Rejected, so nothing was applied. The argument is kept rather "
+                   "than deleted, the same as any superseded content in the vault.")
+    did.append(f"The proposal moves to {MAINTENANCE_ARCHIVE}/{item_id}.md and its "
+               f"index entry leaves {MAINTENANCE_STATE}.")
+    if closed:
+        did.append(f"Closed {closed}, which this was staged on behalf of.")
+    lines.append(" ".join(did))
+
+    try:
+        meta, _ = vault_io.read_frontmatter(MAINTENANCE_STATE)
+        waiting = len(meta.get("inbox") or [])
+    except (FileNotFoundError, ValueError):
+        waiting = 0
+    left = ("no proposals waiting" if not waiting
+            else f"{waiting} proposal{'' if waiting == 1 else 's'} still waiting")
+    lines.append(f"Leaves {left} in Settings. Next: nothing on this item; a "
+                 f"decision is final and reopening one means staging it again.")
+    return "\n\n".join(lines)
 
 
 @router.post("/inbox/{item_id}/{decision}")
@@ -1239,8 +1325,11 @@ def decide(item_id: str, decision: str) -> dict:
 
     applied: str | None = None
     closed: str | None = None
+    # Read before the branch: a rejection's commit body carries the argument
+    # that was turned down, which is the half of the record that would
+    # otherwise exist only in the archived file nobody re-opens.
+    text = vault_io.read_file(staged)
     if decision == "accept":
-        text = vault_io.read_file(staged)
         try:
             applied = proposals.apply_proposal(text)
         except proposals.DiffApplyError as exc:
@@ -1259,7 +1348,9 @@ def decide(item_id: str, decision: str) -> dict:
     touched = [staged, archive, MAINTENANCE_STATE] + ([applied] if applied else [])
     committed = _commit_vault(
         f"{'Accept' if decision == 'accept' else 'Reject'} {item_id}"
-        + (f": applied to {applied}" if applied else ""), touched)
+        + (f": applied to {applied}" if applied else ""),
+        _decision_body(item_id, decision, text, applied, closed),
+        touched)
     return {"item": item_id, "decision": decision, "archived_to": archive,
             "applied_to": applied, "closed_job": closed, "committed": committed}
 
