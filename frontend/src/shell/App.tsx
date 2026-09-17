@@ -391,6 +391,7 @@ export function App() {
             slots={slots}
             active={active}
             accent={accent}
+            shownCwd={shortenHome(cwd)}
             hidden={view !== 'terminal'}
             onSelect={(id) => { setActive(id); setView('terminal') }}
             onClose={close}

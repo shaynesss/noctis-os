@@ -59,11 +59,18 @@ export const gridColumns = (n: number): number => (n <= 3 ? Math.max(1, n) : Mat
 export const visibleWith = (slots: readonly Slot[], shown: Slot | undefined): Slot[] =>
   !shown ? [] : shown.group ? slots.filter((s) => s.group === shown.group) : [shown]
 
-export function Terminals({ slots, active, accent, hidden, onSelect, onClose, onAdd, onReorder, onSplit }: {
+export function Terminals({ slots, active, accent, hidden, shownCwd, onSelect, onClose, onAdd, onReorder, onSplit }: {
   slots: Slot[]
   active: string | null
   accent: string
   hidden: boolean
+  /** Where the showing session *is*, as the CLI last reported it, not where
+   *  its terminal was opened. `slot.cwd` is fixed at launch and never moves,
+   *  so a session that cd'd left this strip naming its old directory while
+   *  the status bar named the new one: one fact on screen twice, disagreeing
+   *  (found 2026-09-17). The bar's own value is passed straight through so
+   *  there is one derivation rather than two that can drift again. */
+  shownCwd?: string
   onSelect: (id: string) => void
   onClose: (id: string) => void
   onAdd: () => void
@@ -225,7 +232,7 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
         >
           +
         </button>
-        {shown && <span className="absolute right-[12px] text-ink-faint">{shortenHome(shown.cwd)}</span>}
+        {shown && <span className="absolute right-[12px] text-ink-faint">{shownCwd ?? shortenHome(shown.cwd)}</span>}
       </div>
 
       {slots.length === 0 && (
