@@ -127,7 +127,7 @@ History is read from the transcripts the CLI writes itself, indexed into SQLite,
 What makes the app fit the folder rather than the other way round:
 
 - **One universal prompt.** `~/.claude/CLAUDE.md` is a symlink to `second-brain/prompts/system.md`, so every Claude Code session on the machine reads it, hosted or not. A mode's overlay is a pointer to its methodology, passed at launch.
-- **The job context is the resume point.** `jobs/<slug>/context.md` carries stage, status and where the work was left; the tail of it goes into a session's startup arguments, and `job_context` fetches the rest.
+- **The job context is the resume point.** `jobs/<slug>/context.md` carries stage, status and where the work was left; the tail of it goes into a session's startup arguments, and `job_context` fetches the rest. Anything a shell command can answer is not written there: branch, unpushed commits, uncommitted files and the last commit are read from the repository at launch and printed above the prose, which wins where the two disagree. A note typed at one session's close is a snapshot, and the next session reads it as the present.
 - **State and knowledge do not mix.** Where things are at lives in the job context and the mode's `lessons.md`. What was decided and why lives in `wiki/`. That split is what keeps the vault readable as it grows.
 - **The vault is the only database.** No ORM, no migrations. Every durable read and write is a markdown file with YAML frontmatter, and the vault is a git repository so every change is visible and reversible.
 - **Maintenance never edits a methodology.** Nightly, it reads each mode's lessons and stages a proposed diff. A person accepts or rejects it in the app; accepting is the edit.

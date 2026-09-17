@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 Current state, not aspirational. History lives in [`CHANGELOG.md`](CHANGELOG.md); the reference is [`DOCUMENTATION.md`](DOCUMENTATION.md).
 
@@ -8,7 +8,9 @@ Current state, not aspirational. History lives in [`CHANGELOG.md`](CHANGELOG.md)
 
 **v2 is the daily driver, and the session is a real terminal.** The app hosts the interactive Claude Code CLI in a pseudo-terminal per tab; the `-p` orchestrator that preceded it is deleted. Stage 1 complete; Stage 2 items 1–9 closed, and nothing is left in the build order, the `launchd`-on-wake scheduler that was item 6's last piece was closed on 2026-09-15 rather than built, because the commit log is the record. v1 is gone entirely.
 
-**Verified 2026-09-16 (evening):** 305 backend tests, 73 frontend, `tsc -b` and `cargo check` clean, `make doctor` reporting both halves up, no swallowed hook failures and no capability gap in any mode. A Playwright pass over every rail tab against the running app, and a second with a Faber terminal seeded in this repository, to see the record block, reports no page errors and no console errors. (The day's earlier commit bodies said "tsc clean" while `tsc -b` had seven errors, fixed in this pass; the number in a commit body is a claim, and `make test` is the check.)
+**Verified 2026-09-17 (evening):** 371 backend tests, 74 frontend, `tsc -b` and `cargo check` clean. The shared-tree guard was also checked against the live condition rather than only its fixtures: two Faber terminals genuinely open in this repository, `git add -A` refused naming the other terminal, `git add <path>` and a bulk command in the vault both allowed.
+
+*Not re-run on 09-17: `make doctor` and the Playwright pass over the rail tabs, both last green 2026-09-16 (evening). Said plainly because this file's previous entry claimed a verification date for checks that had not been re-run under it, which is the same defect the day spent fixing elsewhere. (The number in a commit body is a claim; `make test` is the check.)*
 
 v2's premise: the app drives Claude Code as a subprocess rather than calling the API, so it runs on the existing subscription at no marginal cost. The interface is the deliverable, v2 exists to stop Claude Desktop being the entry point.
 
@@ -26,7 +28,8 @@ Verified live, not only by tests.
 - **MCP server**: five tools against the real vault, stdio, no third-party dependencies (it imports `retrieval/` and `jobs.py` from beside it), usable from any MCP client; registered at user scope so every session on the machine has `vault_search`.
 - **Shell**: Tauri 2, Opt+Space summon, tray, launch-at-login; `⌘T` mode entry, `⌘⇧H` handoff, `⌘W` close, `⌘1–9` focus.
 - **Limits**: the 5-hour and 7-day windows in the status bar, and a banner naming any model the engine is refusing, with the message it gave, read from the transcripts and cleared when that model answers again.
-- **Telemetry**: hooks attribute actions to a mode and job for hosted sessions; the status line feeds the bar and survives a reload.
+- **Telemetry**: hooks attribute actions to a mode and job for hosted sessions; the status line feeds the bar and survives a reload. The two telemetry hooks come from a project's own `.claude/settings.local.json`, so they fire only in projects that register them (`second-brain` and `articulation-loop` do not, see DOCUMENTATION §21).
+- **The shared-tree guard**: a `PreToolUse` hook refuses whole-tree git commands (`add -A`, `commit -a`, `reset --hard`, `clean -f` and the rest) while another live session is in the same repository, and only then. It rides in the argv, so it holds in every project. Built 2026-09-17 after two sessions committed each other's working trees.
 
 ## Next
 

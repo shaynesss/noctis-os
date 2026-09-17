@@ -35,7 +35,7 @@ claude
   --append-system-prompt "<system.md + overlay + job brief>"
   --agents '<the mode's subagents, JSON>'
   --mcp-config '<Noctis MCP server, JSON>'
-  --settings '<permissions.json + statusLine + crossSessionInbound, JSON>'
+  --settings '<permissions.json + statusLine + crossSessionInbound + the shared-tree guard, JSON>'
   --add-dir <vault>
   [--resume <engine session id>]
   ["<first message>"]
@@ -46,7 +46,7 @@ Built by `backend/interactive.py`, served by `GET /v2/sessions/interactive-args?
 | Flag | Why |
 |---|---|
 | `--append-system-prompt` | The mode's identity, as text in the argv. Nothing per-mode is written to disk, so two sessions of one mode cannot race, and an edited methodology reaches a resumed session. |
-| `--settings` | The tracked policy plus a `statusLine` command that POSTs the CLI's own report, windows, context, model, session id, transcript path, to `/v2/sessions/statusline` every five seconds. |
+| `--settings` | The tracked policy, a `statusLine` command that POSTs the CLI's own report, windows, context, model, session id, transcript path, to `/v2/sessions/statusline` every five seconds, and the one hook that must hold in every project rather than only the ones carrying Noctis files (§11). |
 | `--add-dir <vault>` | The engine sandboxes file access to the working directory; a Faber session in a repo could not read its own methodology without this. |
 | `--` + positional prompt | A handoff's carried summary, submitted as the session's first message. Behind the terminator, because a summary that opens with a bullet is an argument that opens with a dash, and the option parser exited on one. |
 
@@ -277,14 +277,19 @@ React + Tailwind 4 in a Tauri shell. `frontend/src/shell/` is the v2 client; `ma
 
 ## 11. Telemetry and hooks
 
-Two, both non-blocking, both given the mode via `NOCTIS_MODE`. **A terminal session gets it from `interactive-args`**, which returns an `env` map beside the argv (`NOCTIS_MODE`, and `NOCTIS_JOB_ID` when a job owns the working directory) and `pty_spawn` applies to the child, a PTY child otherwise inherits the shell process's environment, and a vesper session was found logging under whatever mode the shell happened to carry. The env wins over the `--mode` baked into a project's own `.claude/settings.local.json` hooks; those baked values are only a fallback for sessions nothing launched.
+Three: two telemetry, non-blocking, and one guard, the only hook that can stop a tool call.
 
 - **`PostToolUse`** → `hooks/log_action.py`, one line per tool call to a per-job runtime log
 - **`SessionEnd`** → `hooks/mark_session_end.py`, clears the busy flag
+- **`PreToolUse`**, matcher `Bash` → `hooks/guard_shared_tree.py`, refuses whole-tree git commands while another live session is in the same repository (2026-09-17)
+
+The telemetry pair is given the mode via `NOCTIS_MODE`. **A terminal session gets it from `interactive-args`**, which returns an `env` map beside the argv (`NOCTIS_MODE`, and `NOCTIS_JOB_ID` when a job owns the working directory) and `pty_spawn` applies to the child, a PTY child otherwise inherits the shell process's environment, and a vesper session was found logging under whatever mode the shell happened to carry. The env wins over the `--mode` baked into a project's own `.claude/settings.local.json` hooks.
 
 **Not `Stop`.** `Stop` fires after *every agent turn*, not at session termination. Registering on it shipped briefly and was caught when busy expressions flipped to idle mid-session.
 
-**Hooks are composed into `--settings` as inline JSON**, because they need absolute interpreter and script paths that cannot be committed. They used to live in a per-mode `settings.json` that is no longer read, a silent break, since a hook that stops firing reports nothing. A test asserts the scripts exist on disk.
+**They reach a session by two different routes, and only one of them is universal.** The guard is composed into `--settings` by `interactive.py`'s `statusline_settings`, so every hosted session carries it in every project. The telemetry pair is **not**: it is registered per project in that project's own `.claude/settings.local.json`, which is where a hosted session actually picks it up. Absolute interpreter and script paths in both cases, which is why neither can be a committed settings file. A test asserts the scripts exist on disk, because a registered path that does not resolve fails silently.
+
+> Until 2026-09-17 this section said the hooks were composed into `--settings`. That described the deleted `-p` orchestrator: `engine.py`'s `settings_config()` still builds such a block and no interactive session has ever read it. The consequence is in §21, and it is not cosmetic.
 
 **Their role.** A terminal session's telemetry comes from its own `statusLine` report and its transcript on disk; the hooks are what fires on every tool call regardless of who hosts the session, and they write the action feed. That makes the runtime-log format a real interface rather than an implementation detail.
 
@@ -473,7 +478,7 @@ Start with `make doctor`. It answers most of this in three lines.
 make test        # pytest + tsc -b + vitest
 ```
 
-299 backend, 73 frontend (2026-09-16).
+371 backend, 74 frontend (2026-09-17).
 
 **Two traps worth knowing**, both of which shipped as bugs:
 
@@ -488,6 +493,7 @@ make test        # pytest + tsc -b + vitest
 
 **Outstanding:**
 - Nothing in the build order. The `launchd` scheduler that was its last item is no longer needed: the commit log is the record and needs no writer, a vault auto-push is against the push rule, and maintenance runs nightly on its own plist.
+- **The telemetry hooks only fire in projects that register them** (§11). They come from a project's own `.claude/settings.local.json`, and as of 2026-09-17 `noctis-os`, `portfolio-platform` and `bello-website` have one while **`second-brain` and `articulation-loop` do not**. So a session hosted in the vault writes no action log, sets no busy marker and leaves no `SESSION_END` sentinel, which is also what `staleness.flag_pass()` reads to decide a session died mid-build. Found 2026-09-17 while registering the guard, which does not have this problem because it rides in the argv. The fix is to move the pair into `statusline_settings` beside it; not done, because it changes what every hosted session logs and deserves its own verification rather than riding along with a guard.
 
 **Known and accepted:**
 - Commit attribution by transcript matches on the subject line: two commits with one subject (a repeated "wip") both credit the first session that ran it, and a subject under twelve characters is not searched at all and falls to the by-clock rules.

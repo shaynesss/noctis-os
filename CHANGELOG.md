@@ -11,6 +11,47 @@ are complete and verified live. Nothing is left in the build order: the
 2026-09-15 rather than built, because the commit log is the record and needs
 no writer.
 
+### The brief computes what it used to claim, and a guard on the shared tree (2026-09-17, evening)
+
+- **A job brief no longer states what git can answer.** `jobs.repo_facts()`
+  reads branch, unpushed count, uncommitted files and the last commit from the
+  repository when the brief is built, and `job_brief()` prints them above the
+  prose under a line saying the computed half wins where the two disagree. The
+  prompt for it: this job's own brief said seventeen commits were unpushed when
+  two were, and that `flag_stale_jobs()` had no caller when `runner.py` calls it
+  through `flag_pass()`. A session repeated both to the person who could see
+  otherwise. A branch with no upstream says so rather than reporting zero, and
+  the empty path is guarded explicitly because `Path("").resolve()` is the
+  backend's own working directory, which would have briefed every path-less job
+  on whichever repository the server was started from.
+- **The shared-tree guard.** Twice in one day a session ran `git add -A` in
+  `noctis-os` and committed another live session's working tree under its own
+  message, leaving two commit bodies that describe work they do not contain.
+  `hooks/guard_shared_tree.py` is a `PreToolUse` hook on `Bash` refusing
+  whole-tree commands (`add -A|--all|-u|.`, `commit -a`, `stash` with no
+  pathspec, `reset --hard`, `checkout/restore .`, `clean -f`) while another live
+  session reports the same repository, resolved through `rev-parse
+  --show-toplevel` rather than the raw cwd, since `backend/` and `frontend/` are
+  one tree. Alone, everything is allowed; with company, `git add <paths>` still
+  is, which is what splitting the work by file means. It fails open at every
+  step. A prompt rule could not do this: the session that loses its work is not
+  the one running the command. Worktrees were the alternative and were rejected,
+  a second worktree gets no job context (`find_job_for_cwd` matches
+  `project_path` exactly) and none of the 250MB of gitignored `.venv` and
+  `node_modules` the tests need.
+- **Three stale documents corrected.** `apply.py`'s docstring said the commit
+  half "was never actually built"; the accept route has committed since
+  `442a752`. The hooks README and DOCUMENTATION §11 both said hooks are composed
+  into `--settings`, which described the deleted `-p` path. Correcting the third
+  surfaced a real gap, now in §21: the telemetry pair is registered per project
+  in `.claude/settings.local.json`, and `second-brain` and `articulation-loop`
+  have none, so a session hosted in the vault writes no action log, sets no busy
+  marker and leaves no `SESSION_END` for the staleness pass to read.
+- 371 backend tests, 74 frontend, `tsc -b` and `cargo check` clean. The guard
+  was verified against the live condition, two Faber terminals genuinely open in
+  this repository, not only against its fixtures, which is how a wrong endpoint
+  path survived 46 green tests: every one of them mocked the call that used it.
+
 ### Three wires reconnected, and the views open at once (2026-09-16, evening)
 
 - **The staleness pass runs under nightshift.** `staleness.flag_pass()` is
