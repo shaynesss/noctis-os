@@ -75,7 +75,7 @@ A session opened in a project directory gets that job's context in its startup a
 
 ## The body: the app
 
-The body is a macOS window (Tauri) with a rail of four tabs beside a terminal area. Each terminal is the real interactive `claude`, hosted in a pseudo-terminal and drawn in the app's own palette. A session's identity travels in its startup arguments: which mode it is, which methodology to read, which subagents it has, which job it is on. Nothing per-mode is written to disk, so two sessions of one mode cannot collide, and an edited methodology reaches a session that is already running.
+The body is a macOS window (Tauri) with a rail of four icons beside a terminal area. Each terminal is the real interactive `claude`, hosted in a pseudo-terminal and drawn in the app's own palette. A session's identity travels in its startup arguments: which mode it is, which methodology to read, which subagents it has, which job it is on. Nothing per-mode is written to disk, so two sessions of one mode cannot collide, and an edited methodology reaches a session that is already running.
 
 Five modes, and they differ by **method**, never by capability. Every mode gets the same tools; what changes is the methodology it reads and the model it runs.
 
@@ -175,7 +175,7 @@ The engine's rolling 5-hour and 7-day windows (the real currency on a subscripti
 
 ### Settings
 
-**Prompts:** the universal prompt and each mode's overlay, edited in place in the vault. **Regression suite:** thirteen cases, each a mode, a prompt and a deterministic check on one rule, run from the card. **Maintenance:** nightshift's last run in one sentence, and the proposals it staged, with accept and reject.
+**Prompts:** the universal prompt and each mode's overlay, edited in place in the vault, with the thirteen cases that guard them in the same block: each a mode, a prompt and a deterministic check on one rule, run from the row underneath, which also says whether the record still speaks for the text above it. **Maintenance:** when nightshift last ran, and the proposals it staged, with accept and reject.
 
 ## Quickstart
 

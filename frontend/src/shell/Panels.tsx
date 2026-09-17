@@ -176,15 +176,23 @@ export function sinceLabel(iso: string | null, now = new Date()): string {
 /** Nightshift's newest run as one sentence, whatever it did. A run of the
  *  same outcome is counted: "broken, 3 nights running" is the line that six
  *  weeks of "quiet night" in a log never produced. Tested to the string. */
+/* When it ran, and nothing else unless something went wrong.
+ *
+ * It used to report the outcome too ("1 proposal staged", "nothing to
+ * stage"), which the list directly underneath already shows: the proposals
+ * are right there to be counted, so the sentence was reading them out
+ * (2026-09-17). A failure is the exception and stays, in full, because a
+ * nightly job that fails quietly is the bug this record exists to prevent:
+ * it failed every night for forty-one nights while a log said "quiet".
+ */
 export function nightshiftLine(n: NightshiftSummary | null): string {
   if (!n) return 'Nightshift has not recorded a run.'
   const at = new Date(n.ran_at)
   const hm = Number.isNaN(at.getTime()) ? '' : ` at ${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
   const run = n.streak > 1 ? ` (${n.streak} nights running)` : ''
-  if (n.kind === 'broken') return `Nightshift failed${hm} — ${n.error}${run}`
-  if (n.kind === 'partial') return `Nightshift ran${hm} — ${plural(n.staged, 'proposal')} staged, ${n.failed} of ${n.seen} failed`
-  if (n.kind === 'staged') return `Nightshift ran${hm} — ${plural(n.staged, 'proposal')} staged`
-  return `Nightshift ran${hm} — nothing to stage${run}`
+  if (n.kind === 'broken') return `Nightshift failed${hm}: ${n.error}${run}`
+  if (n.kind === 'partial') return `Nightshift ran${hm}, ${n.failed} of ${n.seen} failed`
+  return `Nightshift ran${hm}`
 }
 
 /* A unified diff the conventional way: removed lines red, added lines
@@ -821,11 +829,14 @@ const ago = (unix: number): string => {
 export function Settings({ onDecided }: { onDecided?: () => void }) {
   return (
     <>
+      {/* One block, not two (2026-09-17). The prompts and the cases that
+          guard them are halves of one working system: you edit the text
+          here and the row underneath says whether the record still speaks
+          for it, and what re-proving it would cost. Two headings made them
+          look like two things you could attend to separately, which is
+          exactly the mistake that let the suite sit unrun for a day. */}
       <Heading>Prompts</Heading>
       <Prompts />
-
-      <Heading className="mt-7">Regression suite</Heading>
-      <Regression />
 
       {/* What arrives (2026-09-15): the one scheduled thing's last run, and
           the proposals it staged, accepted or rejected here. This was the
@@ -847,7 +858,6 @@ function Maintenance({ onDecided }: { onDecided?: () => void }) {
         <div className="px-4 py-[13px] text-[12.5px] leading-[1.6]"
              style={{ color: broken ? 'var(--color-faber)' : 'var(--color-ink-dim)' }}>
           {night === false ? 'Could not read nightshift\'s record.' : night === null ? 'Loading…' : nightshiftLine(night.nightshift)}
-          <span className="ml-[8px] font-mono text-[10.5px] text-ink-faint">nightly at 03:00 · backend/runtime/nightshift.log</span>
         </div>
       </Card>
       <div className="mt-[10px]">
@@ -994,6 +1004,11 @@ function Prompts() {
           Save
         </button>
       </div>
+
+      {/* The cases that guard what is above, in the same card: editing the
+          text and knowing whether the record still speaks for it are one
+          motion. */}
+      <Regression />
     </Card>
   )
 }
@@ -1111,8 +1126,8 @@ function Regression() {
     return () => { alive = false; if (id) clearInterval(id) }
   }, [])
 
-  if (view === false) return <Unreachable what="the regression suite" />
-  if (view === null) return <Loading />
+  if (view === false) return <div className="border-t border-line"><Unreachable what="the regression suite" /></div>
+  if (view === null) return <div className="border-t border-line"><Loading /></div>
 
   const cost = view.scopes[effectiveScope] ?? 0
   /* The tally counts what has landed, including results from a run that is
@@ -1149,8 +1164,8 @@ function Regression() {
   }
 
   return (
-    <Card>
-      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px] px-4 py-[12px]">
+    <>
+      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px] border-t border-line px-4 py-[12px]">
         <span className="text-[13px] text-ink">{plural(view.cases.length, 'case')}</span>
         {/* What the record says, at a glance: current passes, current
             failures, results the prompt has moved past, never run. */}
@@ -1292,7 +1307,7 @@ function Regression() {
         )}
         {error && <span className="basis-full text-[11px]" style={{ color: 'var(--color-faber)' }}>{error}</span>}
       </div>
-    </Card>
+    </>
   )
 }
 

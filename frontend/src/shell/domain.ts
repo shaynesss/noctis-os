@@ -95,6 +95,31 @@ export interface RememberedSlot {
   group?: string
 }
 
+const DISMISSED_REFUSAL_KEY = 'noctis.dismissed-refusal'
+
+/* Which refusal you have already waved away.
+ *
+ * The banner is about an event, not a state: the engine refused a model at
+ * a moment, and saying "I know" should hold. It was React state, so every
+ * reload brought the same 21:51 back (2026-09-17). Keyed by the refusal's
+ * own timestamp, so a *different* refusal still arrives: dismissing Fable's
+ * says nothing about the next model to stop. */
+export function rememberDismissedRefusal(at: string): void {
+  try {
+    localStorage.setItem(DISMISSED_REFUSAL_KEY, at)
+  } catch {
+    // A window that cannot remember it will ask again, which is survivable.
+  }
+}
+
+export function recallDismissedRefusal(): string | null {
+  try {
+    return localStorage.getItem(DISMISSED_REFUSAL_KEY)
+  } catch {
+    return null
+  }
+}
+
 const OPEN_SLOTS_KEY = 'noctis.open-slots'
 
 export function rememberSlots(slots: readonly RememberedSlot[]): void {

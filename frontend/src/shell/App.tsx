@@ -27,7 +27,7 @@ import { Reader } from './Reader'
 import { Terminals, newSlot, shortenHome, type Slot } from './Terminals'
 import { Transcript } from './Transcript'
 import { useFetched } from './useFetched'
-import { MODE_ACCENT, MODE_LABEL, recallSlots, rememberSlots, type Mode } from './domain'
+import { MODE_ACCENT, MODE_LABEL, recallDismissedRefusal, recallSlots, rememberDismissedRefusal, rememberSlots, type Mode } from './domain'
 import './tokens.css'
 
 /** What a terminal's statusLine reports, the parts the shell reads. */
@@ -353,10 +353,11 @@ export function App() {
   /* One banner at a time, newest first: two models refusing at once is a
    * list nobody reads, and the newest is the one the work just hit. */
   const refused = limits?.refused?.[0] ?? null
-  const [dismissedRefusal, setDismissedRefusal] = useState<string | null>(null)
+  const [dismissedRefusal, setDismissedRefusal] = useState<string | null>(() => recallDismissedRefusal())
   useEffect(() => {
     // A new refusal re-arms the banner: dismissing Fable's says nothing
-    // about the next model to stop.
+    // about the next model to stop. The dismissal itself is remembered
+    // across reloads, so the same event does not come back every refresh.
     if (refused && dismissedRefusal && dismissedRefusal !== refused.at) setDismissedRefusal(null)
   }, [refused, dismissedRefusal])
 
@@ -366,7 +367,10 @@ export function App() {
     <div className="relative flex h-full flex-col" style={{ ['--accent' as string]: accent }}>
       <TitleStrip />
       {refused && dismissedRefusal !== refused.at && (
-        <RefusedBanner refused={refused} onDismiss={() => setDismissedRefusal(refused.at)} />
+        <RefusedBanner
+          refused={refused}
+          onDismiss={() => { setDismissedRefusal(refused.at); rememberDismissedRefusal(refused.at) }}
+        />
       )}
 
       <div className="flex min-h-0 flex-1">

@@ -6,16 +6,24 @@ import { nightshiftLine, reflow, sinceLabel } from './Panels'
 
 describe('nightshiftLine', () => {
   const at = new Date(2026, 8, 15, 3, 0).toISOString()
-  it('says what the night did, and counts a run of the same outcome', () => {
+  it('says when it ran, and nothing else when nothing went wrong', () => {
     expect(nightshiftLine(null)).toBe('Nightshift has not recorded a run.')
-    expect(nightshiftLine({ ran_at: at, staged: 0, failed: 4, seen: 4, error: "No such file or directory: 'claude'", kind: 'broken', streak: 41 }))
-      .toBe("Nightshift failed at 03:00 — No such file or directory: 'claude' (41 nights running)")
+    // The outcome went (2026-09-17): the proposals it staged are listed
+    // directly underneath, so the sentence was reading the list out.
     expect(nightshiftLine({ ran_at: at, staged: 2, failed: 0, seen: 2, error: null, kind: 'staged', streak: 1 }))
-      .toBe('Nightshift ran at 03:00 — 2 proposals staged')
-    expect(nightshiftLine({ ran_at: at, staged: 1, failed: 1, seen: 3, error: null, kind: 'partial', streak: 1 }))
-      .toBe('Nightshift ran at 03:00 — 1 proposal staged, 1 of 3 failed')
+      .toBe('Nightshift ran at 03:00')
     expect(nightshiftLine({ ran_at: at, staged: 0, failed: 0, seen: 0, error: null, kind: 'quiet', streak: 3 }))
-      .toBe('Nightshift ran at 03:00 — nothing to stage (3 nights running)')
+      .toBe('Nightshift ran at 03:00')
+  })
+
+  it('still says so when the night failed, which is the whole point of the record', () => {
+    // It failed every night for forty-one nights while its log said
+    // "quiet"; a failure that reads like a success is the bug this exists
+    // to prevent, so it is the one outcome the line keeps.
+    expect(nightshiftLine({ ran_at: at, staged: 0, failed: 4, seen: 4, error: "No such file or directory: 'claude'", kind: 'broken', streak: 41 }))
+      .toBe("Nightshift failed at 03:00: No such file or directory: 'claude' (41 nights running)")
+    expect(nightshiftLine({ ran_at: at, staged: 1, failed: 1, seen: 3, error: null, kind: 'partial', streak: 1 }))
+      .toBe('Nightshift ran at 03:00, 1 of 3 failed')
   })
 })
 

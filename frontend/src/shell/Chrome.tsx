@@ -4,16 +4,45 @@ import { Logo } from './Logo'
 import { CHARACTERS, MODE_ACCENT, MODE_LABEL, type Mode } from './domain'
 
 /* ------------------------------------------------------------------ rail */
+/* Icons only, no labels (2026-09-17). Four items, two of which now wear the
+ * mark of the thing they are about rather than a generic glyph, which is
+ * what made the words removable: a label under an icon that already names
+ * itself is furniture.
+ *
+ * Each carries its own viewBox and whether it is drawn filled or stroked,
+ * because a borrowed mark comes with its own geometry and redrawing it on
+ * this file's 24px stroked grid would be redrawing it wrong. The name stays
+ * in `title` and `aria-label`, so hovering still says it and a screen
+ * reader still hears it.
+ */
 const RAIL = [
-  // The conversation surface: the real CLI, hosted in a pseudo-terminal.
-  { id: 'terminal', label: 'Terminal', d: 'M4 4h16v16H4zM7 9l3 3-3 3M13 15h4' },
-  // The repositories the open terminals are in, one module each: the
-  // commit log is the memory of where a piece of work was left, and the
-  // app opens here. (The Inbox tab, and the Brief before it, went
-  // 2026-09-15: what arrives is in Settings' Maintenance section.)
-  { id: 'repo', label: 'Repo', d: 'M6 3v12M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9' },
-  { id: 'stats', label: 'Stats', d: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
-  { id: 'settings', label: 'Settings', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 14H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z' },
+  {
+    id: 'terminal',
+    label: 'Terminal',
+    // The conversation surface: the real `claude`, hosted in a PTY. Claude's
+    // own sunburst, drawn here rather than imported -- it takes
+    // `currentColor` that way, and there is no official asset in this repo.
+    // An approximation of the mark, not a copy of it: eight tapered rays
+    // from a core, concave-sided so they read as light.
+    viewBox: '0 0 24 24',
+    fill: true,
+    d: 'M12.95 10.00 Q12.81 6.70 12.00 1.40 Q11.19 6.70 11.05 10.00 Z M14.09 11.26 Q16.32 8.82 19.50 4.50 Q15.18 7.68 12.74 9.91 Z M14.00 12.95 Q17.30 12.81 22.60 12.00 Q17.30 11.19 14.00 11.05 Z M12.74 14.09 Q15.18 16.32 19.50 19.50 Q16.32 15.18 14.09 12.74 Z M11.05 14.00 Q11.19 17.30 12.00 22.60 Q12.81 17.30 12.95 14.00 Z M9.91 12.74 Q7.68 15.18 4.50 19.50 Q8.82 16.32 11.26 14.09 Z M10.00 11.05 Q6.70 11.19 1.40 12.00 Q6.70 12.81 10.00 12.95 Z M11.26 9.91 Q8.82 7.68 4.50 4.50 Q7.68 8.82 9.91 11.26 Z'
+  },
+  {
+    id: 'repo',
+    label: 'Repo',
+    // The repositories the open terminals are in, one module each: the
+    // commit log is the memory of where a piece of work was left, and the
+    // app opens here. (The Inbox tab, and the Brief before it, went
+    // 2026-09-15: what arrives is in Settings' Maintenance section.)
+    // GitHub's own mark, on its own 16px grid, because the GitHub half of
+    // that view is what the tab is for.
+    viewBox: '0 0 16 16',
+    fill: true,
+    d: 'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z',
+  },
+  { id: 'stats', label: 'Stats', viewBox: '0 0 24 24', fill: false, d: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
+  { id: 'settings', label: 'Settings', viewBox: '0 0 24 24', fill: false, d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 14H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z' },
 ] as const
 
 /* One highlight for a whole list, not one per row (2026-09-15, after
@@ -90,23 +119,23 @@ export function Rail({ view, onView, badges }: {
   // floats over the content at the top-left. They cannot be moved to the
   // right on macOS, so the rail moves out from under them instead.
   return (
-    <nav className="flex w-[160px] shrink-0 flex-col border-r border-line">
-      {/* Mark and wordmark centred together. The star takes the active
-          mode's accent via currentColor, so the identity shifts with the
-          session rather than sitting inert above a UI that changes. */}
+    <nav className="flex w-[58px] shrink-0 flex-col border-r border-line">
+      {/* The mark alone. The wordmark went with the labels (2026-09-17):
+          "NOCTIS" spelled out above four named rows was the app saying its
+          own name twice in a column it then had to be wide enough for. The
+          star takes the active mode's accent via currentColor, so the
+          identity shifts with the session rather than sitting inert above a
+          UI that changes. */}
       {/* Height comes from --head-band, shared with the tab bar beside it,
           so the two bottom rules meet and the header reads as one band
           split by the rail rather than two boxes of different sizes. */}
-      <div className="flex h-[var(--head-band)] shrink-0 items-center justify-center gap-[7px] border-b border-line px-[12px]">
-        <Logo size={15} className="shrink-0" style={{ color: 'var(--accent)' }} />
-        <span className="font-mono text-[12px] font-bold uppercase tracking-[0.14em]">Noctis</span>
+      <div className="flex h-[var(--head-band)] shrink-0 items-center justify-center border-b border-line">
+        <Logo size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
       </div>
 
       <div className="h-[10px] shrink-0" />
 
-      {/* The rows keep icon-then-label, left-aligned; the block of rows is
-          what sits in the middle of the rail. */}
-      <div ref={list} className="relative mx-auto flex w-[124px] flex-col gap-[2px]" onMouseLeave={leave}>
+      <div ref={list} className="relative mx-auto flex w-[42px] flex-col gap-[2px]" onMouseLeave={leave}>
         <Pill at={pill} />
         {RAIL.map((item) => {
           const active = view === item.id
@@ -119,16 +148,38 @@ export function Rail({ view, onView, badges }: {
               onClick={() => onView(item.id)}
               onMouseEnter={() => enter(item.id)}
               aria-current={active}
-              className={`relative flex w-full items-center gap-[9px] rounded-control px-[12px] py-[7px] text-[12.5px] transition-colors duration-150 ${
+              aria-label={item.label}
+              title={item.label}
+              className={`relative flex h-[34px] w-full items-center justify-center rounded-control transition-colors duration-150 ${
                 lit ? 'text-ink' : 'text-ink-dim'
               }`}
             >
-              <svg viewBox="0 0 24 24" aria-hidden className="h-[15px] w-[15px] shrink-0" style={{ fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 }}>
+              <svg
+                viewBox={item.viewBox}
+                aria-hidden
+                className="h-[16px] w-[16px] shrink-0"
+                style={item.fill
+                  ? { fill: 'currentColor' }
+                  : { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 }}
+              >
                 <path d={item.d} />
               </svg>
-              {item.label}
+              {/* In the signature, like every other reading the interface
+                  makes about itself (2026-09-17): it was in maintenance's
+                  orange, which said "this belongs to Maintenance" when what
+                  it counts is simply what is waiting. Top-right of the icon
+                  now the row is a square, and it never moves the icon. */}
               {badges?.[item.id] ? (
-                <span className="rounded-full bg-maint px-[6px] font-mono text-[10px] font-bold text-ground">
+                <span
+                  className="absolute right-[3px] top-[3px] min-w-[14px] rounded-full px-[3px] font-mono text-[9.5px] font-bold leading-[14px] text-ground"
+                  style={{
+                    background: 'var(--color-sig-5)',
+                    // A ring in the ground the rail is painted on, so the
+                    // badge reads as sitting beside the icon rather than
+                    // cutting into it.
+                    boxShadow: '0 0 0 2px var(--color-ground)',
+                  }}
+                >
                   {badges[item.id]}
                 </span>
               ) : null}
