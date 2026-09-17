@@ -316,6 +316,21 @@ export function App() {
         return
       }
       const k = e.key.toLowerCase()
+      /* ⌘R reloads the page, the way it does in a browser.
+       *
+       * Safe here, and deliberately so: the PTY registry belongs to the Rust
+       * process, so a reload does not touch a single running session. Each
+       * terminal remounts and `pty_attach` hands it its scrollback and the
+       * number of the last frame it already has. That is the same path a
+       * crash or a hot reload takes, tested since the PTY migration.
+       *
+       * It is also the only way to pick up a change to the terminal palette:
+       * the theme is built when a terminal is constructed and never updated
+       * after, so an open pane keeps the colours it was born with.
+       *
+       * Bound because a hand reaches for it. Tauri's webview gives no reload
+       * of its own in a bundled app, so ⌘R did nothing at all until now. */
+      if (k === 'r') { e.preventDefault(); window.location.reload(); return }
       if (k === 'k') { e.preventDefault(); setPalette(true); return }
       if (k === 't') { e.preventDefault(); setLauncher({}); return }
       if (k === 'w') {
