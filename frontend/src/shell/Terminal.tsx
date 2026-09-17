@@ -42,26 +42,29 @@ const theme = (accent: string) => ({
   black: token('--color-line', '#2a2a2a'),
   red: token('--color-faber', '#e53311'),
   green: token('--color-good', '#3fa463'),
-  /* The signature, one step below `brightYellow` (2026-09-17). The CLI's
-   * thinking line shimmers by animating between its two warm slots, so
-   * theming only the bright one left the animation swinging from our pink
-   * back into orange on every cycle. Both steps of the ramp are ours now:
-   * `--color-sig-5` here, `--sig-text` (step 6) there, so the shimmer runs
-   * dark-to-light inside the signature rather than across two palettes.
-   *
-   * The cost, named because it is real: yellow is the caution colour, and
-   * CLI output that means "careful" no longer arrives amber. Red and
-   * brightRed are untouched, so anything that means *error* still reads as
-   * one, which is the distinction worth keeping. Noctua's amber leaves the
-   * terminal palette and is unchanged everywhere else in the app. */
-  yellow: token('--color-sig-5', '#bd5a6e'),
+  yellow: token('--color-noctua', '#eca207'),
   blue: '#5a8ad6',
   magenta: token('--color-vesper', '#953ead'),
   cyan: '#3fa39c',
   white: token('--color-ink-dim', '#8a8a8a'),
 
   brightBlack: token('--color-ink-faint', '#6a6a6a'),
-  brightRed: '#ff5c3d',
+  /* The signature's darker step, pairing with `brightYellow` above
+   * (2026-09-17). The CLI's thinking line shimmers between exactly these two
+   * slots, so the pair has to be themed together or the animation swings out
+   * of the palette on every cycle.
+   *
+   * Which two was measured, not guessed: decoding a screenshot of the line
+   * gives #ec6749 across 533 pixels and #d07c8b across 145, and macOS
+   * captures in Display P3, which shifts both by the same amount in the same
+   * direction. Undo that and they are #ff5c3d and #de778a exactly, this slot
+   * and `--sig-text`. Two earlier guesses (`--color-maint`, then `yellow`)
+   * were wrong, and `yellow` is back to Noctua's amber because it was never
+   * involved and the change cost the caution colour for nothing.
+   *
+   * `red` stays `--color-faber`, deliberately: something in a terminal has to
+   * still mean stop. */
+  brightRed: token('--color-sig-5', '#bd5a6e'),
   brightGreen: '#54c67e',
   /* The signature, not maintenance's orange (2026-09-17). This is the slot
    * the CLI prints its permission-mode line in ("auto mode on (shift+tab to
