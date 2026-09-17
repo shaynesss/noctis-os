@@ -56,7 +56,10 @@ export function ungroupSingles(slots: Slot[]): Slot[] {
 export function App() {
   // The app opens on Repo (2026-09-15): the commit log is where a piece of
   // work was left, so it is what you open the app to read.
-  const [view, setView] = useState('repo')
+  /* Opens on Terminal (2026-09-17). Repo was the landing view while the
+   * commit log was new and worth reading first; the thing you come back to
+   * the app to do is type into a session, and Repo is one key away. */
+  const [view, setView] = useState('terminal')
 
   /* The arrangement. Seeded from what was open last time, each entry
    * carrying the engine session id its terminal reported, so it comes back

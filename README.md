@@ -155,7 +155,7 @@ The same logic is why the wiki is searched rather than loaded. Years of pages co
 
 ## The app, tab by tab
 
-The window opens on **Repo**.
+The window opens on **Terminal**.
 
 ### Terminal
 
@@ -163,7 +163,7 @@ The real `claude`, one per tab. A fresh session opens by saying what it is and w
 
 ### Repo
 
-**The commit log is the memory.** One module per repository the open terminals are in: branch, what is not on GitHub, uncommitted files, the last twenty commits. Click a commit for its body. Every session's commits end with where the work was left and what comes next, so opening a project is reading where you stopped. There is no separate brief.
+**The commit log is the memory.** One module per repository the open terminals are in: branch, what is not on GitHub, uncommitted files, and the last twenty commits behind a fold. Open it and click a commit for its body. Every session's commits end with where the work was left and what comes next, so opening a project is reading where you stopped. There is no separate brief.
 
 For a project the vault knows, a second block shows the **record**: the project's folder in the vault, its own figures, its own commits. Both halves of one piece of work, one view.
 

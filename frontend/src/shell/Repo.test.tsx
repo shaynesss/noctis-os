@@ -65,7 +65,7 @@ describe('Repo view', () => {
     expect(t).not.toContain('general · 4'); expect(t).not.toContain('Not in a repository')
   })
 
-  it('folds the commit lists when there is more than one repository, and still says how many', () => {
+  it('folds every commit list, whatever is on screen, and still says how many', () => {
     const y: RepoInfo = {
       ...base, root: '/Users/me/Developer/y', name: 'y', cwds: ['/Users/me/Developer/y'],
       commits: [
@@ -80,8 +80,12 @@ describe('Repo view', () => {
     const t = strip(renderToStaticMarkup(<Repo data={{ repos: [base, y], outside: [] }} terminals={terminals} />))
     expect(t).toContain('Commits · 1 of 2 not on GitHub')
     expect(t).not.toContain('bbb2222'), 'folded: the list itself is not rendered'
-    // Alone, the list is open.
-    expect(text({ commits: y.commits })).toContain('aaa1111 y local')
+    // And alone too (2026-09-17): a lone repository used to open its twenty
+    // rows on arrival, which is a screen of history nobody asked for and it
+    // pushed the record and GitHub off the bottom of the module.
+    const alone = text({ commits: y.commits })
+    expect(alone).toContain('Commits · 1 of 2 not on GitHub')
+    expect(alone).not.toContain('aaa1111 y local')
   })
 
   it('with no upstream, offers to publish the branch', () => {
@@ -119,8 +123,9 @@ describe('Repo view', () => {
     expect(text({ ahead: 5 })).toContain('push 5')
     expect(t).toContain('a.ts'); expect(t).toContain('b.ts'); expect(t).not.toContain('Uncommitted ·')
     expect(text({ dirty: [] })).not.toContain('a.ts')
-    expect(t).toContain('● abc1234 newest, local only 1m')
-    expect(t).toContain('● def5678 older, on GitHub 2h')
+    // The figures are above the fold; the rows are behind it.
+    expect(t).toContain('Commits · 1 of 2 not on GitHub')
+    expect(t).not.toContain('abc1234 newest, local only')
   })
 
   it('says nothing at all when everything is on GitHub and committed', () => {

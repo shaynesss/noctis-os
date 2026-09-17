@@ -20,13 +20,11 @@ const RAIL = [
     id: 'terminal',
     label: 'Terminal',
     // The conversation surface: the real `claude`, hosted in a PTY. Claude's
-    // own sunburst, drawn here rather than imported -- it takes
-    // `currentColor` that way, and there is no official asset in this repo.
-    // An approximation of the mark, not a copy of it: eight tapered rays
-    // from a core, concave-sided so they read as light.
-    viewBox: '0 0 24 24',
-    fill: true,
-    d: 'M12.95 10.00 Q12.81 6.70 12.00 1.40 Q11.19 6.70 11.05 10.00 Z M14.09 11.26 Q16.32 8.82 19.50 4.50 Q15.18 7.68 12.74 9.91 Z M14.00 12.95 Q17.30 12.81 22.60 12.00 Q17.30 11.19 14.00 11.05 Z M12.74 14.09 Q15.18 16.32 19.50 19.50 Q16.32 15.18 14.09 12.74 Z M11.05 14.00 Q11.19 17.30 12.00 22.60 Q12.81 17.30 12.95 14.00 Z M9.91 12.74 Q7.68 15.18 4.50 19.50 Q8.82 16.32 11.26 14.09 Z M10.00 11.05 Q6.70 11.19 1.40 12.00 Q6.70 12.81 10.00 12.95 Z M11.26 9.91 Q8.82 7.68 4.50 4.50 Q7.68 8.82 9.91 11.26 Z'
+    // own mark, as a file rather than a path: it keeps Claude's orange
+    // whatever the session is, so there is nothing for `currentColor` to do,
+    // and a drawing of a logo is a worse logo. `assets/marks/claude.png`,
+    // reached through the public/assets symlink.
+    src: '/assets/marks/claude.png',
   },
   {
     id: 'repo',
@@ -120,17 +118,19 @@ export function Rail({ view, onView, badges }: {
   // right on macOS, so the rail moves out from under them instead.
   return (
     <nav className="flex w-[58px] shrink-0 flex-col border-r border-line">
-      {/* The mark alone. The wordmark went with the labels (2026-09-17):
-          "NOCTIS" spelled out above four named rows was the app saying its
-          own name twice in a column it then had to be wide enough for. The
-          star takes the active mode's accent via currentColor, so the
-          identity shifts with the session rather than sitting inert above a
-          UI that changes. */}
+      {/* The wordmark alone, no star beside it (2026-09-17). With the rows
+          reduced to icons the header is the only place the app says what it
+          is, so it says it in words; the star was a second mark competing
+          with four others in a 58px column. It takes the active mode's
+          accent, so the identity still shifts with the session. */}
       {/* Height comes from --head-band, shared with the tab bar beside it,
           so the two bottom rules meet and the header reads as one band
           split by the rail rather than two boxes of different sizes. */}
       <div className="flex h-[var(--head-band)] shrink-0 items-center justify-center border-b border-line">
-        <Logo size={16} className="shrink-0" style={{ color: 'var(--accent)' }} />
+        <span className="font-mono text-[9.5px] font-bold uppercase tracking-[0.1em]"
+              style={{ color: 'var(--accent)' }}>
+          Noctis
+        </span>
       </div>
 
       <div className="h-[10px] shrink-0" />
@@ -154,16 +154,21 @@ export function Rail({ view, onView, badges }: {
                 lit ? 'text-ink' : 'text-ink-dim'
               }`}
             >
-              <svg
-                viewBox={item.viewBox}
-                aria-hidden
-                className="h-[16px] w-[16px] shrink-0"
-                style={item.fill
-                  ? { fill: 'currentColor' }
-                  : { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 }}
-              >
-                <path d={item.d} />
-              </svg>
+              {'src' in item ? (
+                <img src={item.src} alt="" aria-hidden className="h-[17px] w-[17px] shrink-0"
+                     style={{ opacity: lit ? 1 : 0.75 }} />
+              ) : (
+                <svg
+                  viewBox={item.viewBox}
+                  aria-hidden
+                  className="h-[16px] w-[16px] shrink-0"
+                  style={item.fill
+                    ? { fill: 'currentColor' }
+                    : { fill: 'none', stroke: 'currentColor', strokeWidth: 1.6 }}
+                >
+                  <path d={item.d} />
+                </svg>
+              )}
               {/* In the signature, like every other reading the interface
                   makes about itself (2026-09-17): it was in maintenance's
                   orange, which said "this belongs to Maintenance" when what

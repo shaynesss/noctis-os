@@ -439,17 +439,19 @@ export function Repo({ data, terminals, onChanged }: { data: RepoPayload; termin
   const groups = [...data.repos].sort((a, b) =>
     Number(b.cwds.includes(showingCwd ?? '')) - Number(a.cwds.includes(showingCwd ?? '')))
   /* One module per repository, laid out like the terminals: a row up to
-   * three, a grid after. With more than one on screen the commit lists
-   * start folded, so the page reads as repositories first. A terminal in
-   * a directory outside any repository (`data.outside`) gets no module:
-   * every mode starts in a repository now, and a section saying "not in
-   * a repository" told the reader nothing they could act on here. */
-  const many = groups.length > 1
+   * three, a grid after. Every commit list starts folded (2026-09-17): a
+   * lone repository opened its twenty rows on arrival, which is a screen
+   * of history before you have asked for any, and it pushed the record and
+   * GitHub off the bottom of the module. The figures above the fold are
+   * what the tab is for at a glance; the list is what you open. A terminal
+   * in a directory outside any repository (`data.outside`) gets no module:
+   * every mode starts in a repository now, and a section saying "not in a
+   * repository" told the reader nothing they could act on here. */
   return (
     <div className="grid items-stretch gap-6"
          style={{ gridTemplateColumns: `repeat(${gridColumns(groups.length)}, minmax(0, 1fr))` }}>
       {groups.map((r) => (
-        <RepoModule key={r.root} r={r} folded={many} onChanged={onChanged}
+        <RepoModule key={r.root} r={r} folded onChanged={onChanged}
                     terminals={terminals.filter((t) => r.cwds.includes(t.cwd))} />
       ))}
     </div>
@@ -1166,6 +1168,10 @@ function Regression() {
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px] border-t border-line px-4 py-[12px]">
+        {/* The block's name, where its heading used to be. Merging it into
+            the prompts card was right (they are one system) and left these
+            two rows unlabelled, so nothing said what the cases were for. */}
+        <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-ink-faint">Regression</span>
         <span className="text-[13px] text-ink">{plural(view.cases.length, 'case')}</span>
         {/* What the record says, at a glance: current passes, current
             failures, results the prompt has moved past, never run. */}

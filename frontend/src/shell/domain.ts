@@ -20,7 +20,11 @@ export const MODE_ACCENT: Record<Mode, string> = {
   faber: 'var(--color-faber)',
   noctua: 'var(--color-noctua)',
   vesper: 'var(--color-vesper)',
-  maintenance: 'var(--color-maint)',
+  /* The signature, not its own orange (2026-09-17). Maintenance is not a
+   * character: its persona was retired with v1 and what is left is a
+   * nightly system function, so it is drawn in the hue the interface uses
+   * for readings about itself rather than in one that implies somebody. */
+  maintenance: 'var(--color-sig)',
 }
 
 /* The vault names modes by their folder -- dev, learn, research -- and the
