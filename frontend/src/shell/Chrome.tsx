@@ -43,6 +43,9 @@ const RAIL = [
   { id: 'settings', label: 'Settings', viewBox: '0 0 24 24', fill: false, d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.6 14H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0 1.1 2.7H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z' },
 ] as const
 
+/** The rail's ids, for anything that needs to know a view is still real. */
+export const RAIL_VIEWS = RAIL.map((r) => r.id) as readonly string[]
+
 /* One highlight for a whole list, not one per row (2026-09-15, after
  * Bencho's selection list): a rounded pill that slides to the row under the
  * pointer and settles back on the active row when the pointer leaves. Rows
@@ -133,7 +136,11 @@ export function Rail({ view, onView, badges }: {
             wordmark each time, and the name of the app is the one thing in
             here that should not move. Sized to the rows below it: smaller
             than the thing it sits above reads as a caption for them. */}
-        <span className="font-mono text-[12.5px] font-bold uppercase tracking-[0.11em] text-ink">
+        {/* The negative margin cancels the tracking CSS adds *after* the
+            last letter: the box measures 52px while the ink measures 50.6,
+            so centring the box left the word a fraction left of centre. */}
+        <span className="font-mono text-[12.5px] font-bold uppercase tracking-[0.11em] text-ink"
+              style={{ marginRight: '-0.11em' }}>
           Noctis
         </span>
       </div>

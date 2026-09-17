@@ -99,6 +99,32 @@ export interface RememberedSlot {
   group?: string
 }
 
+const VIEW_KEY = 'noctis.view'
+
+/* Which rail item was showing when you left.
+ *
+ * The window opened on Repo, then on Terminal (2026-09-17), and both were
+ * guesses about what you would want next. What you want next is what you
+ * were doing, so it opens where you left it. A value that is no longer a
+ * rail item (a tab removed between releases) falls back rather than
+ * leaving the pane blank. */
+export function rememberView(view: string): void {
+  try {
+    localStorage.setItem(VIEW_KEY, view)
+  } catch {
+    // A window that cannot remember it opens on the terminal, as before.
+  }
+}
+
+export function recallView(known: readonly string[], fallback: string): string {
+  try {
+    const seen = localStorage.getItem(VIEW_KEY)
+    return seen && known.includes(seen) ? seen : fallback
+  } catch {
+    return fallback
+  }
+}
+
 const DISMISSED_REFUSAL_KEY = 'noctis.dismissed-refusal'
 
 /* Which refusal you have already waved away.

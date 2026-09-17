@@ -15,7 +15,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Activity } from './Activity'
 import { Unreachable } from './Async'
-import { BottomBar, Rail, RefusedBanner, TitleStrip, type LiveLimits } from './Chrome'
+import { BottomBar, RAIL_VIEWS, Rail, RefusedBanner, TitleStrip, type LiveLimits } from './Chrome'
 import { del, get, type HistoryTranscript, type Stats as StatsPayload, type Window } from './engine'
 import { Launcher, type LaunchRequest } from './Launcher'
 import { Palette } from './Palette'
@@ -27,7 +27,7 @@ import { Reader } from './Reader'
 import { Terminals, newSlot, shortenHome, type Slot } from './Terminals'
 import { Transcript } from './Transcript'
 import { useFetched } from './useFetched'
-import { MODE_ACCENT, MODE_LABEL, recallDismissedRefusal, recallSlots, rememberDismissedRefusal, rememberSlots, type Mode } from './domain'
+import { MODE_ACCENT, MODE_LABEL, recallDismissedRefusal, recallSlots, recallView, rememberDismissedRefusal, rememberSlots, rememberView, type Mode } from './domain'
 import './tokens.css'
 
 /** What a terminal's statusLine reports, the parts the shell reads. */
@@ -56,10 +56,13 @@ export function ungroupSingles(slots: Slot[]): Slot[] {
 export function App() {
   // The app opens on Repo (2026-09-15): the commit log is where a piece of
   // work was left, so it is what you open the app to read.
-  /* Opens on Terminal (2026-09-17). Repo was the landing view while the
-   * commit log was new and worth reading first; the thing you come back to
-   * the app to do is type into a session, and Repo is one key away. */
-  const [view, setView] = useState('terminal')
+  /* Opens where you left it (2026-09-17). Repo was the landing view while
+   * the commit log was new, then Terminal; both were a guess about what you
+   * would want next, and what you want next is what you were doing.
+   * Terminal is the fallback for a first run or a window that cannot read
+   * its storage. */
+  const [view, setView] = useState(() => recallView(RAIL_VIEWS, 'terminal'))
+  useEffect(() => { rememberView(view) }, [view])
 
   /* The arrangement. Seeded from what was open last time, each entry
    * carrying the engine session id its terminal reported, so it comes back
