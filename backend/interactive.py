@@ -31,6 +31,12 @@ from orchestrator.modes import mode_agents, mode_methodology
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STATUSLINE = REPO_ROOT / "backend" / "scripts" / "statusline.sh"
+# Absolute, and derived rather than committed, for the reason the hooks block
+# in `engine.py` gives: an interpreter path cannot live in a tracked settings
+# file. The venv's python is named explicitly because a PTY child inherits the
+# shell's PATH, which need not have one.
+PYTHON = REPO_ROOT / "backend" / ".venv" / "bin" / "python3"
+GUARD_SHARED_TREE = REPO_ROOT / "backend" / "hooks" / "guard_shared_tree.py"
 
 
 def statusline_settings(mode: str = "general", port: int | None = None,
@@ -67,6 +73,16 @@ def statusline_settings(mode: str = "general", port: int | None = None,
         "command": f"bash {STATUSLINE} {port or os.environ.get('PORT', '8000')} {mode} {slot or '-'}",
         "refreshInterval": 5,
     }
+    # The shared-tree guard rides in the argv rather than in a project's
+    # `.claude/settings.local.json`, because it has to hold in every project,
+    # including one that has no Noctis files in it at all. Sessions run in
+    # parallel on one repository by design; this refuses only the commands that
+    # act on the whole working tree, and only while someone else is in it.
+    policy.setdefault("hooks", {}).setdefault("PreToolUse", []).append({
+        "matcher": "Bash",
+        "hooks": [{"type": "command",
+                   "command": f"{PYTHON} {GUARD_SHARED_TREE}"}],
+    })
     return policy
 
 
