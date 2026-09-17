@@ -42,7 +42,19 @@ const theme = (accent: string) => ({
   black: token('--color-line', '#2a2a2a'),
   red: token('--color-faber', '#e53311'),
   green: token('--color-good', '#3fa463'),
-  yellow: token('--color-noctua', '#eca207'),
+  /* The signature, one step below `brightYellow` (2026-09-17). The CLI's
+   * thinking line shimmers by animating between its two warm slots, so
+   * theming only the bright one left the animation swinging from our pink
+   * back into orange on every cycle. Both steps of the ramp are ours now:
+   * `--color-sig-5` here, `--sig-text` (step 6) there, so the shimmer runs
+   * dark-to-light inside the signature rather than across two palettes.
+   *
+   * The cost, named because it is real: yellow is the caution colour, and
+   * CLI output that means "careful" no longer arrives amber. Red and
+   * brightRed are untouched, so anything that means *error* still reads as
+   * one, which is the distinction worth keeping. Noctua's amber leaves the
+   * terminal palette and is unchanged everywhere else in the app. */
+  yellow: token('--color-sig-5', '#bd5a6e'),
   blue: '#5a8ad6',
   magenta: token('--color-vesper', '#953ead'),
   cyan: '#3fa39c',
