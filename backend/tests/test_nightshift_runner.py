@@ -1,3 +1,5 @@
+import pathlib
+
 import vault_io
 from nightshift import runner
 from nightshift.slack_surface import SlackItem
@@ -66,7 +68,7 @@ def test_run_stages_an_item_where_settings_reads(vault, monkeypatch):
     _register_probe(monkeypatch)
     monkeypatch.setitem(runner.SLACK_CHECKS, "dev", lambda: [_probe()])
 
-    slugs, _failed, _seen = runner.run()
+    slugs, _failed, _dropped, _seen = runner.run()
 
     assert len(slugs) == 1
     assert slugs[0].startswith("probe-b-")
@@ -90,10 +92,10 @@ def test_run_is_idempotent_against_already_pending_item(vault, monkeypatch):
     _register_probe(monkeypatch)
     monkeypatch.setitem(runner.SLACK_CHECKS, "dev", lambda: [_probe()])
 
-    first, _, _ = runner.run()
+    first, _, _, _ = runner.run()
     assert len(first) == 1
 
-    second, _, _ = runner.run()
+    second, _, _, _ = runner.run()
     assert second == []
 
     state, _ = vault_io.read_frontmatter(runner.STATE_PATH)
@@ -116,7 +118,7 @@ def test_one_failing_item_does_not_drop_other_items(vault, monkeypatch):
     monkeypatch.setitem(runner.SLACK_CHECKS, "learn", lambda: [bad_item])
     monkeypatch.setitem(runner.SLACK_CHECKS, "research", lambda: [_probe()])
 
-    slugs, _failed, _seen = runner.run()
+    slugs, _failed, _dropped, _seen = runner.run()
 
     assert len(slugs) == 1
     assert slugs[0].startswith("probe-b-")
@@ -141,8 +143,99 @@ def test_run_flags_a_stale_job_and_stages_nothing_for_it(vault, monkeypatch, tmp
               last_touched=(datetime.now(timezone.utc) - timedelta(days=4)).isoformat())
     (runtime / "dev__died-mid-build.log").write_text(f"{old} Edit x\n", encoding="utf-8")
 
-    slugs, _failed, _seen = runner.run()
+    slugs, _failed, _dropped, _seen = runner.run()
 
     meta, _ = vault_io.read_frontmatter("modes/dev/jobs/died-mid-build/context.md")
     assert meta["flagged"] is True
     assert slugs == []
+
+
+# --- drops: the outcome that was neither staged, nor failed, nor nothing ------
+#
+# Until 2026-09-17 each of these three gates was a bare `continue`. The item
+# counted in `seen`, appeared in neither `staged` nor `failed`, and the night
+# reported itself quiet: `data/nightshift.json` holds `seen: 3, staged: 0,
+# failed: 0` for 2026-09-16 and `seen: 4, staged: 1, failed: 0` for 09-17,
+# which is three paid-for distiller calls discarded each night, unlogged.
+
+def _register_drafter(monkeypatch, draft_text: str | None):
+    def draft(item, vault_path, inbox_path):
+        if draft_text is not None:
+            inbox_path.write_text(draft_text, encoding="utf-8")
+    monkeypatch.setitem(runner.ADVANCE, "probe", draft)
+    monkeypatch.setattr(runner, "MECHANICAL_KINDS", frozenset())
+    for mode in ("dev", "learn", "research", "settings"):
+        monkeypatch.setitem(runner.SLACK_CHECKS, mode, lambda: [])
+    monkeypatch.setitem(runner.SLACK_CHECKS, "dev", lambda: [_probe()])
+
+
+def test_a_drafter_that_writes_nothing_is_recorded_not_forgotten(vault, monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "DROPS_DIR", tmp_path / "drops")
+    _register_drafter(monkeypatch, None)
+
+    staged, failed, dropped, seen = runner.run()
+
+    assert (staged, failed, seen) == ([], [], 1)
+    assert len(dropped) == 1
+    assert dropped[0]["gate"] == "no-draft"
+    assert dropped[0]["kept"] is None       # there was no draft to keep
+
+
+def test_a_draft_missing_its_rationale_is_kept_for_reading(vault, monkeypatch, tmp_path):
+    """The gate was silent *and* it unlinked the draft, so the morning had
+    neither a reason nor an artefact. The draft moves to runtime now."""
+    monkeypatch.setattr(runner, "DROPS_DIR", tmp_path / "drops")
+    _register_drafter(monkeypatch, "## Diff\n(none)\n\n## Confidence\nhigh -- sure.\n")
+
+    _staged, _failed, dropped, _seen = runner.run()
+
+    assert dropped[0]["gate"] == "no-rationale"
+    kept = pathlib.Path(dropped[0]["kept"])
+    assert kept.exists() and "## Diff" in kept.read_text()
+
+
+def test_a_draft_with_no_usable_confidence_is_dropped_and_kept(vault, monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "DROPS_DIR", tmp_path / "drops")
+    _register_drafter(monkeypatch, "## Rationale\nA probe.\n\n## Confidence\nmaybe?\n")
+
+    _staged, _failed, dropped, _seen = runner.run()
+
+    assert dropped[0]["gate"] == "no-confidence"
+    assert pathlib.Path(dropped[0]["kept"]).exists()
+
+
+def test_a_dropped_draft_does_not_stay_in_the_inbox(vault, monkeypatch, tmp_path):
+    """A rejected draft must not be left where Settings lists proposals: it
+    met none of the contract the listing assumes."""
+    monkeypatch.setattr(runner, "DROPS_DIR", tmp_path / "drops")
+    _register_drafter(monkeypatch, "## Diff\n(none)\n")
+
+    _staged, _failed, dropped, _seen = runner.run()
+
+    inbox = vault_io.get_vault_path() / runner.MAINTENANCE_INBOX
+    assert not (inbox / f"{dropped[0]['slug']}.md").exists()
+    state, _ = vault_io.read_frontmatter(runner.STATE_PATH)
+    assert state.get("inbox") in ([], None)
+
+
+def test_the_cursor_marker_uses_the_real_lessons_path_for_maintenance(vault, monkeypatch):
+    """`maintenance/lessons.md` is not `modes/maintenance/lessons.md`, and
+    the drafter hardcoded the second shape. Any maintenance draft that got
+    as far as the marker raised FileNotFoundError and took the whole item
+    down as a failure (found 2026-09-17)."""
+    vault_io.write_file("maintenance/lessons.md", "# Lessons\n\none\ntwo\n")
+    # What the drafter reads before it calls anything.
+    vault_io.write_file("maintenance/schedule.md", "# Schedule\n")
+    vault_io.write_file("maintenance/agents/distiller.md", "# Distiller\n")
+    vault_io.write_file(f"{runner.MAINTENANCE_INBOX}/README.md", "# Format\n")
+    item = SlackItem(mode="settings", kind="undistilled-lessons",
+                     slug_hint="undistilled-maintenance", description="d", context="c")
+    inbox = vault_io.get_vault_path() / runner.MAINTENANCE_INBOX
+    inbox.mkdir(parents=True, exist_ok=True)
+    draft = inbox / "probe.md"
+    draft.write_text("## Rationale\nx\n", encoding="utf-8")
+
+    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: None)
+    runner._draft_distillation(item, vault_io.get_vault_path(), draft)
+
+    assert "<!-- cursor-advance: maintenance=4 -->" in draft.read_text()

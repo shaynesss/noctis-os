@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 import vault_io  # noqa: E402
-from jobs import MAINTENANCE_INBOX, MAINTENANCE_STATE  # noqa: E402
+from jobs import MAINTENANCE_INBOX, MAINTENANCE_STATE, lessons_path  # noqa: E402
 from nightshift.apply import _section  # noqa: E402
 from nightshift.slack_surface import SLACK_CHECKS, SlackItem  # noqa: E402
 import staleness  # noqa: E402
@@ -32,6 +32,45 @@ STATE_PATH = MAINTENANCE_STATE
 # a smaller/newer tier can be adopted without a code change when one ships --
 # a literal never gets revisited on its own.
 DISTILLER_MODEL = os.environ.get("NIGHTSHIFT_DISTILLER_MODEL", "claude-haiku-4-5")
+
+
+# Where a draft that failed the inbox contract is kept instead of deleted.
+# Runtime, not vault: it is a machine artefact, high-churn and gitignored,
+# the same rule the action logs follow.
+DROPS_DIR = Path(__file__).resolve().parents[1] / "runtime" / "nightshift-drops"
+
+# Why a draft never reached the inbox. Three gates, each a real contract from
+# `maintenance/inbox/README.md`, and until 2026-09-17 all three were a bare
+# `continue`: the item counted in `seen`, never appeared in `staged`, never
+# appeared in `failed`, and the night reported itself quiet. `data/nightshift.json`
+# has `seen: 3, staged: 0, failed: 0` for 2026-09-16 and the same shape for
+# 09-17, which is three distiller calls a night, paid for, discarded, unlogged.
+GATES = {
+    "no-draft": "the drafter wrote no file",
+    "no-rationale": "the draft has no `## Rationale` section",
+    "no-confidence": "the draft's `## Confidence` is missing or is not high/low",
+}
+
+
+def _drop(dropped: list[dict], item: SlackItem, slug: str, gate: str,
+          draft: Path | None) -> None:
+    """Record a draft that did not make it, and keep it if there is one.
+
+    Deleting the evidence is what made this invisible twice over: the gate
+    was silent *and* the artefact it rejected was unlinked, so the next
+    morning had neither a reason nor a draft to read. The file moves to
+    `runtime/nightshift-drops/` instead, where it can be opened.
+    """
+    kept: str | None = None
+    if draft is not None and draft.exists():
+        DROPS_DIR.mkdir(parents=True, exist_ok=True)
+        target = DROPS_DIR / f"{slug}.md"
+        target.write_text(draft.read_text(encoding="utf-8"), encoding="utf-8")
+        draft.unlink()
+        kept = str(target)
+    dropped.append({"slug": slug, "kind": item.kind, "gate": gate, "kept": kept})
+    print(f"nightshift: dropped {slug} ({gate}: {GATES[gate]})"
+          + (f"; draft kept at {kept}" if kept else ""), file=sys.stderr)
 
 
 def _existing_pending_slugs() -> list[str]:
@@ -131,7 +170,12 @@ Do not write anywhere else. Do not run any other tool besides Read/Grep/Write.
         # time), not re-derived later from the slug at accept time (see
         # apply.py's parse_cursor_advance for why that would be fragile).
         target_mode = item.slug_hint.removeprefix("undistilled-")
-        line_count = len(vault_io.read_file(f"modes/{target_mode}/lessons.md").splitlines())
+        # `lessons_path`, not an f-string: maintenance's lessons live at
+        # `maintenance/lessons.md`, outside `modes/`, and this hardcoded the
+        # wrong shape. Any maintenance draft that got this far raised
+        # FileNotFoundError here and was recorded as a failure of the whole
+        # item (found 2026-09-17, while making the drop gates speak).
+        line_count = len(vault_io.read_file(lessons_path(target_mode)).splitlines())
         with inbox_path.open("a", encoding="utf-8") as f:
             f.write(f"\n<!-- cursor-advance: {target_mode}={line_count} -->\n")
 
@@ -148,15 +192,25 @@ ADVANCE = {
 MECHANICAL_KINDS: frozenset[str] = frozenset()
 
 
-def run() -> tuple[list[str], list[dict], int]:
-    """Scan -> Advance -> Stage. Returns (staged slugs, failures, items seen).
+def run() -> tuple[list[str], list[dict], list[dict], int]:
+    """Scan -> Advance -> Stage. Returns (staged, failures, drops, seen).
 
     Failures are returned, not only printed: from 2026-08-05 to 09-15 every
     night's advance step failed identically ("No such file or directory:
     'claude'" -- launchd's PATH) and this loop, correctly refusing to let one
     item's failure drop the rest, printed each one to a log and ended the
     night as quiet. The caller records them, so identical failure across
-    every item is a broken machine and reported as one."""
+    every item is a broken machine and reported as one.
+
+    **Drops are the same lesson learned a second time.** An item can also
+    reach Advance, cost a real model call, and then be discarded by one of
+    three contract gates without being a failure at all -- which meant it
+    was counted in `seen`, absent from `staged`, absent from `failed`, and
+    the night called itself quiet. `seen: 3, staged: 0, failed: 0` is what
+    2026-09-16 recorded, and it was three distiller runs thrown away. Drops
+    are returned for the same reason failures are, and the rejected draft is
+    kept rather than deleted, so the reason and the artefact both survive to
+    the morning."""
     vault_path = vault_io.get_vault_path()
     # Where Settings reads. Drafts went to modes/nightshift/inbox/ until
     # 2026-09-16, a path the app stopped reading at the cutover, so a night's
@@ -172,6 +226,7 @@ def run() -> tuple[list[str], list[dict], int]:
     pending = _existing_pending_slugs()
     staged_slugs = []
     failed: list[dict] = []
+    dropped: list[dict] = []
     seen = 0
 
     for checker in SLACK_CHECKS.values():
@@ -197,23 +252,27 @@ def run() -> tuple[list[str], list[dict], int]:
                 continue
 
             if not inbox_path.exists():
-                continue  # advance failed to produce a draft -- stage nothing, no partial write
+                # Advance produced no draft. Nothing to keep, but the fact is
+                # recorded: a night that silently stages nothing is the one
+                # failure this whole record exists to make visible.
+                _drop(dropped, item, slug, "no-draft", None)
+                continue
 
             proposal_text = inbox_path.read_text(encoding="utf-8")
             rationale = _extract_rationale(proposal_text)
             if not rationale:
-                inbox_path.unlink()  # malformed draft, doesn't meet the mandatory-rationale contract
+                _drop(dropped, item, slug, "no-rationale", inbox_path)
                 continue
 
             confidence = _confidence_for(item, proposal_text)
             if not confidence:
-                inbox_path.unlink()  # malformed draft, doesn't meet the mandatory-confidence contract
+                _drop(dropped, item, slug, "no-confidence", inbox_path)
                 continue
 
             _stage(item, slug, rationale, confidence)
             staged_slugs.append(slug)
 
-    return staged_slugs, failed, seen
+    return staged_slugs, failed, dropped, seen
 
 
 def _extract_rationale(proposal_text: str) -> str | None:
@@ -268,8 +327,8 @@ def _stage(item: SlackItem, slug: str, rationale: str, confidence: str) -> None:
 if __name__ == "__main__":
     from nightshift import report
 
-    slugs, failed, seen = run()
-    entry = report.record(slugs, failed, seen)
+    slugs, failed, dropped, seen = run()
+    entry = report.record(slugs, failed, dropped, seen)
     if entry["error"]:
         # Every item failed the same way: not a quiet night, a broken one.
         # Said so, and exited non-zero, so launchd's log and Settings'

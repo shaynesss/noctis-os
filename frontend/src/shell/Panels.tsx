@@ -29,7 +29,14 @@ const GRID_GAP = 24
  *  error, which `error` names). */
 export interface NightshiftSummary {
   ran_at: string; staged: number; failed: number; seen: number; error: string | null
-  kind: 'staged' | 'quiet' | 'partial' | 'broken'; streak: number
+  /** Drafts that reached Advance, cost a model call, and were rejected by a
+   *  contract gate before staging. Counted separately from failures because
+   *  they are not errors, and separately from nothing because they are not
+   *  nothing: a night with three of them reported itself quiet, twice. */
+  dropped: number
+  /** Which gates rejected them: no-draft, no-rationale, no-confidence. */
+  gates: string[]
+  kind: 'staged' | 'quiet' | 'partial' | 'broken' | 'dropped'; streak: number
 }
 
 export interface InboxPayload {
@@ -197,6 +204,16 @@ export function nightshiftLine(n: NightshiftSummary | null): string {
   const run = n.streak > 1 ? ` (${n.streak} nights running)` : ''
   if (n.kind === 'broken') return `Nightshift failed${hm}: ${n.error}${run}`
   if (n.kind === 'partial') return `Nightshift ran${hm}, ${n.failed} of ${n.seen} failed`
+  /* A discarded draft is the quiet failure this record exists for: it cost a
+     model call and left nothing, and for two nights it read as "ran". Named
+     with its gate, because "discarded" without a reason is the same silence
+     one level up. */
+  if (n.kind === 'dropped') {
+    const what = `${n.dropped} draft${n.dropped === 1 ? '' : 's'} discarded`
+    const why = n.gates.length ? ` (${n.gates.join(', ')})` : ''
+    const also = n.staged ? `, ${n.staged} staged` : ''
+    return `Nightshift ran${hm}, ${what}${why}${also}${run}`
+  }
   return `Nightshift ran${hm}`
 }
 

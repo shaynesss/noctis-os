@@ -10,19 +10,34 @@ describe('nightshiftLine', () => {
     expect(nightshiftLine(null)).toBe('Nightshift has not recorded a run.')
     // The outcome went (2026-09-17): the proposals it staged are listed
     // directly underneath, so the sentence was reading the list out.
-    expect(nightshiftLine({ ran_at: at, staged: 2, failed: 0, seen: 2, error: null, kind: 'staged', streak: 1 }))
+    expect(nightshiftLine({ ran_at: at, staged: 2, failed: 0, seen: 2, error: null, dropped: 0, gates: [], kind: 'staged', streak: 1 }))
       .toBe('Nightshift ran at 03:00')
-    expect(nightshiftLine({ ran_at: at, staged: 0, failed: 0, seen: 0, error: null, kind: 'quiet', streak: 3 }))
+    expect(nightshiftLine({ ran_at: at, staged: 0, failed: 0, seen: 0, error: null, dropped: 0, gates: [], kind: 'quiet', streak: 3 }))
       .toBe('Nightshift ran at 03:00')
+  })
+
+  it('names a discarded draft, which read as a plain "ran" for two nights', () => {
+    /* seen 3, staged 0, failed 0 is what 2026-09-16 recorded: three distiller
+       calls whose drafts were dropped by a silent gate. The line said
+       "Nightshift ran at 01:04" and nothing else. */
+    expect(nightshiftLine({ ran_at: at, staged: 0, failed: 0, seen: 3, error: null, dropped: 3, gates: ['no-draft'], kind: 'dropped', streak: 2 }))
+      .toBe('Nightshift ran at 03:00, 3 drafts discarded (no-draft) (2 nights running)')
+    // Staging something does not excuse discarding the rest.
+    expect(nightshiftLine({ ran_at: at, staged: 1, failed: 0, seen: 4, error: null, dropped: 3, gates: ['no-confidence', 'no-rationale'], kind: 'dropped', streak: 1 }))
+      .toBe('Nightshift ran at 03:00, 3 drafts discarded (no-confidence, no-rationale), 1 staged')
+    // One draft, singular, and no gate recorded (an entry from before the
+    // gates existed) still says the count rather than saying nothing.
+    expect(nightshiftLine({ ran_at: at, staged: 0, failed: 0, seen: 1, error: null, dropped: 1, gates: [], kind: 'dropped', streak: 1 }))
+      .toBe('Nightshift ran at 03:00, 1 draft discarded')
   })
 
   it('still says so when the night failed, which is the whole point of the record', () => {
     // It failed every night for forty-one nights while its log said
     // "quiet"; a failure that reads like a success is the bug this exists
     // to prevent, so it is the one outcome the line keeps.
-    expect(nightshiftLine({ ran_at: at, staged: 0, failed: 4, seen: 4, error: "No such file or directory: 'claude'", kind: 'broken', streak: 41 }))
+    expect(nightshiftLine({ ran_at: at, staged: 0, failed: 4, seen: 4, error: "No such file or directory: 'claude'", dropped: 0, gates: [], kind: 'broken', streak: 41 }))
       .toBe("Nightshift failed at 03:00: No such file or directory: 'claude' (41 nights running)")
-    expect(nightshiftLine({ ran_at: at, staged: 1, failed: 1, seen: 3, error: null, kind: 'partial', streak: 1 }))
+    expect(nightshiftLine({ ran_at: at, staged: 1, failed: 1, seen: 3, error: null, dropped: 0, gates: [], kind: 'partial', streak: 1 }))
       .toBe('Nightshift ran at 03:00, 1 of 3 failed')
   })
 })

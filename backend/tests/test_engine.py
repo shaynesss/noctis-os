@@ -55,16 +55,17 @@ def test_every_mode_has_a_model():
     assert set(engine.MODE_TOOLS) == set(engine.MODE_MODELS)
 
 
-def test_the_tracked_policy_gains_the_hooks_and_keeps_everything_else():
-    """settings_config assigns into the loaded file. A fresh literal would drop
-    crossSessionInbound -- or whatever is added next -- without failing."""
+def test_settings_config_is_the_tracked_policy_and_registers_no_hooks():
+    """It carried a `hooks` block that nothing read, once the `-p` path that
+    passed it as `--settings` was deleted. Its survival is why two documents
+    told readers that a hosted session gets its telemetry hooks from here; it
+    gets them from the project's own settings file. Hooks that must hold
+    everywhere go through `interactive.statusline_settings` instead, which is
+    pinned by test_guard_shared_tree."""
     tracked = json.loads(engine.SHARED_SETTINGS.read_text())
     composed = json.loads(engine.settings_config())
-    for key, value in tracked.items():
-        assert composed[key] == value, f"{key} lost composing the hooks"
-    assert set(composed["hooks"]) == {"PostToolUse", "SessionEnd"}
-    for event in composed["hooks"].values():
-        assert Path(event[0]["hooks"][0]["command"].split()[0]).is_absolute()
+    assert composed == tracked
+    assert "hooks" not in composed
 
 
 def test_the_mcp_config_points_at_a_server_that_exists():

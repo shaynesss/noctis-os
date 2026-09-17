@@ -22,7 +22,7 @@ import re
 from datetime import datetime, timezone
 
 import vault_io
-from jobs import MAINTENANCE_STATE, jobs_dir
+from jobs import MAINTENANCE_STATE, jobs_dir, lessons_path
 
 
 class DiffApplyError(Exception):
@@ -172,11 +172,18 @@ def advance_lessons_cursor(mode: str) -> None:
     """Sets the cursor to the target mode's lessons.md live line count at
     accept time, not to a number carried in the proposal -- see
     parse_cursor_advance's docstring for why a session-supplied number is
-    structurally unreliable here. Same self-heal pattern as triggers.py
-    computing badges live instead of trusting stored state.
+    structurally unreliable here: compute from the live file at the moment
+    of use rather than trusting a stored number. `triggers.py` was the other
+    instance of that pattern and was deleted with the trigger badges at the
+    v2 cutover; this is the one that remains.
     """
-    lessons_path = f"modes/{mode}/lessons.md"
-    through = len(vault_io.read_file(lessons_path).splitlines()) if vault_io.file_exists(lessons_path) else 0
+    # Via jobs.lessons_path for the same reason jobs_dir is used in close_job:
+    # maintenance is not under `modes/`. Hardcoded, an accepted maintenance
+    # distillation set that mode's cursor to 0 instead of its line count,
+    # because file_exists was false and the branch silently took the zero,
+    # which re-lights accumulation for that mode every night forever.
+    path = lessons_path(mode)
+    through = len(vault_io.read_file(path).splitlines()) if vault_io.file_exists(path) else 0
 
     state, content = vault_io.read_frontmatter(MAINTENANCE_STATE)
     cursor = state.get("lessons_distilled_through", {}) or {}

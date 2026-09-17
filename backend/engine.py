@@ -143,24 +143,26 @@ def mcp_config() -> str:
 
 
 def settings_config() -> str:
-    """Permissions from the tracked file, plus the telemetry hooks.
+    """The tracked permission policy, as inline JSON.
 
-    Inline JSON rather than a path, because the hooks need absolute
-    interpreter and script paths and those cannot be committed. One tracked
-    policy (permissions.json, reviewable in a diff) and one machine-specific
-    part (these paths, derived not stored).
+    **It registers no hooks, and used to appear to.** Until 2026-09-17 this
+    built a `hooks` block naming `log_action.py` and `mark_session_end.py`,
+    and nothing ever read it: the `-p` orchestrator that passed this as
+    `--settings` was deleted at the PTY migration, and its one remaining
+    caller (`capabilities.py --migrate`) reads `permissions` alone. The block
+    cost more than its bytes, because the hooks README and DOCUMENTATION §11
+    both described it as how a session gets its hooks, and a session reading
+    either was told the wrong thing for two months.
+
+    Where hooks actually come from, both routes, so this is written down
+    somewhere the code can be read next to it:
+
+    * the telemetry pair, from each project's own `.claude/settings.local.json`
+      (so a project without one gets neither; see DOCUMENTATION §21)
+    * `guard_shared_tree.py`, from `interactive.py`'s `statusline_settings`,
+      which every hosted session carries in its argv
     """
-    policy = json.loads(SHARED_SETTINGS.read_text())
-    hook = lambda script: [{"matcher": "", "hooks": [{                # noqa: E731
-        "type": "command",
-        "command": f"{REPO_ROOT}/backend/.venv/bin/python3 "
-                   f"{REPO_ROOT}/backend/hooks/{script}",
-    }]}]
-    policy["hooks"] = {
-        "PostToolUse": hook("log_action.py"),
-        "SessionEnd": hook("mark_session_end.py"),
-    }
-    return json.dumps(policy)
+    return json.dumps(json.loads(SHARED_SETTINGS.read_text()))
 
 
 # Where `claude` actually lives, checked in order. PATH is searched first,

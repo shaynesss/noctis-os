@@ -41,10 +41,15 @@ def check_dev() -> list[SlackItem]:
 
 def check_settings() -> list[SlackItem]:
     """Undistilled lessons: any mode whose lessons.md has grown since the
-    last distillation pass, tracked via a line-count cursor in settings'
-    own state.md (`lessons_distilled_through`). Cursor advance-on-accept
-    isn't wired yet -- known follow-up, same shape as nightshift's other
-    not-yet-built mode-specific apply logic (see STATUS.md).
+    last distillation pass, tracked via a line-count cursor in maintenance's
+    own state.md (`lessons_distilled_through`). Advance-on-accept is wired:
+    the accept route calls `apply.advance_lessons_cursor`, which reads the
+    live line count rather than the number the draft carried.
+
+    This is the one surviving trigger. Friction (a `FRICTION:` marker scan)
+    and suspicion (a 7-day `state.md` staleness read) were computed by
+    `triggers.py`, which went with the trigger badges at the v2 cutover;
+    accumulation lives on here, as a nightly check rather than a badge.
     """
     settings_state, _ = vault_io.read_frontmatter(MAINTENANCE_STATE)
     cursor = settings_state.get("lessons_distilled_through", {}) or {}
@@ -62,7 +67,7 @@ def check_settings() -> list[SlackItem]:
                     slug_hint=f"undistilled-{mode}",
                     description=f"Custos: undistilled lessons in {mode}",
                     context=(
-                        f"modes/{mode}/lessons.md grew from {cursor.get(mode, 0)} "
+                        f"{lessons_path(mode)} grew from {cursor.get(mode, 0)} "
                         f"to {line_count} lines since the last distillation pass"
                     ),
                 )
