@@ -317,7 +317,7 @@ def test_an_old_transcript_is_not_read_for_refusals(tmp_path, monkeypatch):
 
 
 def test_model_label_reads_like_the_cli_shows_it():
-    from orchestrator.jsonl import _model_label
+    from orchestrator.jsonl import model_label as _model_label
     assert _model_label("claude-fable-5-1") == "Fable 5.1"
     assert _model_label("claude-opus-5") == "Opus 5"
     assert _model_label("claude-haiku-4-5-20251001") == "Haiku 4.5"

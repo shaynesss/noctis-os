@@ -1112,7 +1112,13 @@ def mode_defaults() -> dict:
     if not projects:
         last_project = next((d for d in recent if d != vault), None)
         projects = str(Path(last_project).parent) if last_project else str(home)
+    from engine import MODEL_CATALOG
     return {
+        # Every model a session may start on, with the level each is already
+        # configured to run at: the launcher's effort control follows the
+        # model, because that is where the CLI's own setting is keyed.
+        "models": [{**m, "effort": _configured_effort(m["id"])} for m in MODEL_CATALOG],
+        "mode_model": dict(MODE_MODELS),
         "effort": {mode: _configured_effort(model) for mode, model in MODE_MODELS.items()},
         "dirs": {
             "general": vault,

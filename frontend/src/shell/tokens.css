@@ -215,3 +215,51 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The launcher's effort slider.
+ *
+ * A real `input[type=range]`, not five buttons pretending: the keyboard
+ * model (arrows, Home, End) and the drag both come free, and effort is an
+ * ordered scale, which a row of buttons does not say. Styled here because a
+ * range input needs pseudo-element rules that utility classes cannot reach.
+ * Drawn in the signature, not the mode's accent: this file's own rule is
+ * that the interface's readings and meters are one hue so a reading is
+ * never mistaken for a character's colour, and General's accent is a light
+ * grey that made the rail read as a bright bar across the dialog.
+ */
+.effort-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.effort-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--color-sig) 0%,
+    var(--color-sig) var(--fill, 0%),
+    var(--color-line) var(--fill, 0%),
+    var(--color-line) 100%
+  );
+}
+
+.effort-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background: var(--color-sig);
+  border: 2px solid var(--color-sheet);
+  box-shadow: 0 0 0 1px var(--color-sig);
+}
+
+.effort-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-sig) 45%, transparent);
+}

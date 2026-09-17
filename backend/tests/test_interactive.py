@@ -128,3 +128,25 @@ def test_an_unknown_effort_is_refused_before_the_terminal_opens(vault, tmp_path)
     lands where a session should be. Caught here instead, as a 400."""
     with pytest.raises(ValueError, match="unknown effort"):
         interactive.spawn_args("faber", str(tmp_path), effort="maximum")
+
+
+def test_the_model_can_be_chosen_per_session_and_defaults_to_the_modes(vault, tmp_path):
+    """A mode is its methodology, not its model: dev.md calls running a
+    cheaper tier for mechanical work effort routing, and the launcher is
+    where that is chosen."""
+    default = interactive.spawn_args("faber", str(tmp_path))
+    assert default["model"] == MODE_MODELS["faber"]
+
+    chosen = interactive.spawn_args("faber", str(tmp_path), model="claude-haiku-4-5")
+    assert chosen["model"] == "claude-haiku-4-5"
+    assert chosen["args"][chosen["args"].index("--model") + 1] == "claude-haiku-4-5"
+    # Nothing else moved: the mode did not become another mode, so the argv
+    # differs in exactly one value.
+    i = default["args"].index("--model") + 1
+    assert chosen["args"][:i] + chosen["args"][i + 1:] == default["args"][:i] + default["args"][i + 1:]
+    assert chosen["env"] == default["env"]
+
+
+def test_an_unknown_model_is_refused_before_the_terminal_opens(vault, tmp_path):
+    with pytest.raises(ValueError, match="unknown model"):
+        interactive.spawn_args("faber", str(tmp_path), model="gpt-4")

@@ -57,18 +57,29 @@ ALL_TOOLS = (
     "mcp__noctis__job_context mcp__noctis__worklist"
 )
 
-# What a session can be switched to, and what each is for. The mode's own
+# What a session can be started on, and what each is for. The mode's own
 # entry in MODE_MODELS is the default; this is the menu when you want
 # something else for one session -- dev.md's "effort routing expressed as
-# model routing", made reachable rather than a launcher-only override.
+# model routing". A mode is its methodology, not its model.
+#
+# It had no readers between the Settings models table being removed and the
+# launcher gaining its chooser (2026-09-17), which is why Fable was missing
+# from it. Listed rather than passed through: an id the engine does not know
+# is rejected after the terminal has painted, and the error lands where a
+# session should be.
 MODEL_CATALOG: list[dict[str, str]] = [
     {"id": "claude-opus-5", "name": "Opus 5",
      "blurb": "Best for everyday, complex tasks"},
+    {"id": "claude-fable-5-1", "name": "Fable 5.1",
+     "blurb": "Deepest reasoning, on usage credits"},
     {"id": "claude-sonnet-5", "name": "Sonnet 5",
      "blurb": "Efficient for routine tasks"},
     {"id": "claude-haiku-4-5", "name": "Haiku 4.5",
      "blurb": "Fastest for quick answers"},
 ]
+
+# The ids alone, for validating what the launcher sends.
+MODELS = tuple(m["id"] for m in MODEL_CATALOG)
 
 MODE_TOOLS: dict[str, dict[str, str]] = {
     # The same entry for every mode, by construction rather than by five

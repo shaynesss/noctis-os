@@ -36,6 +36,8 @@ export interface Slot {
    *  configured level alone. Not remembered across a reload: a slot coming
    *  back reattaches to a live session or resumes one, and neither respawns. */
   effort?: string
+  /** The model, when the launcher chose one other than the mode's own. */
+  model?: string
   /** Slots sharing a group are shown side by side. Never a group of one:
    *  the shell clears a group the moment it has a single member. */
   group?: string
@@ -267,7 +269,7 @@ export function Terminals({ slots, active, accent, hidden, onSelect, onClose, on
               )}
               <div className="min-h-0 flex-1">
                 <Terminal id={s.id} mode={s.mode} cwd={s.cwd} accent={accent}
-                          resumeId={s.resumeId} prompt={s.prompt} effort={s.effort} />
+                          resumeId={s.resumeId} prompt={s.prompt} effort={s.effort} model={s.model} />
               </div>
             </div>
           )

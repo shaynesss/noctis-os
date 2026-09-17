@@ -33,11 +33,15 @@ export type Effort = (typeof EFFORTS)[number]
  * the scheduler can still run it. */
 const MODES: Mode[] = ['general', 'faber', 'noctua', 'vesper']
 
+interface ModelChoice { id: string; name: string; blurb: string; effort: Effort | null }
+
 export interface LaunchRequest {
   mode: Mode
   cwd: string
   /** Omitted when the mode's configured level was left alone. */
   effort?: Effort
+  /** Omitted when the mode's own model was left alone. */
+  model?: string
   /** Set when this launch came from a handoff, for the provenance block. */
   from?: { mode: Mode; label: string; carried: string }
 }
@@ -76,7 +80,11 @@ export function Launcher({
    * whichever directory was used last regardless of mode, which put a
    * Noctua session in the home folder — nobody's sensible starting point,
    * and the reason it opened by remarking on where it was. */
-  const defaults = useFetched<{ dirs: Record<string, string>; effort: Record<string, Effort | null> }>('/v2/mode-defaults')
+  const defaults = useFetched<{
+    dirs: Record<string, string>
+    models: ModelChoice[]
+    mode_model: Record<string, string>
+  }>('/v2/mode-defaults')
   const [cwd, setCwd] = useState(handoff?.cwd ?? '')
   const [touched, setTouched] = useState(false)
 
@@ -90,12 +98,25 @@ export function Launcher({
   }, [mode, defaults, dirs, touched, handoff])
   const [carried, setCarried] = useState(handoff?.carried ?? '')
 
-  /* Follows the mode too, until you pick one. Each mode has its own model
-   * and models are configured separately, so the level that is already true
-   * for Faber is not the one that is true for Noctua. */
+  /* The model, and the effort that follows it.
+   *
+   * A mode is its methodology, not its model, so the model is a per-session
+   * choice with the mode's own as its default. Effort is configured per
+   * model in the engine's settings, so the level shown follows whichever
+   * model is selected: picking Haiku shows what Haiku is set to, not what
+   * Opus was. Both stop following once you touch them. */
+  const models = useMemo(() => (defaults ? defaults.models : []), [defaults])
+  const [model, setModel] = useState<string | null>(null)
+  const [modelTouched, setModelTouched] = useState(false)
+  const modeModel = defaults ? defaults.mode_model[mode] ?? null : null
+  useEffect(() => {
+    if (!modelTouched) setModel(modeModel)
+  }, [modeModel, modelTouched])
+
   const [effort, setEffort] = useState<Effort | null>(null)
   const [effortTouched, setEffortTouched] = useState(false)
-  const configured = defaults ? defaults.effort?.[mode] ?? null : null
+  const chosen = models.find((m) => m.id === model) ?? null
+  const configured = chosen?.effort ?? null
   useEffect(() => {
     if (!effortTouched) setEffort(configured)
   }, [configured, effortTouched])
@@ -125,6 +146,9 @@ export function Launcher({
       mode,
       cwd,
       effort: effort ?? undefined,
+      // Only when it differs: sending the mode's own model as an override
+      // would be a lie in the argv about where the choice came from.
+      model: model && model !== modeModel ? model : undefined,
       from: handoff ? { mode: handoff.mode, label: handoff.label, carried } : undefined,
     })
   }
@@ -276,20 +300,21 @@ export function Launcher({
 
           <div className="mt-[12px]">
             <span className="mb-[5px] flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-faint">
-              Effort
+              Model
               <span className="normal-case tracking-normal">
-                {configured ? `— ${MODE_LABEL[mode]} runs at ${configured} unless you say otherwise` : '— the engine\'s own setting'}
+                {model === modeModel ? `— ${MODE_LABEL[mode]}'s own` : '— for this session'}
               </span>
             </span>
-            <div className="flex gap-[3px]" role="group" aria-label="Effort">
-              {EFFORTS.map((level) => {
-                const on = effort === level
+            <div className="flex gap-[3px]" role="group" aria-label="Model">
+              {models.map((m) => {
+                const on = m.id === model
                 return (
                   <button
-                    key={level}
+                    key={m.id}
                     type="button"
-                    onClick={() => { setEffortTouched(true); setEffort(level) }}
+                    onClick={() => { setModelTouched(true); setModel(m.id) }}
                     aria-pressed={on}
+                    title={m.blurb}
                     className={`flex-1 rounded-control border px-[8px] py-[6px] font-mono text-[11.5px] transition-colors ${
                       on ? '' : 'border-line text-ink-faint hover:bg-elevated hover:text-ink-dim'
                     }`}
@@ -302,6 +327,56 @@ export function Launcher({
                           }
                         : undefined
                     }
+                  >
+                    {m.name}
+                  </button>
+                )
+              })}
+            </div>
+            {chosen && (
+              <div className="mt-[4px] text-[11.5px] text-ink-faint">{chosen.blurb}</div>
+            )}
+          </div>
+
+          <div className="mt-[12px]">
+            <span className="mb-[3px] flex items-center gap-2 font-mono text-[10.5px] uppercase tracking-[0.12em] text-ink-faint">
+              Effort
+              <span className="normal-case tracking-normal">
+                {configured
+                  ? effort === configured
+                    ? `— ${chosen?.name ?? 'this model'} is set to ${configured}`
+                    : `— ${chosen?.name ?? 'this model'} is set to ${configured}, running this one at ${effort}`
+                  : '— the engine\'s own setting'}
+              </span>
+            </span>
+            {/* A slider, because effort is an ordered scale and five buttons
+                do not say so. The input carries the keyboard model; the row
+                of labels under it is the scale, and clicking one is the
+                same as dragging there. */}
+            <input
+              type="range"
+              className="effort-slider"
+              min={0}
+              max={EFFORTS.length - 1}
+              step={1}
+              value={Math.max(0, EFFORTS.indexOf((effort ?? configured ?? 'high') as Effort))}
+              onChange={(e) => { setEffortTouched(true); setEffort(EFFORTS[Number(e.target.value)]) }}
+              aria-label="Effort"
+              aria-valuetext={effort ?? undefined}
+              style={{
+                ['--fill' as string]: `${(Math.max(0, EFFORTS.indexOf((effort ?? configured ?? 'high') as Effort)) / (EFFORTS.length - 1)) * 100}%`,
+              }}
+            />
+            <div className="flex justify-between">
+              {EFFORTS.map((level) => {
+                const on = effort === level
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => { setEffortTouched(true); setEffort(level) }}
+                    className="font-mono text-[10.5px] transition-colors"
+                    style={{ color: on ? 'var(--color-sig-6)' : 'var(--color-ink-faint)' }}
                   >
                     {level}
                   </button>

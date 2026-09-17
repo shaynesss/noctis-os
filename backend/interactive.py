@@ -26,7 +26,7 @@ from pathlib import Path
 
 import jobs
 import vault_io
-from engine import MODE_MODELS, SHARED_SETTINGS, claude_binary, mcp_config
+from engine import MODE_MODELS, MODELS, SHARED_SETTINGS, claude_binary, mcp_config
 from orchestrator.modes import mode_agents, mode_methodology
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -86,7 +86,7 @@ EFFORTS = ("low", "medium", "high", "xhigh", "max")
 
 def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
                slot: str | None = None, prompt: str | None = None,
-               effort: str | None = None) -> dict:
+               effort: str | None = None, model: str | None = None) -> dict:
     """Everything the shell needs to open one interactive session.
 
     Returns the binary separately from the arguments because the Rust side
@@ -96,7 +96,14 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
     if mode not in MODE_MODELS:
         raise ValueError(f"unknown mode {mode!r}")
 
-    args: list[str] = ["--model", MODE_MODELS[mode]]
+    # The mode's model unless the launcher said otherwise. A mode is its
+    # methodology, not its model: running Faber on a cheaper tier for
+    # mechanical work is effort routing, which dev.md already describes as a
+    # per-job call rather than a property of the mode.
+    if model and model not in MODELS:
+        raise ValueError(f"unknown model {model!r}; expected one of {', '.join(MODELS)}")
+    chosen_model = model or MODE_MODELS[mode]
+    args: list[str] = ["--model", chosen_model]
 
     # How hard the session thinks, chosen at the launcher rather than typed
     # as `/effort` once it is already running. Omitted when not given, which
@@ -174,5 +181,5 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
         "env": env,
         "cwd": cwd,
         "mode": mode,
-        "model": MODE_MODELS[mode],
+        "model": chosen_model,
     }

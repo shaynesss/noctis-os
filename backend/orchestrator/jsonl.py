@@ -500,7 +500,7 @@ _LIMIT_MIN_INTERVAL_S = 5.0        # the bar polls every four
 _refusal_memo: dict[Path, tuple[int, str | None, dict[str, dict[str, Any]], dict[str, str]]] = {}
 
 
-def _model_label(model_id: str) -> str:
+def model_label(model_id: str) -> str:
     """`claude-fable-5-1` -> `Fable 5.1`, the shape the CLI shows itself.
 
     The refusal record is synthetic and carries no display name, and the
@@ -556,7 +556,7 @@ def _refusals_in(path: Path) -> list[dict[str, Any]]:
                         if isinstance(block, dict) and block.get("type") == "text":
                             said = block.get("text") or ""
                     refused[last_model] = {
-                        "model": last_model, "label": _model_label(last_model),
+                        "model": last_model, "label": model_label(last_model),
                         "at": at, "message": said.strip(), "session": path.stem,
                     }
                     continue

@@ -253,7 +253,7 @@ export function App() {
     // opening-prompt box went on 2026-09-16, and a fresh session opens on
     // the backend's prompt instead.
     const prompt = req.from?.carried.trim() || undefined
-    open(newSlot(req.mode, req.cwd, { prompt, effort: req.effort }))
+    open(newSlot(req.mode, req.cwd, { prompt, effort: req.effort, model: req.model }))
     setLauncher(null)
   }, [open])
 

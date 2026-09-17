@@ -134,8 +134,22 @@ def _with_origin(tmp_path: Path) -> Path:
     return root
 
 
-def _commit(root: Path, msg: str) -> None:
-    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", msg], cwd=root, check=True)
+# Every fixture commit carries a body, because the push refuses one without
+# from 2026-09-17 and most of these tests are about something else. `at`
+# pins the date: a test about the rule must say which side of it a commit
+# falls on rather than trusting the clock, which is how three of these went
+# red overnight when the cutoff passed.
+FIXTURE_BODY = "Leaves the fixture where it was.\nNext: nothing."
+
+
+def _commit(root: Path, msg: str, body: str | None = FIXTURE_BODY, at: str | None = None) -> None:
+    import os
+    env = {**os.environ}
+    if at:
+        env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = at
+    message = f"{msg}\n\n{body}" if body else msg
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty",
+                    "-m", message], cwd=root, check=True, env=env)
 
 
 def test_the_push_button_pushes_and_refuses_attribution_lines(tmp_path, monkeypatch, client, auth_headers):
@@ -149,7 +163,7 @@ def test_the_push_button_pushes_and_refuses_attribution_lines(tmp_path, monkeypa
     assert r.status_code == 409 and "2 attribution lines" in r.json()["detail"]
     assert subprocess.run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() == "2", "nothing was pushed"
     # Strip it and go.
-    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend", "-m", "clean now"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend", "-m", "clean now\n\n" + FIXTURE_BODY], cwd=root, check=True)
     r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
     assert r.status_code == 200 and r.json()["pushed"] is True and r.json()["force"] is False
     assert subprocess.run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() == "0"
@@ -159,7 +173,7 @@ def test_a_diverged_branch_needs_an_explicit_force(tmp_path, monkeypatch, client
     root = _with_origin(tmp_path)
     monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
     # Rewrite the pushed commit: same content, new hash -- what filter-repo leaves behind.
-    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend", "-m", "first, reworded"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend", "-m", "first, reworded\n\n" + FIXTURE_BODY], cwd=root, check=True)
     r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
     assert r.status_code == 409 and "force" in r.json()["detail"]
     r = client.post("/v2/repos/push", json={"cwd": str(root), "force": True}, headers=auth_headers)
@@ -346,7 +360,9 @@ def test_the_push_refuses_a_bodiless_commit_made_after_the_rule(tmp_path, monkey
     import os
     root = _with_origin(tmp_path)
     monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
-    _commit(root, "old style, no body")                                  # dated now, before the rule
+    # Explicitly before the rule, not "now": this test read the clock and
+    # passed for two days, then failed at midnight on the 17th.
+    _commit(root, "old style, no body", body=None, at="2026-09-16T10:00:00+00:00")
     r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
     assert r.status_code == 200, r.json()
     env = {**os.environ, "GIT_AUTHOR_DATE": "2026-09-20T10:00:00+00:00", "GIT_COMMITTER_DATE": "2026-09-20T10:00:00+00:00"}

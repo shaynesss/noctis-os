@@ -111,7 +111,7 @@ def list_sessions() -> dict:
 @router.get("/interactive-args")
 def interactive_args(mode: str, cwd: str, resume_id: str | None = None,
                      slot: str | None = None, prompt: str | None = None,
-                     effort: str | None = None) -> dict:
+                     effort: str | None = None, model: str | None = None) -> dict:
     """The argv for a session the shell hosts in a pseudo-terminal.
 
     The Rust side owns the terminal and knows nothing about modes; this owns
@@ -126,7 +126,8 @@ def interactive_args(mode: str, cwd: str, resume_id: str | None = None,
     # would otherwise be a literal directory called "~".
     try:
         args = interactive.spawn_args(mode, str(_safe_cwd(cwd)), resume_id,
-                                      slot=slot, prompt=prompt, effort=effort)
+                                      slot=slot, prompt=prompt, effort=effort,
+                                      model=model)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     if resume_id:
