@@ -51,18 +51,18 @@ const theme = (accent: string) => ({
   brightBlack: token('--color-ink-faint', '#6a6a6a'),
   brightRed: '#ff5c3d',
   brightGreen: '#54c67e',
-  /* Grey, not maintenance's orange (2026-09-17). This is the slot the CLI
-   * prints its permission-mode line in ("auto mode on (shift+tab to cycle)"),
-   * which is furniture: it states a setting, it is not news, and an orange as
-   * strong as `--color-maint` read as a warning every time the terminal
-   * redrew. The same grey as the hint already beside it, so the line reads as
-   * one calm sentence.
+  /* The signature, not maintenance's orange (2026-09-17). This is the slot
+   * the CLI prints its permission-mode line in ("auto mode on (shift+tab to
+   * cycle)"), which is furniture: it states a setting, it is not news, and an
+   * orange as strong as `--color-maint` read as a warning every time the
+   * terminal redrew.
    *
-   * It now matches `white`, which is the cost: the CLI can no longer
-   * distinguish those two slots here. Accepted, because nothing in a session
-   * was using bright yellow against white to mean anything. `--color-ink`
-   * (#cccccc) is the lighter choice if this wants to stand slightly apart. */
-  brightYellow: token('--color-ink-dim', '#8a8a8a'),
+   * `--sig-text` rather than a grey (tried first, same day) or a raw
+   * `--color-sig-*` step: it is the signature's text weight, the one already
+   * chosen to sit legibly on the ground beside a meter, so the line belongs
+   * to the app without competing with the mode accent the cursor carries.
+   * Every other slot stays where it was. */
+  brightYellow: token('--sig-text', '#de778a'),
   brightBlue: '#7aa7ea',
   brightMagenta: '#b662d0',
   brightCyan: '#5cc4bc',
