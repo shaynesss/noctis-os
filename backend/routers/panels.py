@@ -1245,8 +1245,31 @@ def acknowledge_flag(mode: str, slug: str) -> dict:
     return {"acknowledged": f"{mode}/{slug}", "committed": committed}
 
 
+def _archive_path(item_id: str) -> str:
+    """Where this decision's text goes, never on top of an earlier one.
+
+    A slug carries the date its item was staged, so an item rejected and
+    then restaged the same day (a bad diff redrafted, which is exactly what
+    "reopening one means staging it again" below asks for) comes back with
+    the name its own earlier decision already holds. This used to be a 409,
+    "was already decided", which read as a safety check and was in practice
+    a rule that no item could be decided twice in one calendar day. The
+    earlier decision is the record and is never overwritten; the new one
+    takes the next free `-2`, `-3`. Nothing parses these names -- the file's
+    own text says which item it is.
+    """
+    base = f"{MAINTENANCE_ARCHIVE}/{item_id}"
+    if not vault_io.file_exists(f"{base}.md"):
+        return f"{base}.md"
+    n = 2
+    while vault_io.file_exists(f"{base}-{n}.md"):
+        n += 1
+    return f"{base}-{n}.md"
+
+
 def _decision_body(item_id: str, decision: str, text: str,
-                   applied: str | None, closed: str | None) -> str:
+                   applied: str | None, closed: str | None,
+                   archive: str | None = None) -> str:
     """The commit body for an accept or a reject.
 
     A generated message is still the record, so it answers the same questions
@@ -1269,8 +1292,8 @@ def _decision_body(item_id: str, decision: str, text: str,
     else:
         did.append("Rejected, so nothing was applied. The argument is kept rather "
                    "than deleted, the same as any superseded content in the vault.")
-    did.append(f"The proposal moves to {MAINTENANCE_ARCHIVE}/{item_id}.md and its "
-               f"index entry leaves {MAINTENANCE_STATE}.")
+    did.append(f"The proposal moves to {archive or f'{MAINTENANCE_ARCHIVE}/{item_id}.md'} "
+               f"and its index entry leaves {MAINTENANCE_STATE}.")
     if closed:
         did.append(f"Closed {closed}, which this was staged on behalf of.")
     lines.append(" ".join(did))
@@ -1309,6 +1332,14 @@ def decide(item_id: str, decision: str) -> dict:
 
     Rejecting archives, drops the index entry and commits, so a rejection is
     on the record too.
+
+    Deciding the same item twice in one day is allowed, and has to be: a
+    proposal rejected for a bad diff is restaged under the same date-stamped
+    slug, and a guard on the archive filename ("was already decided") turned
+    the body's own closing line -- "reopening one means staging it again" --
+    into something the app refused to let you do. A double click is caught
+    by the 404 above instead, since the first decision moves the staged file
+    away. `_archive_path` keeps the earlier decision intact.
     """
     if decision not in {"accept", "reject"}:
         raise HTTPException(status_code=400, detail="Decision is accept or reject")
@@ -1319,9 +1350,7 @@ def decide(item_id: str, decision: str) -> dict:
     if not vault_io.file_exists(staged):
         raise HTTPException(status_code=404, detail=f"No such proposal: {item_id}")
 
-    archive = f"{MAINTENANCE_ARCHIVE}/{item_id}.md"
-    if vault_io.file_exists(archive):
-        raise HTTPException(status_code=409, detail=f"{item_id} was already decided")
+    archive = _archive_path(item_id)
 
     applied: str | None = None
     closed: str | None = None
@@ -1349,7 +1378,7 @@ def decide(item_id: str, decision: str) -> dict:
     committed = _commit_vault(
         f"{'Accept' if decision == 'accept' else 'Reject'} {item_id}"
         + (f": applied to {applied}" if applied else ""),
-        _decision_body(item_id, decision, text, applied, closed),
+        _decision_body(item_id, decision, text, applied, closed, archive),
         touched)
     return {"item": item_id, "decision": decision, "archived_to": archive,
             "applied_to": applied, "closed_job": closed, "committed": committed}

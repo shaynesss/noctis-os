@@ -31,10 +31,14 @@ no writer.
   are failures with reasons rather than drops without. `stdin=DEVNULL` drops the
   three-second wait per call for input that never comes.
 - **The first live run staged three proposals** (dev, research, maintenance),
-  which exposed two things only a real proposal could: a drafter writes git's
-  `--- a/path` header whatever the format example shows, so `apply_proposal`
-  strips an `a/`/`b/` prefix; and a target the vault lacks is now a 409 naming
-  the file instead of a `FileNotFoundError` reaching the accept route as a 500.
+  the first the system has ever staged from a model. Two hardening fixes came
+  out of reading real drafts rather than test fixtures: the first live drafter
+  call wrote its diff header as `--- a/modes/dev/dev.md`, git's form rather than
+  the format example's bare path (the three staged proposals happened to use the
+  bare form, so this is defensive, not a failure that occurred), and
+  `apply_proposal` strips an `a/`/`b/` prefix now; and a target the vault lacks
+  is a 409 naming the file instead of a `FileNotFoundError` reaching the accept
+  route as a 500.
 - **A live session is no longer read as a dead one.** `staleness._log_tail` read
   `lines[-1]` for the log's newest timestamp, but an action-log entry keeps the
   newlines its tool call had, so every multi-line Bash command writes lines with

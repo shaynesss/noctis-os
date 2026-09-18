@@ -159,3 +159,61 @@ def test_the_real_commit_passes_the_real_push_check(vault, client, auth_headers)
                              capture_output=True, text=True).stdout.strip()
     assert subject.startswith("Accept faber-pivot-track-20260914")
     assert _recordless(root, "HEAD~1..HEAD") == [], "the push would refuse the app's own commit"
+
+
+# --- an item can be decided twice in one day, because restaging says so -------
+
+def test_the_same_slug_can_be_decided_again_after_being_restaged(vault, client, auth_headers):
+    """A slug carries the date its item was staged, so a proposal rejected
+    for a bad diff and redrafted the same day comes back under the name its
+    own rejection already holds in the archive. That was a 409, "was already
+    decided", which read as a safety check and in practice meant no item
+    could be decided twice in one calendar day -- while the rejection's own
+    commit body was telling the reader that reopening one means staging it
+    again. Found live 2026-09-18, on the first restage the system ever did.
+    """
+    _stage()
+    first = client.post("/v2/inbox/faber-pivot-track-20260914/reject", headers=auth_headers)
+    assert first.status_code == 200
+    assert first.json()["archived_to"] == "maintenance/archive/faber-pivot-track-20260914.md"
+
+    _stage()   # redrafted, same slug, same day
+    second = client.post("/v2/inbox/faber-pivot-track-20260914/accept", headers=auth_headers)
+
+    assert second.status_code == 200
+    # The earlier decision is the record and is never written over.
+    assert second.json()["archived_to"] == "maintenance/archive/faber-pivot-track-20260914-2.md"
+    assert vault_io.file_exists("maintenance/archive/faber-pivot-track-20260914.md")
+    assert vault_io.file_exists("maintenance/archive/faber-pivot-track-20260914-2.md")
+    assert second.json()["applied_to"] == "modes/dev/dev.md"
+
+
+def test_deciding_a_proposal_that_is_not_staged_is_a_404(vault, client, auth_headers):
+    """What actually catches a double click: the first decision moves the
+    staged file to the archive, so the second request finds nothing to
+    decide. This is the guard the archive-filename check was mistaken for.
+    """
+    _stage()
+    assert client.post("/v2/inbox/faber-pivot-track-20260914/reject",
+                       headers=auth_headers).status_code == 200
+    again = client.post("/v2/inbox/faber-pivot-track-20260914/reject", headers=auth_headers)
+    assert again.status_code == 404
+
+
+def test_the_body_names_the_archive_file_the_decision_actually_wrote(vault):
+    """The commit body says where the proposal went; on a second decision
+    that is the suffixed name, not the one the first decision took."""
+    from routers.panels import _decision_body
+    body = _decision_body("faber-pivot-track-20260914", "reject", PROPOSAL, None, None,
+                          "maintenance/archive/faber-pivot-track-20260914-2.md")
+    assert "maintenance/archive/faber-pivot-track-20260914-2.md" in body
+    assert "maintenance/archive/faber-pivot-track-20260914.md and" not in body
+
+
+def test_archive_path_walks_past_every_decision_already_on_record(vault):
+    from routers.panels import _archive_path
+    assert _archive_path("x-20260918") == "maintenance/archive/x-20260918.md"
+    vault_io.write_file("maintenance/archive/x-20260918.md", "first\n")
+    assert _archive_path("x-20260918") == "maintenance/archive/x-20260918-2.md"
+    vault_io.write_file("maintenance/archive/x-20260918-2.md", "second\n")
+    assert _archive_path("x-20260918") == "maintenance/archive/x-20260918-3.md"
