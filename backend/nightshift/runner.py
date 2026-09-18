@@ -153,7 +153,20 @@ Return that proposal as your final message and nothing else: start at
 no write tool and nothing to save it to -- your answer *is* the file, and
 the sweep writes it where it belongs.
 Follow the four-part format above (Rationale, Diff, Evidence, Confidence)
-exactly. For Confidence: write "high" if multiple independent lessons
+exactly.
+
+How your diff will be applied, because it decides whether the proposal
+survives: the ` ` context lines and `-` removed lines of each `@@` hunk are
+joined into one block and searched for in the target file as an exact
+string, which must be found exactly once. So copy every context line
+verbatim from the file you read, in file order, with no line left out --
+quoting the first bullet of a list and then jumping to the next heading
+makes a block that appears nowhere. Keep the context tight, two or three
+lines either side is plenty, and a blank line you are *adding* is a `+`
+line, not a context line. If you cannot quote the surrounding lines exactly,
+say so in the Rationale and give no diff rather than an approximate one.
+
+For Confidence: write "high" if multiple independent lessons
 entries clearly support the same pattern, or "low" if you're inferring
 from a single entry or a weaker signal -- then one sentence on why. This
 is a genuine self-assessment, not a formality; judge it honestly.
