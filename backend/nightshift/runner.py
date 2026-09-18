@@ -5,6 +5,7 @@ maintenance/inbox/<slug>.md and the mirrored index entry in
 maintenance/state.md -- nothing else in the vault, ever.
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -46,27 +47,30 @@ DROPS_DIR = Path(__file__).resolve().parents[1] / "runtime" / "nightshift-drops"
 # has `seen: 3, staged: 0, failed: 0` for 2026-09-16 and the same shape for
 # 09-17, which is three distiller calls a night, paid for, discarded, unlogged.
 GATES = {
-    "no-draft": "the drafter wrote no file",
+    "no-draft": "the drafter returned nothing",
     "no-rationale": "the draft has no `## Rationale` section",
     "no-confidence": "the draft's `## Confidence` is missing or is not high/low",
 }
 
 
 def _drop(dropped: list[dict], item: SlackItem, slug: str, gate: str,
-          draft: Path | None) -> None:
+          draft: str | None) -> None:
     """Record a draft that did not make it, and keep it if there is one.
 
     Deleting the evidence is what made this invisible twice over: the gate
     was silent *and* the artefact it rejected was unlinked, so the next
-    morning had neither a reason nor a draft to read. The file moves to
+    morning had neither a reason nor a draft to read. The text goes to
     `runtime/nightshift-drops/` instead, where it can be opened.
+
+    It is text rather than a file from 2026-09-18: a rejected draft never
+    reaches the inbox at all now, because the drafter hands its work back
+    and the runner is what writes.
     """
     kept: str | None = None
-    if draft is not None and draft.exists():
+    if draft and draft.strip():
         DROPS_DIR.mkdir(parents=True, exist_ok=True)
         target = DROPS_DIR / f"{slug}.md"
-        target.write_text(draft.read_text(encoding="utf-8"), encoding="utf-8")
-        draft.unlink()
+        target.write_text(draft, encoding="utf-8")
         kept = str(target)
     dropped.append({"slug": slug, "kind": item.kind, "gate": gate, "kept": kept})
     print(f"nightshift: dropped {slug} ({gate}: {GATES[gate]})"
@@ -98,11 +102,22 @@ def _slug_for(item: SlackItem) -> str:
     return f"{_identity_prefix(item)}{date}"
 
 
-def _draft_distillation(item: SlackItem, vault_path: Path, inbox_path: Path) -> None:
+def _draft_distillation(item: SlackItem, vault_path: Path) -> str:
     """Maintenance's slack surface genuinely needs judgment (identify a
     recurring pattern, draft a diff candidate) -- borrows maintenance's own
-    distiller subagent at reduced permission: read-only over the vault,
-    write scoped to exactly this one inbox file, no bash, no network.
+    distiller subagent at reduced permission: read-only over the vault, no
+    write tool at all, no bash, no network.
+
+    **The drafter returns the proposal; the runner writes it (2026-09-18).**
+    It used to be handed a `Write` scoped to one path, and every such draft
+    since the machine started working was thrown away: any parenthesised
+    specifier on `Write` in `--allowedTools` is refused, so the model did
+    the reading, found the pattern, wrote a correct four-part proposal and
+    was denied at the last step. `Write(/abs/path.md)`, `Write(//abs)`,
+    `Write(rel/path.md)` and `Write(dir/**)` were all measured; only a bare
+    `Write` is honoured, and a bare `Write` on an unattended nightly job is
+    the whole vault. Handing the text back needs no write permission and is
+    what `maintenance/agents/distiller.md` says this subagent is: read-only.
 
     Methodology and agent definition moved to maintenance/ on 2026-09-07
     (Noctis v2 Stage 1 item 3). State -- the inbox, its index, the archive --
@@ -131,17 +146,21 @@ Required proposal format:
 ---
 
 Task: {item.context}. Read the relevant lessons.md file(s) under modes/,
-identify the specific pattern, and write ONE proposal file to exactly this
-path: {inbox_path}
+identify the specific pattern, and draft ONE proposal.
+
+Return that proposal as your final message and nothing else: start at
+`## Rationale`, no preamble, no sign-off, no code fence around it. You have
+no write tool and nothing to save it to -- your answer *is* the file, and
+the sweep writes it where it belongs.
 Follow the four-part format above (Rationale, Diff, Evidence, Confidence)
 exactly. For Confidence: write "high" if multiple independent lessons
 entries clearly support the same pattern, or "low" if you're inferring
 from a single entry or a weaker signal -- then one sentence on why. This
 is a genuine self-assessment, not a formality; judge it honestly.
-Do not write anywhere else. Do not run any other tool besides Read/Grep/Write.
+Read and Grep are the only tools you have; do not attempt any other.
 """
 
-    subprocess.run(
+    result = subprocess.run(
         [
             "claude",
             "-p",
@@ -151,9 +170,9 @@ Do not write anywhere else. Do not run any other tool besides Read/Grep/Write.
             "--model",
             DISTILLER_MODEL,
             "--allowedTools",
-            f"Read Grep Write({inbox_path})",
+            "Read Grep",
             "--disallowedTools",
-            "Bash WebFetch WebSearch Edit",
+            "Bash WebFetch WebSearch Edit Write",
             "--add-dir",
             str(vault_path),
         ],
@@ -162,9 +181,15 @@ Do not write anywhere else. Do not run any other tool besides Read/Grep/Write.
         timeout=180,
         capture_output=True,
         text=True,
+        # Otherwise every call waits three seconds for a stdin that is
+        # never coming ("no stdin data received in 3s, proceeding without
+        # it"), three times a night for nothing.
+        stdin=subprocess.DEVNULL,
     )
 
-    if inbox_path.exists() and item.slug_hint.startswith("undistilled-"):
+    draft = _result_text(result)
+
+    if draft and item.slug_hint.startswith("undistilled-"):
         # Records which mode's lessons_distilled_through cursor to advance
         # on accept, and to what -- computed here (deterministic, draft
         # time), not re-derived later from the slug at accept time (see
@@ -176,11 +201,79 @@ Do not write anywhere else. Do not run any other tool besides Read/Grep/Write.
         # FileNotFoundError here and was recorded as a failure of the whole
         # item (found 2026-09-17, while making the drop gates speak).
         line_count = len(vault_io.read_file(lessons_path(target_mode)).splitlines())
-        with inbox_path.open("a", encoding="utf-8") as f:
-            f.write(f"\n<!-- cursor-advance: {target_mode}={line_count} -->\n")
+        draft += f"\n<!-- cursor-advance: {target_mode}={line_count} -->\n"
+
+    return draft
 
 
-# What a kind of slack turns into. `flagged-job` was here until 2026-09-17:
+def _result_text(result: subprocess.CompletedProcess) -> str:
+    """The proposal, out of `--output-format json`'s envelope.
+
+    The envelope is read rather than thrown away because throwing it away
+    is what hid the permission bug above for three nights. `stdout` carried
+    `permission_denials` every one of those nights, naming the tool and the
+    exact path it was refused, and `capture_output=True` with nothing
+    reading the result discarded it; the night saw only a missing file and
+    called it `no-draft`, which is true and useless.
+
+    A drafter that comes back with nothing usable raises, so the run records
+    a failure *with its reason* rather than an empty draft with none. An
+    identical raise across every item is what `report.record` reads as a
+    broken machine rather than a quiet night.
+    """
+    try:
+        payload = json.loads(result.stdout or "")
+    except ValueError:
+        raise RuntimeError(
+            f"drafter output was not JSON: {(result.stdout or result.stderr or '')[:200]}"
+        ) from None
+
+    if payload.get("is_error"):
+        # Checked before the text, because on an error the text *is* the
+        # error ("ran out of turns"), and a proposal file is the last place
+        # that should end up.
+        raise RuntimeError(f"drafter errored: {str(payload.get('result'))[:200]}")
+
+    body = _proposal_body(payload.get("result") or "")
+    if body:
+        return body
+
+    # Checked after the text, the other way round: a denial the model worked
+    # around and still answered correctly is not worth throwing a good draft
+    # away for. A denial that left nothing behind is exactly the bug above.
+    denied = sorted({d.get("tool_name", "?") for d in payload.get("permission_denials") or []})
+    if denied:
+        raise RuntimeError(f"drafter was denied {', '.join(denied)} and returned nothing")
+    return ""
+
+
+def _proposal_body(text: str) -> str:
+    """The proposal file's content, out of whatever the model wrapped it in.
+
+    Two liberties, both one-directional: a fenced block is unwrapped, and
+    anything before the first `## Rationale` is cut. A model told to answer
+    with a file still sometimes says "Here is the proposal:" first, and that
+    line would otherwise be the first line of a vault file for good. Nothing
+    is added, nothing is reordered, and a draft with no `## Rationale` at all
+    comes back whole -- for the gate to reject and the drops folder to keep,
+    which is the only way the morning can see what went wrong.
+    """
+    body = text.strip()
+    if body.startswith("```"):
+        lines = body.splitlines()
+        if len(lines) > 1 and lines[-1].strip() == "```":
+            body = "\n".join(lines[1:-1]).strip()
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        if line.strip().lower() == "## rationale":
+            body = "\n".join(lines[i:]).strip()
+            break
+    return body + "\n" if body else ""
+
+
+# What a kind of slack turns into: `(item, vault_path) -> str`, the proposal's
+# text. A drafter does not write -- see `_draft_distillation`. `flagged-job` was
+# here until 2026-09-17:
 # it drafted a status note about a flagged job that proposed nothing, sat
 # beside the same job in the Inbox's flagged list, and came back the night
 # after it was accepted. The flag itself is the item; the Inbox shows it.
@@ -210,7 +303,14 @@ def run() -> tuple[list[str], list[dict], list[dict], int]:
     2026-09-16 recorded, and it was three distiller runs thrown away. Drops
     are returned for the same reason failures are, and the rejected draft is
     kept rather than deleted, so the reason and the artefact both survive to
-    the morning."""
+    the morning.
+
+    **And a third time, on 2026-09-18.** Every distillation draft since the
+    machine started working was denied at its `Write` and discarded as
+    `no-draft`: the reason sat in the drafter's own JSON output, which was
+    captured and never read. Advance hands its text back now and the gates
+    run against that, so a proposal reaches `inbox/` only by passing them,
+    and a rejected one never lands where the app lists proposals at all."""
     vault_path = vault_io.get_vault_path()
     # Where Settings reads. Drafts went to modes/nightshift/inbox/ until
     # 2026-09-16, a path the app stopped reading at the cutover, so a night's
@@ -238,9 +338,8 @@ def run() -> tuple[list[str], list[dict], list[dict], int]:
             slug = _slug_for(item)
             seen += 1
 
-            inbox_path = inbox_dir / f"{slug}.md"
             try:
-                ADVANCE[item.kind](item, vault_path, inbox_path)
+                draft = ADVANCE[item.kind](item, vault_path)
             except Exception as exc:
                 # One failing/timing-out claude subprocess call (rate
                 # limit, network blip) must not drop every other
@@ -251,24 +350,27 @@ def run() -> tuple[list[str], list[dict], list[dict], int]:
                 failed.append({"slug": slug, "kind": item.kind, "error": str(exc)[:200]})
                 continue
 
-            if not inbox_path.exists():
-                # Advance produced no draft. Nothing to keep, but the fact is
-                # recorded: a night that silently stages nothing is the one
+            if not (draft or "").strip():
+                # Advance produced no proposal. Nothing to keep, but the fact
+                # is recorded: a night that silently stages nothing is the one
                 # failure this whole record exists to make visible.
                 _drop(dropped, item, slug, "no-draft", None)
                 continue
 
-            proposal_text = inbox_path.read_text(encoding="utf-8")
-            rationale = _extract_rationale(proposal_text)
+            rationale = _extract_rationale(draft)
             if not rationale:
-                _drop(dropped, item, slug, "no-rationale", inbox_path)
+                _drop(dropped, item, slug, "no-rationale", draft)
                 continue
 
-            confidence = _confidence_for(item, proposal_text)
+            confidence = _confidence_for(item, draft)
             if not confidence:
-                _drop(dropped, item, slug, "no-confidence", inbox_path)
+                _drop(dropped, item, slug, "no-confidence", draft)
                 continue
 
+            # Past the gates, so this is a proposal. The file and its index
+            # entry are written together or the file sits invisible
+            # (inbox/README.md), and the runner owns both writes.
+            (inbox_dir / f"{slug}.md").write_text(draft, encoding="utf-8")
             _stage(item, slug, rationale, confidence)
             staged_slugs.append(slug)
 

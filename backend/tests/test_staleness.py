@@ -250,3 +250,59 @@ def test_a_job_written_after_its_session_died_is_not_flagged(vault, monkeypatch,
     _died_here(runtime, "dev", "on-hold", died)
 
     assert staleness.flag_stale_jobs("dev") == []
+
+
+# --- a log entry can be several lines long -----------------------------------
+
+def test_a_live_session_is_not_read_as_dead_when_its_log_ends_mid_entry(vault, monkeypatch, tmp_path):
+    """An action-log entry keeps the newlines its tool call had, so a
+    multi-line Bash command writes lines that carry no timestamp -- a third
+    of this project's own log on 2026-09-18. Reading only `lines[-1]` made a
+    log ending mid-entry look like no session had ever run, which is how
+    nightshift flagged this project as abandoned at 11:30 while the session
+    writing that very line was live in it.
+    """
+    runtime = tmp_path / "runtime"
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", runtime)
+    runtime.mkdir(parents=True)
+    now = datetime.now(timezone.utc)
+    # The job's own record is old; only the log says a session is here.
+    _seed_job(vault, last_touched=(now - timedelta(days=4)).isoformat())
+    # A hosted session, active ten minutes ago, mid-heredoc.
+    (runtime / "faber__noctis-build.log").write_text(
+        f"{(now - timedelta(minutes=10)).isoformat()} Bash cat > f <<EOF\n"
+        "a line of the heredoc\n"
+        "another line\n",
+        encoding="utf-8")
+    # And the stale log the fallback used to reach for.
+    _died_here(runtime, "dev", "noctis-build", (now - timedelta(days=3)).isoformat())
+
+    flagged = staleness.flag_stale_jobs("dev")
+
+    assert flagged == []
+    metadata, _ = vault_io.read_frontmatter("modes/dev/jobs/noctis-build/context.md")
+    assert not metadata.get("flagged")
+
+
+def test_log_tail_reads_back_past_untimestamped_lines(vault, monkeypatch, tmp_path):
+    log = tmp_path / "x.log"
+    log.write_text("2026-09-18T11:00:00+00:00 Bash grep -n 'a\nb' file\n", encoding="utf-8")
+    stamp, closed = staleness._log_tail(log)
+    assert stamp == datetime.fromisoformat("2026-09-18T11:00:00+00:00")
+    assert closed is False
+
+
+def test_log_tail_still_sees_a_clean_close_written_after_a_multi_line_entry(vault, monkeypatch, tmp_path):
+    log = tmp_path / "x.log"
+    log.write_text(
+        "2026-09-18T11:00:00+00:00 Bash cat <<EOF\nheredoc\n"
+        "2026-09-18T11:05:00+00:00 SESSION_END\n", encoding="utf-8")
+    stamp, closed = staleness._log_tail(log)
+    assert closed is True
+    assert stamp == datetime.fromisoformat("2026-09-18T11:05:00+00:00")
+
+
+def test_log_tail_of_a_log_with_no_timestamp_anywhere_is_no_session(vault, monkeypatch, tmp_path):
+    log = tmp_path / "x.log"
+    log.write_text("garbage\nmore garbage\n", encoding="utf-8")
+    assert staleness._log_tail(log) == (None, False)

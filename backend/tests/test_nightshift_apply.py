@@ -250,3 +250,50 @@ def test_close_job_is_a_noop_when_job_context_missing(vault):
 
     state, _ = vault_io.read_frontmatter("maintenance/state.md")
     assert state["jobs"] == []
+
+
+# --- what a real drafter actually writes -------------------------------------
+
+PROPOSAL_WITH_GIT_STYLE_HEADERS = """## Rationale
+A pattern worth a change.
+
+## Diff
+--- a/modes/dev/dev.md
++++ b/modes/dev/dev.md
+@@
+-old text here
++new text here
+
+## Evidence
+- modes/dev/lessons.md, 2026-09-18
+"""
+
+
+def test_apply_proposal_strips_the_git_style_a_prefix_from_the_target(vault):
+    """The inbox format's example has a bare path, and the first live
+    distillation proposal (2026-09-18, once the drafter could return one at
+    all) wrote `--- a/modes/dev/dev.md` anyway, which is what `git diff`
+    produces and what a model has read ten thousand of. Reading it literally
+    looks for a vault file called `a/modes/...` and raises FileNotFoundError,
+    which the accept route turns into a 500.
+    """
+    vault_io.write_file("modes/dev/dev.md", "before\nold text here\nafter\n")
+
+    target = apply.apply_proposal(PROPOSAL_WITH_GIT_STYLE_HEADERS)
+
+    assert target == "modes/dev/dev.md"
+    assert "new text here" in vault_io.read_file("modes/dev/dev.md")
+
+
+PROPOSAL_TARGETING_A_MISSING_FILE = PROPOSAL_WITH_GIT_STYLE_HEADERS.replace(
+    "modes/dev/dev.md", "modes/nowhere/nothing.md")
+
+
+def test_apply_proposal_raises_a_409_reason_for_a_target_the_vault_lacks(vault):
+    """Not a 500: the reader needs to know which file the proposal meant."""
+    try:
+        apply.apply_proposal(PROPOSAL_TARGETING_A_MISSING_FILE)
+        assert False, "expected DiffApplyError"
+    except apply.DiffApplyError as exc:
+        assert "not in the vault" in str(exc)
+        assert "modes/nowhere/nothing.md" in str(exc)

@@ -89,24 +89,34 @@ def _parse_last_touched(last_touched: object) -> datetime | None:
 
 
 def _log_tail(log_path: Path) -> tuple[datetime | None, bool]:
-    """(time of the last line, whether it is the clean-close sentinel)."""
-    lines = log_path.read_text(encoding="utf-8").splitlines()
-    if not lines:
-        return None, False
-    last_line = lines[-1]
-    # Anchored, not a bare substring match: a real tool-call line is
-    # "<timestamp> <tool_name> <summary...>", where <summary> could itself
-    # happen to contain the literal text "SESSION_END" (e.g. editing
-    # mark_session_end.py) and would previously have been misread as a
-    # clean close. The sentinel mark_session_end.py actually writes is
-    # exactly two tokens: "<timestamp> SESSION_END". Found in the 2026-07-21
-    # ship-gate review.
-    parts = last_line.split(" ")
-    closed = len(parts) == 2 and parts[1] == "SESSION_END"
-    try:
-        return datetime.fromisoformat(parts[0]), closed
-    except ValueError:
-        return None, closed
+    """(time of the last timestamped line, whether it is the clean-close
+    sentinel).
+
+    **The last timestamped line, not the last line (2026-09-18).** An entry
+    is "<timestamp> <tool_name> <summary...>" and a summary keeps whatever
+    newlines the tool call had, so any multi-line Bash command (a heredoc, a
+    wrapped grep) writes an entry whose later lines carry no timestamp: 523
+    of the 1705 lines in this project's own log that day, very nearly a
+    third. Reading `lines[-1]` blind meant a log that happened to end
+    mid-entry parsed as "no session ever worked this job", which sent
+    `_last_session` to the job's other log -- and that flagged this project
+    as abandoned while a session was live in it, writing the very command
+    whose newline broke the parse.
+
+    Anchored, not a bare substring match: <summary> could itself contain the
+    literal text "SESSION_END" (e.g. editing mark_session_end.py) and would
+    previously have been misread as a clean close. The sentinel
+    mark_session_end.py actually writes is exactly two tokens:
+    "<timestamp> SESSION_END". Found in the 2026-07-21 ship-gate review.
+    """
+    for line in reversed(log_path.read_text(encoding="utf-8").splitlines()):
+        parts = line.split(" ")
+        try:
+            stamp = datetime.fromisoformat(parts[0])
+        except ValueError:
+            continue    # a continuation line of a multi-line summary
+        return stamp, len(parts) == 2 and parts[1] == "SESSION_END"
+    return None, False
 
 
 def _last_session(folder: str, slug: str) -> tuple[datetime | None, bool]:

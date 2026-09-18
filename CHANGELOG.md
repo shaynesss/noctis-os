@@ -11,6 +11,39 @@ are complete and verified live. Nothing is left in the build order: the
 2026-09-15 rather than built, because the commit log is the record and needs
 no writer.
 
+### The drafter never wrote a thing, and the reason was in its own output (2026-09-18)
+
+- **Advance hands its proposal back; the runner writes it.** The distiller was
+  given `Write(<the one inbox path>)` and told to save the file itself. Any
+  parenthesised specifier on `Write` in `--allowedTools` is refused, measured
+  across `Write(/abs)`, `Write(//abs)`, `Write(rel)` and `Write(dir/**)`; only a
+  bare `Write` is honoured, which on an unattended nightly job is the whole
+  vault. So every distillation draft the machine ever produced was denied at the
+  last step and recorded as `no-draft`: three nights, nine model calls, nine
+  finished four-part proposals thrown away, roughly $1.30. `permission_denials`
+  sat in the subprocess's JSON every one of those nights, naming the tool and the
+  path, and `capture_output=True` with nothing reading `stdout` discarded it.
+  Advance is `(item, vault_path) -> str` now, the drafter runs on `Read Grep`
+  with `Write` disallowed, and the runner writes the file once the gates pass, so
+  a rejected draft never reaches `inbox/` and `maintenance/agents/distiller.md`'s
+  "read-only" is literally true. `_result_text` raises on an errored run before
+  trusting its text and on a denial that left nothing behind after it, so both
+  are failures with reasons rather than drops without. `stdin=DEVNULL` drops the
+  three-second wait per call for input that never comes.
+- **The first live run staged three proposals** (dev, research, maintenance),
+  which exposed two things only a real proposal could: a drafter writes git's
+  `--- a/path` header whatever the format example shows, so `apply_proposal`
+  strips an `a/`/`b/` prefix; and a target the vault lacks is now a 409 naming
+  the file instead of a `FileNotFoundError` reaching the accept route as a 500.
+- **A live session is no longer read as a dead one.** `staleness._log_tail` read
+  `lines[-1]` for the log's newest timestamp, but an action-log entry keeps the
+  newlines its tool call had, so every multi-line Bash command writes lines with
+  no timestamp: 523 of 1705 in this project's log that morning. A log ending
+  mid-entry parsed as "no session ever worked this job", the read fell through to
+  the job's other log, and nightshift flagged this project as abandoned while the
+  session writing the offending heredoc was live in it. It reads back to the last
+  line that parses.
+
 ### A discarded draft is not a quiet night (2026-09-17, late)
 
 - **Nightshift records why a draft was dropped, and keeps it.** Three gates

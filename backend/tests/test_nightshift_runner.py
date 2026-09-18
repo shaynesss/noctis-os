@@ -1,4 +1,8 @@
+import json
 import pathlib
+import types
+
+import pytest
 
 import vault_io
 from nightshift import runner
@@ -20,9 +24,12 @@ def _probe(slug="b"):
     return SlackItem(mode="dev", kind="probe", slug_hint=slug, description="a probe", context="ctx")
 
 
+PROBE_DRAFT = "## Rationale\nA probe.\n\n## Diff\n(none)\n\n## Evidence\n- none\n"
+
+
 def _register_probe(monkeypatch):
-    def draft(item, vault_path, inbox_path):
-        inbox_path.write_text("## Rationale\nA probe.\n\n## Diff\n(none)\n\n## Evidence\n- none\n", encoding="utf-8")
+    def draft(item, vault_path):
+        return PROBE_DRAFT
     monkeypatch.setitem(runner.ADVANCE, "probe", draft)
     monkeypatch.setattr(runner, "MECHANICAL_KINDS", frozenset({"probe"}))
     for mode in ("dev", "learn", "research", "settings"):
@@ -83,9 +90,11 @@ def test_run_stages_an_item_where_settings_reads(vault, monkeypatch):
 
     # maintenance/inbox, which is where Settings reads; drafts went to
     # modes/nightshift/inbox until 2026-09-16 and were never shown.
+    # Written by the runner, out of what the drafter returned -- the
+    # drafter has no write tool (2026-09-18).
     proposal_path = vault / "maintenance" / "inbox" / f"{slugs[0]}.md"
     assert proposal_path.exists()
-    assert "## Rationale" in proposal_path.read_text(encoding="utf-8")
+    assert proposal_path.read_text(encoding="utf-8") == PROBE_DRAFT
 
 
 def test_run_is_idempotent_against_already_pending_item(vault, monkeypatch):
@@ -159,9 +168,8 @@ def test_run_flags_a_stale_job_and_stages_nothing_for_it(vault, monkeypatch, tmp
 # which is three paid-for distiller calls discarded each night, unlogged.
 
 def _register_drafter(monkeypatch, draft_text: str | None):
-    def draft(item, vault_path, inbox_path):
-        if draft_text is not None:
-            inbox_path.write_text(draft_text, encoding="utf-8")
+    def draft(item, vault_path):
+        return draft_text
     monkeypatch.setitem(runner.ADVANCE, "probe", draft)
     monkeypatch.setattr(runner, "MECHANICAL_KINDS", frozenset())
     for mode in ("dev", "learn", "research", "settings"):
@@ -230,12 +238,115 @@ def test_the_cursor_marker_uses_the_real_lessons_path_for_maintenance(vault, mon
     vault_io.write_file(f"{runner.MAINTENANCE_INBOX}/README.md", "# Format\n")
     item = SlackItem(mode="settings", kind="undistilled-lessons",
                      slug_hint="undistilled-maintenance", description="d", context="c")
+    monkeypatch.setattr(runner.subprocess, "run",
+                        lambda *a, **k: _completed("## Rationale\nx\n"))
+
+    draft = runner._draft_distillation(item, vault_io.get_vault_path())
+
+    assert "<!-- cursor-advance: maintenance=4 -->" in draft
+
+
+# --- the drafter returns its work, and the runner writes it ------------------
+#
+# Until 2026-09-18 the drafter was handed `Write(<one absolute path>)` and told
+# to save the file itself. Every parenthesised specifier on `Write` in
+# `--allowedTools` is refused, so every distillation draft the machine ever
+# produced was denied at the last step and recorded as `no-draft` -- three
+# nights, nine model calls, nine finished proposals thrown away. The reason was
+# in the subprocess's own JSON the whole time, under `permission_denials`.
+
+def _completed(result_text, denials=(), is_error=False, stdout=None):
+    payload = {"result": result_text, "permission_denials": list(denials), "is_error": is_error}
+    return types.SimpleNamespace(
+        stdout=json.dumps(payload) if stdout is None else stdout, stderr="", returncode=0)
+
+
+def _seed_distiller_reads():
+    """What `_draft_distillation` reads before it calls anything."""
+    vault_io.write_file("maintenance/schedule.md", "# Schedule\n")
+    vault_io.write_file("maintenance/agents/distiller.md", "# Distiller\n")
+    vault_io.write_file(f"{runner.MAINTENANCE_INBOX}/README.md", "# Format\n")
+    vault_io.write_file("maintenance/lessons.md", "# Lessons\n\none\n")
+
+
+def test_the_drafter_is_given_no_write_tool(vault, monkeypatch):
+    """The regression that matters: a `Write` rule with a specifier is
+    silently refused, and a bare `Write` on an unattended nightly job is the
+    whole vault. The drafter gets neither."""
+    _seed_distiller_reads()
+    seen = {}
+
+    def spy(cmd, **kw):
+        seen["cmd"] = cmd
+        return _completed("## Rationale\nx\n\n## Confidence\nhigh -- sure.\n")
+
+    monkeypatch.setattr(runner.subprocess, "run", spy)
+    item = SlackItem(mode="settings", kind="undistilled-lessons",
+                     slug_hint="undistilled-dev", description="d", context="c")
+    monkeypatch.setattr(runner, "lessons_path", lambda mode: "maintenance/lessons.md")
+
+    runner._draft_distillation(item, vault_io.get_vault_path())
+
+    cmd = seen["cmd"]
+    allowed = cmd[cmd.index("--allowedTools") + 1]
+    disallowed = cmd[cmd.index("--disallowedTools") + 1]
+    assert allowed == "Read Grep"
+    assert "Write" not in allowed
+    assert "Write" in disallowed.split()
+
+
+def test_a_denied_tool_is_a_failure_with_its_reason_not_a_silent_no_draft():
+    """`permission_denials` was in this payload every night for three nights
+    and nothing read it."""
+    denial = {"tool_name": "Write", "tool_input": {"file_path": "/x.md"}}
+    with pytest.raises(RuntimeError, match="denied Write"):
+        runner._result_text(_completed("", denials=[denial]))
+
+
+def test_an_errored_drafter_raises_rather_than_returning_an_empty_draft():
+    with pytest.raises(RuntimeError, match="drafter errored"):
+        runner._result_text(_completed("ran out of turns", is_error=True))
+
+
+def test_output_that_is_not_json_raises_with_what_arrived():
+    with pytest.raises(RuntimeError, match="not JSON"):
+        runner._result_text(_completed("", stdout="claude: command not found"))
+
+
+def test_a_drafter_that_answers_with_nothing_returns_nothing():
+    """No denial, no error, no text: the `no-draft` gate's remaining job."""
+    assert runner._result_text(_completed("   ")) == ""
+
+
+def test_a_fenced_answer_is_unwrapped():
+    body = runner._proposal_body("```markdown\n## Rationale\nx\n```")
+    assert body == "## Rationale\nx\n"
+
+
+def test_a_preamble_before_the_proposal_is_cut():
+    """A model told to answer with a file still says "Here is the proposal:"
+    sometimes, and that line would be the vault file's first line for good."""
+    body = runner._proposal_body("Here is the proposal:\n\n## Rationale\nx\n\n## Diff\n(none)\n")
+    assert body.startswith("## Rationale")
+    assert "Here is" not in body
+
+
+def test_a_draft_with_no_rationale_comes_back_whole_for_the_gate_to_reject():
+    """Nothing is repaired on the way through: the gate rejects it and the
+    drops folder keeps it, which is how the morning sees what went wrong."""
+    assert runner._proposal_body("I could not find a pattern.") == "I could not find a pattern.\n"
+
+
+def test_the_runner_writes_what_the_drafter_returned_and_nothing_else(vault, monkeypatch, tmp_path):
+    """The whole point of the change: one writer, and it is this one."""
+    monkeypatch.setattr(runner, "DROPS_DIR", tmp_path / "drops")
+    _register_drafter(monkeypatch, "## Rationale\nA real one.\n\n## Confidence\nlow -- one entry.\n")
+
+    staged, failed, dropped, seen = runner.run()
+
+    assert (failed, dropped, seen) == ([], [], 1)
     inbox = vault_io.get_vault_path() / runner.MAINTENANCE_INBOX
-    inbox.mkdir(parents=True, exist_ok=True)
-    draft = inbox / "probe.md"
-    draft.write_text("## Rationale\nx\n", encoding="utf-8")
-
-    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: None)
-    runner._draft_distillation(item, vault_io.get_vault_path(), draft)
-
-    assert "<!-- cursor-advance: maintenance=4 -->" in draft.read_text()
+    written = (inbox / f"{staged[0]}.md").read_text(encoding="utf-8")
+    assert written == "## Rationale\nA real one.\n\n## Confidence\nlow -- one entry.\n"
+    state, _ = vault_io.read_frontmatter(runner.STATE_PATH)
+    assert state["inbox"][0]["confidence"] == "low"

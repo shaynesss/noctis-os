@@ -116,12 +116,28 @@ def apply_proposal(proposal_text: str) -> str | None:
     if not match:
         raise DiffApplyError("diff section has no '--- <path>' target file header")
     target = match.group(1).strip()
+    # `git diff` writes its headers as `--- a/path` / `+++ b/path`, and a
+    # drafter that has read a great many diffs writes them that way whatever
+    # the inbox format's example shows (the first live distillation proposal,
+    # 2026-09-18, targeted `a/modes/dev/dev.md`). Stripping the prefix is
+    # unambiguous: the vault's top level is modes/, maintenance/, wiki/ and
+    # the rest, and nothing in it is called `a` or `b`.
+    if target.startswith(("a/", "b/")):
+        target = target[2:]
 
     hunks = _hunks(diff_text)
     if not hunks:
         raise DiffApplyError("diff has no '@@' hunks to apply")
 
-    current = vault_io.read_file(target)
+    try:
+        current = vault_io.read_file(target)
+    except FileNotFoundError:
+        # A target the vault does not have is the proposal's fault, not the
+        # server's: 409 with the path, like every other unapplicable diff.
+        # It used to reach the route as a bare FileNotFoundError and 500,
+        # which tells the reader nothing about which file was meant.
+        raise DiffApplyError(f"diff targets {target}, which is not in the vault") from None
+
     for hunk_text in hunks:
         old_block, new_block = _old_and_new_blocks(hunk_text)
         if not old_block:
