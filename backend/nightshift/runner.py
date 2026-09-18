@@ -46,6 +46,16 @@ DROPS_DIR = Path(__file__).resolve().parents[1] / "runtime" / "nightshift-drops"
 # appeared in `failed`, and the night reported itself quiet. `data/nightshift.json`
 # has `seen: 3, staged: 0, failed: 0` for 2026-09-16 and the same shape for
 # 09-17, which is three distiller calls a night, paid for, discarded, unlogged.
+# **Three gates, and deliberately not a fourth (2026-09-18).** A draft whose
+# diff does not match its target could be caught here, at 03:00, instead of
+# surfacing in the morning as a proposal that can only be rejected -- the
+# first restage of the maintenance item was exactly that. It is staged
+# anyway, on Shayne's call: a dead proposal is readable, sits in the Inbox
+# with the route's own reason under it, and can be judged on its argument;
+# a drop is a line in a record and a file in `runtime/`, which is strictly
+# less. The gates below reject drafts that are not proposals at all. Whether
+# a proposal is *right* is the review's job, and a diff that no longer
+# applies is a question about the proposal, not about the draft.
 GATES = {
     "no-draft": "the drafter returned nothing",
     "no-rationale": "the draft has no `## Rationale` section",
