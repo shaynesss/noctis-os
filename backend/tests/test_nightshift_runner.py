@@ -1,5 +1,6 @@
 import json
 import pathlib
+import subprocess
 import types
 
 import pytest
@@ -255,10 +256,11 @@ def test_the_cursor_marker_uses_the_real_lessons_path_for_maintenance(vault, mon
 # nights, nine model calls, nine finished proposals thrown away. The reason was
 # in the subprocess's own JSON the whole time, under `permission_denials`.
 
-def _completed(result_text, denials=(), is_error=False, stdout=None):
+def _completed(result_text, denials=(), is_error=False, stdout=None, returncode=0):
     payload = {"result": result_text, "permission_denials": list(denials), "is_error": is_error}
     return types.SimpleNamespace(
-        stdout=json.dumps(payload) if stdout is None else stdout, stderr="", returncode=0)
+        stdout=json.dumps(payload) if stdout is None else stdout, stderr="",
+        returncode=returncode)
 
 
 def _seed_distiller_reads():
@@ -311,6 +313,74 @@ def test_an_errored_drafter_raises_rather_than_returning_an_empty_draft():
 def test_output_that_is_not_json_raises_with_what_arrived():
     with pytest.raises(RuntimeError, match="not JSON"):
         runner._result_text(_completed("", stdout="claude: command not found"))
+
+
+# --- a failed call reports its reason, not its command line ------------------
+#
+# 2026-09-19, 05:40: the machine's network was not up, `claude -p` exited 1, and
+# the envelope on stdout carried the sentence that said so. `check=True` raised
+# `CalledProcessError` before anything read it, and that exception's string is
+# the entire argv -- whose second element is a ten-kilobyte prompt. What the
+# morning's card showed was the opening lines of the Maintenance methodology.
+
+API_ERROR = "API Error: Can't reach the API server -- check your internet or DNS (ENOTFOUND)"
+
+
+def test_an_api_error_on_a_non_zero_exit_reports_the_error_not_the_argv():
+    with pytest.raises(RuntimeError) as exc:
+        runner._result_text(_completed(API_ERROR, is_error=True, returncode=1))
+    assert "ENOTFOUND" in str(exc.value)
+    assert "--allowedTools" not in str(exc.value)
+
+
+def test_a_non_zero_exit_the_envelope_does_not_explain_still_raises_with_the_code():
+    """Otherwise it returns "" and the `no-draft` gate records the drafter
+    as having had nothing to say, which is the silent-failure shape again."""
+    with pytest.raises(RuntimeError, match="exited 1 with no proposal"):
+        runner._result_text(_completed("", returncode=1))
+
+
+def test_a_non_zero_exit_that_wrote_no_envelope_raises_with_the_code():
+    with pytest.raises(RuntimeError, match="exited 127 and its output was not JSON"):
+        runner._result_text(_completed("", stdout="claude: not found", returncode=127))
+
+
+def test_a_failing_call_reaches_the_run_record_as_a_readable_reason(vault, monkeypatch):
+    """End to end through the drafter: no `CalledProcessError` escapes, and
+    what a failure carries is short enough to survive `str(exc)[:200]`."""
+    _seed_distiller_reads()
+    monkeypatch.setattr(runner, "lessons_path", lambda mode: "maintenance/lessons.md")
+    monkeypatch.setattr(runner.subprocess, "run",
+                        lambda *a, **k: _completed(API_ERROR, is_error=True, returncode=1))
+    item = SlackItem(mode="settings", kind="undistilled-lessons",
+                     slug_hint="undistilled-dev", description="d", context="c")
+
+    with pytest.raises(RuntimeError) as exc:
+        runner._draft_distillation(item, vault_io.get_vault_path())
+
+    assert "ENOTFOUND" in str(exc.value)[:200]
+
+
+def test_a_timed_out_call_reports_the_timeout_not_the_argv(vault, monkeypatch):
+    """`TimeoutExpired` carries the command line exactly as
+    `CalledProcessError` did, so dropping `check=True` alone left the same
+    wall of prompt on the other path out. Found by running the fix against a
+    real unreachable API, which retried rather than exiting."""
+    _seed_distiller_reads()
+    monkeypatch.setattr(runner, "lessons_path", lambda mode: "maintenance/lessons.md")
+
+    def timeout(*a, **k):
+        raise subprocess.TimeoutExpired(cmd=["claude", "-p", "x" * 5000],
+                                        timeout=runner.DRAFT_TIMEOUT)
+
+    monkeypatch.setattr(runner.subprocess, "run", timeout)
+    item = SlackItem(mode="settings", kind="undistilled-lessons",
+                     slug_hint="undistilled-dev", description="d", context="c")
+
+    with pytest.raises(RuntimeError) as exc:
+        runner._draft_distillation(item, vault_io.get_vault_path())
+
+    assert str(exc.value) == f"drafter timed out after {runner.DRAFT_TIMEOUT}s"
 
 
 def test_a_drafter_that_answers_with_nothing_returns_nothing():

@@ -34,6 +34,10 @@ STATE_PATH = MAINTENANCE_STATE
 # a literal never gets revisited on its own.
 DISTILLER_MODEL = os.environ.get("NIGHTSHIFT_DISTILLER_MODEL", "claude-haiku-4-5")
 
+# How long one drafter call may run. A constant rather than a literal at the
+# call site so the failure message below cannot drift from the real value.
+DRAFT_TIMEOUT = 180
+
 
 # Where a draft that failed the inbox contract is kept instead of deleted.
 # Runtime, not vault: it is a machine artefact, high-churn and gitignored,
@@ -129,6 +133,20 @@ def _draft_distillation(item: SlackItem, vault_path: Path) -> str:
     the whole vault. Handing the text back needs no write permission and is
     what `maintenance/agents/distiller.md` says this subagent is: read-only.
 
+    **And no `check=True` (2026-09-19).** The CLI exits 1 on an API error
+    and still writes its whole envelope to stdout, with the reason in
+    `result`: "API Error: Can't reach the API server -- check your internet
+    or DNS (ENOTFOUND)" is what the 05:40 run hit on a machine whose network
+    was not up yet. `check=True` raised `CalledProcessError` before
+    `_result_text` could read that, and a `CalledProcessError`'s string is
+    the whole argv -- whose second element is this ten-kilobyte prompt. Cut
+    to 200 characters for the record, the morning's card showed the opening
+    lines of the Maintenance methodology and no reason at all. The envelope
+    is read instead; an exit code with nothing readable behind it still
+    raises, with the code. Same envelope, and the third thing found in it
+    after `permission_denials` and the error text: the data was never the
+    problem, reading it was.
+
     Methodology and agent definition moved to maintenance/ on 2026-09-07
     (Noctis v2 Stage 1 item 3). State -- the inbox, its index, the archive --
     deliberately did not move yet, so every other path here is unchanged.
@@ -183,32 +201,42 @@ is a genuine self-assessment, not a formality; judge it honestly.
 Read and Grep are the only tools you have; do not attempt any other.
 """
 
-    result = subprocess.run(
-        [
-            "claude",
-            "-p",
-            prompt,
-            "--output-format",
-            "json",
-            "--model",
-            DISTILLER_MODEL,
-            "--allowedTools",
-            "Read Grep",
-            "--disallowedTools",
-            "Bash WebFetch WebSearch Edit Write",
-            "--add-dir",
-            str(vault_path),
-        ],
-        check=True,
-        cwd=vault_path,
-        timeout=180,
-        capture_output=True,
-        text=True,
-        # Otherwise every call waits three seconds for a stdin that is
-        # never coming ("no stdin data received in 3s, proceeding without
-        # it"), three times a night for nothing.
-        stdin=subprocess.DEVNULL,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "claude",
+                "-p",
+                prompt,
+                "--output-format",
+                "json",
+                "--model",
+                DISTILLER_MODEL,
+                "--allowedTools",
+                "Read Grep",
+                "--disallowedTools",
+                "Bash WebFetch WebSearch Edit Write",
+                "--add-dir",
+                str(vault_path),
+            ],
+            # No `check=True`: the envelope below is the error report, and
+            # raising on the exit code throws it away unread (see above).
+            cwd=vault_path,
+            timeout=DRAFT_TIMEOUT,
+            capture_output=True,
+            text=True,
+            # Otherwise every call waits three seconds for a stdin that is
+            # never coming ("no stdin data received in 3s, proceeding without
+            # it"), three times a night for nothing.
+            stdin=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired:
+        # Found while verifying the `check=True` fix against a real
+        # unreachable API: the CLI retried the connection until the timeout
+        # instead of exiting, and `TimeoutExpired`'s string is the argv too,
+        # the same 200 characters of prompt `CalledProcessError` gave. The
+        # rule is the exception, not the one exception: nothing whose text
+        # is the command line may reach the record.
+        raise RuntimeError(f"drafter timed out after {DRAFT_TIMEOUT}s") from None
 
     draft = _result_text(result)
 
@@ -243,12 +271,18 @@ def _result_text(result: subprocess.CompletedProcess) -> str:
     a failure *with its reason* rather than an empty draft with none. An
     identical raise across every item is what `report.record` reads as a
     broken machine rather than a quiet night.
+
+    The exit code is part of the reason, not a substitute for it: the caller
+    no longer raises on a non-zero exit (see `_draft_distillation`), so every
+    path out of here that is not a proposal says both what the code was and
+    whatever the envelope managed to say for itself.
     """
     try:
         payload = json.loads(result.stdout or "")
     except ValueError:
         raise RuntimeError(
-            f"drafter output was not JSON: {(result.stdout or result.stderr or '')[:200]}"
+            f"drafter exited {result.returncode} and its output was not JSON: "
+            f"{(result.stdout or result.stderr or '')[:200]}"
         ) from None
 
     if payload.get("is_error"):
@@ -267,6 +301,12 @@ def _result_text(result: subprocess.CompletedProcess) -> str:
     denied = sorted({d.get("tool_name", "?") for d in payload.get("permission_denials") or []})
     if denied:
         raise RuntimeError(f"drafter was denied {', '.join(denied)} and returned nothing")
+    if result.returncode:
+        # An exit code the envelope does not account for. Still a failure
+        # with a reason, rather than an empty draft that reaches the
+        # `no-draft` gate and gets recorded as the drafter having nothing
+        # to say.
+        raise RuntimeError(f"drafter exited {result.returncode} with no proposal and no stated error")
     return ""
 
 
