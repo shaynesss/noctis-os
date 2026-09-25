@@ -26,10 +26,10 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 MODE_MODELS = {
-    "general": "claude-opus-5",
-    "faber": "claude-opus-5",
-    "noctua": "claude-opus-5",
-    "vesper": "claude-opus-5",
+    "general": "claude-opus-5-5",
+    "faber": "claude-opus-5-5",
+    "noctua": "claude-opus-5-5",
+    "vesper": "claude-opus-5-5",
     "maintenance": "claude-haiku-4-5",
 }
 
@@ -68,8 +68,10 @@ ALL_TOOLS = (
 # is rejected after the terminal has painted, and the error lands where a
 # session should be.
 MODEL_CATALOG: list[dict[str, str]] = [
-    {"id": "claude-opus-5", "name": "Opus 5",
+    {"id": "claude-opus-5-5", "name": "Opus 5.5",
      "blurb": "Best for everyday, complex tasks"},
+    {"id": "claude-opus-5", "name": "Opus 5",
+     "blurb": "The previous Opus, kept for comparison"},
     {"id": "claude-fable-5-1", "name": "Fable 5.1",
      "blurb": "Deepest reasoning, on usage credits"},
     {"id": "claude-sonnet-5", "name": "Sonnet 5",
