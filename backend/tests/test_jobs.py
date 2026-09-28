@@ -242,3 +242,42 @@ def test_brief_without_a_project_path_has_no_repository_block(vault, tmp_path):
     # The lookup needs project_path to find the job at all; what is asserted
     # here is that a directory which is not a repository contributes nothing.
     assert "read just now" not in jobs.job_brief("faber", project)
+
+
+def test_a_card_that_will_not_parse_does_not_stop_the_launch(vault, tmp_path, home_is_tmp):
+    """2026-09-28: one card's status held an unquoted ": ", invalid YAML. The
+    lookup reads every card in the mode, so every Faber session failed to
+    start, whichever directory it was opened in. The bad card sorts first
+    here, as it would be read first."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    _write_job(tmp_path, "dev", "proj", project, status="a distinctive status line")
+    _write_job(tmp_path, "dev", "broken", elsewhere, status="Finished. Left: the domain")
+
+    assert "a distinctive status line" in _overlay(_args_for(project))
+    assert _args_for(elsewhere)  # its own directory opens too, just without a brief
+
+
+def test_a_crash_reaches_the_frontend_as_a_500(vault, tmp_path, home_is_tmp, monkeypatch):
+    """Not as silence. Starlette's own 500 has no CORS headers, so the browser
+    withheld it and the terminal said the backend "did not answer" while it
+    was up and crashing (2026-09-28)."""
+    from fastapi.testclient import TestClient
+
+    from auth import ALLOWED_ORIGIN
+    from main import app
+
+    def crash(*_args, **_kwargs):
+        raise RuntimeError("simulated crash while building the brief")
+
+    monkeypatch.setattr(jobs, "job_brief", crash)
+    r = TestClient(app, raise_server_exceptions=False).get(
+        "/v2/sessions/interactive-args",
+        headers={"Authorization": "Bearer test-token", "Origin": ALLOWED_ORIGIN},
+        params={"mode": "faber", "cwd": str(tmp_path)},
+    )
+    assert r.status_code == 500
+    assert r.headers.get("access-control-allow-origin") == ALLOWED_ORIGIN
+    assert "simulated crash" not in r.text  # the traceback goes to the log, not the wire

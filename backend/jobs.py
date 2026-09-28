@@ -128,7 +128,13 @@ def find_job_for_cwd(mode: str, cwd: str | Path) -> str | None:
     for slug in vault_io.list_subdirs(base):
         try:
             meta, _ = vault_io.read_frontmatter(f"{base}/{slug}/context.md")
-        except (FileNotFoundError, ValueError):
+        except FileNotFoundError:
+            continue
+        except ValueError as exc:
+            # Skipped, not fatal: this loop reads every card in the mode, so
+            # one that will not parse used to stop every session of the mode
+            # from starting (2026-09-28). `make doctor` names it.
+            log.warning("job card skipped: %s", exc)
             continue
         project_path = meta.get("project_path")
         if not project_path:

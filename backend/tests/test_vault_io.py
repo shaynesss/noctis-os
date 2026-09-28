@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 
+import pytest
+
 import vault_io
 
 
@@ -182,3 +184,24 @@ def test_is_safe_slug():
     assert not vault_io.is_safe_slug("Has-Upper")
     assert not vault_io.is_safe_slug("-leading-hyphen")
     assert not vault_io.is_safe_slug("trailing-hyphen-")
+
+
+# The shape of the 2026-09-28 card: a status with an unquoted ": " in it,
+# which YAML reads as a second mapping on one line.
+BROKEN_CARD = "---\nname: broken\nstatus: Finished. Left: one thing\n---\n\nbody\n"
+
+
+def test_bad_yaml_is_a_value_error_naming_the_file(vault):
+    """PyYAML's errors are not ValueErrors, so the callers that skip a
+    ValueError let them through, and one job card stopped every Faber launch."""
+    vault_io.write_file("modes/dev/jobs/broken/context.md", BROKEN_CARD)
+    with pytest.raises(ValueError, match=r"^modes/dev/jobs/broken/context\.md, line 3: "):
+        vault_io.read_frontmatter("modes/dev/jobs/broken/context.md")
+
+
+def test_unparseable_frontmatter_names_only_the_broken_files(vault):
+    vault_io.write_file("modes/dev/jobs/broken/context.md", BROKEN_CARD)
+    vault_io.write_frontmatter("modes/dev/jobs/fine/context.md", {"name": "fine"}, "body")
+    bad = vault_io.unparseable_frontmatter("modes", "maintenance")
+    assert len(bad) == 1
+    assert bad[0].startswith("modes/dev/jobs/broken/context.md, line 3: ")

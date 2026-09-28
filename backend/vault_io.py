@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import frontmatter
+import yaml
 
 _SAFE_SLUG = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
@@ -99,13 +100,48 @@ def write_file(relative_path: str, content: str) -> None:
         path.write_text(content, encoding="utf-8")
 
 
+class FrontmatterError(ValueError):
+    """A vault file whose frontmatter is not valid YAML."""
+
+
 def read_frontmatter(relative_path: str) -> tuple[dict[str, Any], str]:
     """Parse a mode's state.md/lessons.md/job-context.md: YAML frontmatter
     (the state-schema contract every mode's files carry) plus freeform body.
+
+    Bad YAML raises FrontmatterError, a ValueError, naming the file. The
+    callers that read many files already skip a ValueError, but PyYAML's own
+    errors are not one, so they went straight past: a job card whose status
+    held an unquoted ": " made every Faber launch fail with a 500 (2026-09-28).
     """
     path = _resolve_within_vault(relative_path)
-    post = frontmatter.loads(path.read_text(encoding="utf-8"))
+    try:
+        post = frontmatter.loads(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        reason = str(exc).splitlines()[0]
+        mark = getattr(exc, "problem_mark", None)
+        where = f", line {mark.line + 1}" if mark else ""
+        raise FrontmatterError(f"{relative_path}{where}: {reason}") from exc
     return dict(post.metadata), post.content
+
+
+def unparseable_frontmatter(*relative_dirs: str) -> list[str]:
+    """Every markdown file under these vault directories whose frontmatter
+    will not parse, as "path, line N: reason". For `make doctor`: the backend
+    now skips such a file rather than failing, and a skipped job card is a
+    job whose sessions start without their brief, so it has to show up
+    somewhere a person looks.
+    """
+    root = get_vault_path().resolve()
+    bad = []
+    for rel in relative_dirs:
+        for path in sorted(_resolve_within_vault(rel).rglob("*.md")):
+            try:
+                read_frontmatter(str(path.relative_to(root)))
+            except FrontmatterError as exc:
+                bad.append(str(exc))
+            except ValueError:
+                continue  # a link out of the vault: not ours to read
+    return bad
 
 
 def write_frontmatter(relative_path: str, metadata: dict[str, Any], content: str) -> None:

@@ -77,6 +77,16 @@ doctor:
 	@cd backend && .venv/bin/python -c 'import main' >/dev/null 2>&1 \
 		&& echo 'ok    (if backend is DOWN it is absent, not broken)' \
 		|| echo 'FAIL  -> cd backend && .venv/bin/python -c "import main"'
+# The backend skips a vault file whose frontmatter will not parse, so a broken
+# job card no longer stops a launch; it just leaves that job's sessions without
+# their brief. This line is where a skipped file shows up (2026-09-28).
+	@printf 'vault    '
+	@cd backend && .venv/bin/python -c \
+		'from dotenv import load_dotenv; load_dotenv(); import vault_io; \
+		 r = vault_io.unparseable_frontmatter("modes", "maintenance"); \
+		 print("ok    every job card and state file parses") if not r else \
+		 print("FAIL  " + str(len(r)) + " file(s) will not parse:\n    " + "\n    ".join(r))' \
+		2>/dev/null || echo 'could not probe -- is VAULT_PATH set in .env?'
 # A hook may never break the session it observes, so both end in a swallow.
 # This is where the swallowed faults surface: without it a hook that stops
 # firing looks identical to a session that used no tools, and the action feed
