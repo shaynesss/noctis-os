@@ -28,10 +28,11 @@ log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v2/sessions", tags=["sessions"])
 
-# The rolling windows, as last reported. A dataclass rather than the old
-# Limits event: the stream that carried that event is gone, and this is the
-# only reader left. Newest wins whichever terminal reported it -- the windows
-# are a property of the account, not of one session.
+# The rolling windows, merged across every terminal's reports. A dataclass
+# rather than the old Limits event: the stream that carried that event is
+# gone, and this is the only reader left. The windows are a property of the
+# account, not of one session, but each terminal only knows what its own last
+# API response said. See `_later_reading` for how the reports are combined.
 @dataclass
 class Windows:
     five_hour_used: float
@@ -41,6 +42,24 @@ class Windows:
 
 
 _limits: Windows | None = None
+
+
+def _later_reading(used: float, resets_at: int, new_used: float, new_resets_at: int) -> tuple[float, int]:
+    """The truer of two readings of one rolling window.
+
+    **Not "the newest report wins" (changed 2026-09-29).** Every terminal
+    re-sends its status line every five seconds with whatever its own last
+    API response said, so an idle terminal keeps reporting an old figure.
+    With four open, the bar flipped between 81% and an idle one's 56% every
+    few seconds. Within one window usage only rises, so the higher reading is
+    the current one; a later reset time is a new window and replaces it; a
+    report still naming an earlier reset is left over and ignored.
+    """
+    if new_resets_at > resets_at:
+        return new_used, new_resets_at
+    if new_resets_at < resets_at:
+        return used, resets_at
+    return max(used, new_used), resets_at
 
 # How many terminals the shell may have open at once. Advisory: the shell
 # reports it, nothing here enforces it -- a terminal is a process the shell
@@ -219,14 +238,28 @@ async def statusline(payload: dict, mode: str | None = None,
     if isinstance(five, dict) and isinstance(seven, dict):
         global _limits
         try:
-            _limits = Windows(
+            incoming = Windows(
                 five_hour_used=float(five.get("used_percentage") or 0) / 100,
                 five_hour_resets_at=int(five.get("resets_at") or 0),
                 seven_day_used=float(seven.get("used_percentage") or 0) / 100,
                 seven_day_resets_at=int(seven.get("resets_at") or 0),
             )
         except (TypeError, ValueError):
-            pass  # a window whose numbers are not numbers is no reading
+            incoming = None  # a window whose numbers are not numbers is no reading
+        if incoming is not None:
+            if _limits is None:
+                _limits = incoming
+            else:
+                merged = Windows(
+                    *_later_reading(_limits.five_hour_used, _limits.five_hour_resets_at,
+                                    incoming.five_hour_used, incoming.five_hour_resets_at),
+                    *_later_reading(_limits.seven_day_used, _limits.seven_day_resets_at,
+                                    incoming.seven_day_used, incoming.seven_day_resets_at))
+                # Replaced only when the reading moved, or a terminal agrees
+                # with it: `limits()` dates a reading by the object's identity,
+                # so a stale report below it must not make it look fresh.
+                if merged != _limits or incoming == merged:
+                    _limits = merged
     return {"ok": True}
 
 

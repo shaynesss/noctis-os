@@ -973,3 +973,32 @@ def test_an_indexed_sessions_tool_calls_are_named_and_its_files_listed(client):
 
     files = client.get(f"/v2/sessions/history/{row}/artifacts", headers=AUTH).json()["artifacts"]
     assert [(f["path"], f["tools"]) for f in files] == [("/x/notes.md", ["Write"])]
+
+
+def test_an_idle_terminals_stale_window_does_not_pull_the_bar_down(client):
+    """Four terminals open, one idle: it kept re-sending 56% while the others
+    said 81%, and the bar followed whichever posted last. Within a window
+    usage only rises; a later reset time is a new window."""
+    from routers import sessions_v2 as sv2
+    sv2._limits = None
+
+    def report(slot, five, reset, seven=0.1):
+        client.post(f"/v2/sessions/statusline?slot={slot}", headers=AUTH, json={
+            "session_id": slot, "rate_limits": {
+                "five_hour": {"used_percentage": five, "resets_at": reset},
+                "seven_day": {"used_percentage": seven * 100, "resets_at": 9_000_000_000}}})
+
+    def five_hour():
+        return client.get("/v2/sessions/limits", headers=AUTH).json()["five_hour"]
+
+    report("term-busy", 81, 1790698200)
+    first_seen = client.get("/v2/sessions/limits", headers=AUTH).json()["reported_at"]
+    report("term-idle", 56, 1790698200)
+    assert five_hour() == {"used": 0.81, "resets_at": 1790698200}
+    assert client.get("/v2/sessions/limits", headers=AUTH).json()["reported_at"] == first_seen, \
+        "a stale report does not make the reading look fresh"
+
+    report("term-busy", 3, 1790716200)          # the window reset: a new one
+    assert five_hour() == {"used": 0.03, "resets_at": 1790716200}
+    report("term-idle", 56, 1790698200)         # still naming the old window
+    assert five_hour() == {"used": 0.03, "resets_at": 1790716200}
