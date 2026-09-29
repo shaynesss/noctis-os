@@ -158,7 +158,7 @@ def test_the_real_commit_passes_the_real_push_check(vault, client, auth_headers)
     subject = subprocess.run(["git", "-C", str(root), "log", "-1", "--format=%s"],
                              capture_output=True, text=True).stdout.strip()
     assert subject.startswith("Accept faber-pivot-track-20260914")
-    assert _recordless(root, "HEAD~1..HEAD") == [], "the push would refuse the app's own commit"
+    assert _recordless(root, ["HEAD~1..HEAD"]) == [], "the push would refuse the app's own commit"
 
 
 # --- an item can be decided twice in one day, because restaging says so -------
