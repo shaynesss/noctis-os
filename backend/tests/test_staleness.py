@@ -328,3 +328,14 @@ def test_the_environment_is_read_from_after_the_prompt():
             "and NOCTIS_JOB_ID=wrong here -- HOME=/u NOCTIS_JOB_ID=noctis-os NOCTIS_MODE=faber TERM=x")
     assert staleness._env_of(text) == ("faber", "noctis-os")
     assert staleness._env_of("claude TERM=x") == (None, None)
+
+
+def test_a_continuation_line_starting_with_a_bare_date_is_not_an_entry(vault, monkeypatch, tmp_path):
+    """It parsed as a naive datetime, and comparing it with an aware `now`
+    raised TypeError out of the whole flag pass."""
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
+    old = (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat()
+    _seed_job(vault, last_touched=(datetime.now(timezone.utc) - timedelta(days=4)).isoformat())
+    _died_here(tmp_path / "runtime", "dev", "noctis-build", old,
+               line="Bash git commit -m 'notes\n2026-09-11 (record audit + backfill)'")
+    assert staleness.flag_stale_jobs("dev") == ["noctis-build"]

@@ -166,6 +166,13 @@ def _log_tail(log_path: Path) -> tuple[datetime | None, bool]:
             stamp = datetime.fromisoformat(parts[0])
         except ValueError:
             continue    # a continuation line of a multi-line summary
+        # A real entry's stamp always carries its offset. A continuation line
+        # can start with a bare date ("2026-09-11 (record audit ...)" is in
+        # this project's own log), which parses as a naive datetime, and
+        # `now - died_at` then raised TypeError and took nightshift's whole
+        # run down before its scan (found 2026-09-29).
+        if stamp.tzinfo is None:
+            continue
         return stamp, len(parts) == 2 and parts[1] == "SESSION_END"
     return None, False
 
