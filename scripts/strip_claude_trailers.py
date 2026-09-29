@@ -4,6 +4,6 @@
 # _ATTRIBUTION), so a history this has cleaned always passes that check.
 import re
 lines = message.split(b"\n")
-keep = [l for l in lines if not re.match(rb"^\s*(Co-Authored-By\s*:.*|Claude-Session\s*:.*|.*Generated with \[?Claude Code\]?.*)$", l, re.I)]
+keep = [l for l in lines if not re.match(rb"^\s*(Co-Authored-By\s*:.*|Claude-Session\s*:.*|\W*Generated with \[?Claude Code\]?(\([^)\s]*\))?[\s.]*)$", l, re.I)]
 while keep and keep[-1].strip() == b"": keep.pop()
 return b"\n".join(keep) + b"\n"

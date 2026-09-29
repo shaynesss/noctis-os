@@ -791,8 +791,15 @@ class PushRequest(BaseModel):
 # Bracketed or not, and a space before the colon: the plain "Generated with
 # Claude Code" line and "Co-Authored-By :" both went through until
 # 2026-09-29, though the rule names them.
+#
+# **A line that is the attribution, not a line that mentions it.** The
+# "Generated" alternative was `.*Generated with ...`, so any sentence quoting
+# the phrase matched: 50a8b84's body describes this very pattern and the push
+# refused it the same afternoon. The line may open with punctuation or an
+# emoji and close with the link, and nothing else.
 _ATTRIBUTION = re.compile(
-    r"^\s*(Co-Authored-By\s*:|Claude-Session\s*:|.*Generated with \[?Claude Code\]?)", re.I | re.M)
+    r"^\s*(Co-Authored-By\s*:|Claude-Session\s*:"
+    r"|\W*Generated with \[?Claude Code\]?(\([^)\s]*\))?[\s.]*$)", re.I | re.M)
 
 # A commit is the record (2026-09-15): the Repo view is where you read
 # where a piece of work left things, so a commit with a subject and no

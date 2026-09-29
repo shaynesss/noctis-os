@@ -595,3 +595,18 @@ def test_a_new_branch_is_checked_only_for_what_no_remote_has(tmp_path, monkeypat
     assert [c["pushed"] for c in listing["commits"][:2]] == [False, True], "only the new commit is off GitHub"
     r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
     assert r.status_code == 200 and r.json()["branch"] == "feature", r.text
+
+
+def test_a_sentence_about_the_rule_is_not_an_attribution_line():
+    """50a8b84's body quotes the phrase while describing the check, and the
+    push refused it: the pattern matched any line containing it."""
+    refused = ["Generated with Claude Code", "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+               "  Generated with [Claude Code]", "Co-Authored-By: Claude <noreply@anthropic.com>",
+               "Co-Authored-By : x", "Claude-Session: https://x"]
+    allowed = ['The attribution pattern caught only "Generated with [Claude Code]" in its',
+               'missed the plain "Generated with Claude Code" line, and drew a repo',
+               "It refuses any `Co-Authored-By`, `Claude-Session` or the rest."]
+    for line in refused:
+        assert panels._ATTRIBUTION.search(line), line
+    for line in allowed:
+        assert not panels._ATTRIBUTION.search(line), line
