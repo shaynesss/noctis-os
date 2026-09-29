@@ -4,7 +4,7 @@ Both hooks end in a bare `except Exception` because a hook must never break
 the session it observes. That policy is right; the silence around it was not.
 A broken interpreter path or a bad import made the action feed go quiet, and
 a quiet feed is indistinguishable from a session that used no tools -- the
-exact failure `driver.py` cites for moving the telemetry settings into argv.
+exact failure the deleted `driver.py` cited for moving the telemetry settings into argv.
 """
 import subprocess
 import sys

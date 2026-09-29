@@ -59,7 +59,7 @@ def test_a_harness_without_subagents_names_the_agent_it_loses():
 
 
 def test_the_probe_follows_a_redirected_config_root(monkeypatch, tmp_path):
-    """Reports what is true, not what the code intends. build_env strips
+    """Reports what is true, not what the code intends. one_shot strips
     CLAUDE_CONFIG_DIR for spawns; a stray one in the environment would
     otherwise have this describing a different machine than sessions run on.
     """

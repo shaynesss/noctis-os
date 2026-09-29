@@ -3,12 +3,13 @@
 this job's runtime status file (SPEC.md EDD: "hook-driven action-feed logs
 ... live in a gitignored backend runtime folder", explicitly NOT the vault).
 
-Job identity comes from env vars NOCTIS_MODE/NOCTIS_JOB_ID (set by the
-Terminal.app launch command — see launch_surfaces.launch_terminal) or, when
-those aren't inherited, from --mode/--job-id baked into the hook command
-itself at launch time (VS Code's URI handler doesn't carry shell env, so Dev
-launches register a per-project hook with these args already filled in —
-see launch_surfaces._ensure_dev_hooks).
+Job identity comes from the env vars NOCTIS_MODE/NOCTIS_JOB_ID, which every
+terminal the app hosts carries (interactive.py), or, when those are absent,
+from --mode/--job-id baked into the hook command in a project's own
+`.claude/settings.local.json`, which is how a session Noctis did not launch
+(a plain terminal, VS Code) is attributed. The env wins, so a hosted session
+logs under its mode's name (`faber__<slug>`) and an unhosted one under the
+vault folder's (`dev__<slug>`); staleness reads both.
 """
 import argparse
 import json

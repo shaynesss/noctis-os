@@ -4,19 +4,18 @@ The Rust side owns the pseudo-terminal and knows nothing about modes; this
 owns the mode and knows nothing about terminals. So the shell asks here for
 the argv and gets back a list to hand `portable_pty`.
 
-**It is deliberately not `driver.build_command`.** That builds a `-p` spawn:
-`--output-format stream-json`, `--verbose`, a permission-prompt tool, a prompt
-baked into the argv. An interactive session wants none of those -- it renders
-itself, prompts for its own permissions, and reads what you type. Sharing one
-function would mean a flag list with an `if interactive` running through it,
-and the two genuinely differ more than they agree.
+**It was deliberately not `driver.build_command`**, the `-p` orchestrator's
+spawn (`--output-format stream-json`, `--verbose`, a permission-prompt tool),
+which was deleted with that orchestrator. An interactive session wants none
+of those: it renders itself, prompts for its own permissions, and reads what
+you type. `engine.one_shot` is the one `-p` left, and it is a script.
 
 What they *do* share is the part that must not drift: the model per mode, the
 methodology overlay, the subagent roster, the vault as a second allowed
 directory, and the tracked permission policy. Those are imported, not copied.
 
-See `PTY-MIGRATION.md`. This is step 1 of §7, and it runs beside the
-orchestrator rather than replacing it.
+See `PTY-MIGRATION.md` (in the vault's wiki/Noctis OS/). This was step 1 of
+§7, built beside the orchestrator; it is now the only launch path.
 """
 from __future__ import annotations
 
@@ -49,9 +48,8 @@ def statusline_settings(mode: str = "general", port: int | None = None,
     render and passes the payload on stdin, so the status bar stops depending
     on a turn being in flight to know anything.
 
-    Composed rather than written to a file for the same reason
-    `driver.settings_config` composes: the command needs an absolute path that
-    cannot be committed.
+    Composed rather than written to a file because the command needs an
+    absolute path that cannot be committed.
     """
     policy = json.loads(SHARED_SETTINGS.read_text())
     # The mode rides along as an argument. The transcript on disk does not
@@ -106,8 +104,8 @@ def spawn_args(mode: str, cwd: str, resume_id: str | None = None,
     """Everything the shell needs to open one interactive session.
 
     Returns the binary separately from the arguments because the Rust side
-    resolves the binary itself when this cannot -- the same PATH problem
-    `driver.claude_binary` exists for, in a second process.
+    resolves the binary itself when this cannot: a process started by
+    launchd or Finder has a bare PATH with no Homebrew on it.
     """
     if mode not in MODE_MODELS:
         raise ValueError(f"unknown mode {mode!r}")

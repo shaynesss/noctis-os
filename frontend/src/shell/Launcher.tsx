@@ -6,8 +6,9 @@
  * have meant maintaining two versions of the same keyboard model.
  *
  * **Why handoff opens a new session rather than switching a live one.** Each
- * mode has its own CLAUDE_CONFIG_DIR, model and tool policy, and a running
- * `claude -p` process cannot change any of them mid-flight. So the mechanic
+ * mode has its own system prompt, model and subagents, all carried in the
+ * argv of the `claude` it launches, and a running process cannot change
+ * them mid-flight. So the mechanic
  * is a spawn, not a mutation -- which is also how dev.md describes the mode
  * boundary: Faber *consumes* Vesper's verdict. Two artifacts, not one that
  * quietly became the other.

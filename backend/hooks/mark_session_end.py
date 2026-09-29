@@ -11,8 +11,8 @@ process itself exits.
 1. The other half of the staleness-flagging mechanism (backend/staleness.py):
    appends a SESSION_END sentinel to the job's runtime log, exactly the way
    log_action.py appends action lines (same job-identity resolution:
-   NOCTIS_MODE/NOCTIS_JOB_ID env vars for Terminal.app, --mode/--job-id
-   baked in for VS Code). A job whose log ends in SESSION_END was closed on
+   NOCTIS_MODE/NOCTIS_JOB_ID from a hosted terminal, --mode/--job-id baked
+   into a project's own hooks otherwise). A job whose log ends in SESSION_END was closed on
    purpose, not abandoned mid-session -- staleness.py must never flag it
    regardless of how old that sentinel gets.
 

@@ -4,8 +4,8 @@
 # terminal). It runs `make dev` straight from the live repo -- which is the
 # Tauri shell plus the backend supervisor since 2026-09-12; it used to run
 # desktop/app.py, v1's pywebview shell, which is now deleted. So
-# a code change just needs the app's own Refresh command (Cmd+R or the
-# Noctis OS > Refresh menu item), never a rebuild of this bundle.
+# a code change just needs the app to reload (Cmd+R), never a rebuild of
+# this bundle.
 #
 # Path resolved relative to this script's own location (4 levels up:
 # MacOS -> Contents -> NoctisOS.app -> desktop -> repo root) rather than

@@ -5,8 +5,8 @@ A hook must never break the session it observes, so both hooks end in a bare
 `except Exception: pass`. That policy is right and the silence is not: a hook
 that stops firing reports nothing, so a broken interpreter path or an import
 error looks exactly like a session that happened not to use any tools. The
-action feed simply goes quiet, and `driver.py` names this as the reason the
-telemetry settings had to move into the argv in the first place.
+action feed simply goes quiet, and the deleted `driver.py` named this as
+the reason the telemetry settings had to move into the argv.
 
 So the swallow stays and gains a receipt. One line per failure in a
 gitignored runtime file, which `make doctor` reads -- the failure becomes

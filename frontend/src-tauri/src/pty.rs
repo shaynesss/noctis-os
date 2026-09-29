@@ -51,9 +51,9 @@ use tauri::{AppHandle, Emitter, State};
 /// terminal feels like it is lagging behind the keyboard.
 const FRAME: Duration = Duration::from_millis(16);
 
-/// Where `claude` is looked for when PATH does not have it. Mirrors
-/// `backend/orchestrator/driver.py`'s list, and for the same reason: a
-/// process started by launchd or by Finder gets a bare PATH with no Homebrew.
+/// Where `claude` is looked for when PATH does not have it. The list the
+/// deleted `driver.py` used, for the same reason: a process started by
+/// launchd or by Finder gets a bare PATH with no Homebrew.
 const FALLBACKS: [&str; 4] = [
     "/opt/homebrew/bin/claude",
     "/usr/local/bin/claude",

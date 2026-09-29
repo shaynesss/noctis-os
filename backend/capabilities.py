@@ -71,9 +71,9 @@ def config_root() -> Path:
 
     Honours CLAUDE_CONFIG_DIR when something in the environment still sets
     it, because the point of this module is to report what is true rather
-    than what the code intends. `build_env` strips it for spawns; a stray one
-    here would otherwise make this probe describe a different machine than
-    the sessions run on.
+    than what the code intends. `engine.one_shot` strips it for its spawns
+    and no launch sets it; a stray one here would otherwise make this probe
+    describe a different machine than the sessions run on.
     """
     override = os.environ.get("CLAUDE_CONFIG_DIR")
     return Path(override) if override else Path.home() / ".claude"

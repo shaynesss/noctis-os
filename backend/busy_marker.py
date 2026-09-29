@@ -16,9 +16,11 @@ this: sessions never touch backend/runtime/, only backend code does. Same
 pattern already used for staleness/flagged (staleness.py) and the
 action-feed log (log_action.py) -- runtime state that must survive a
 session's own vault edits lives in runtime/, not in vault-editable
-frontmatter. GET /mode/<name> overrides whatever `busy` value happens to
-be sitting in state.md's frontmatter with this marker's live value, so a
-stale/dropped key in the vault file can no longer matter.
+frontmatter. v1's GET /mode/<name> read this marker over state.md's own
+`busy`; that route went at the 2026-09-12 cutover and **nothing reads the
+marker now** (2026-09-29 audit: `is_busy` has no caller outside its tests).
+The SessionEnd hook still writes and clears it. Either a reader comes back
+or this module goes; until then it is state nobody looks at.
 
 Clearing the marker still depends entirely on the SessionEnd hook firing --
 and that hook only runs on a clean CLI exit. A session killed some other

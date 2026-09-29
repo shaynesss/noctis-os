@@ -157,9 +157,9 @@ _mode_of: dict[str, str] = {}
 def index_transcripts() -> dict:
     """File every transcript history has not seen.
 
-    The second door into the `sessions` table. `store.record` only sees
-    sessions Noctis streams; a terminal session, or one started in VS Code,
-    exists on disk and nowhere in the interface until this runs. The shell
+    The door into the `sessions` table since the recorder went with the
+    `-p` orchestrator: every session, hosted or not, exists on disk and
+    nowhere in the interface until this runs. The shell
     calls it when a terminal session ends; Stats calls it on each visit so
     the count is current. Idempotent by engine id.
     """
