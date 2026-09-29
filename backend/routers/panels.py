@@ -1259,14 +1259,17 @@ def _drop_index_entry(slug: str) -> None:
     is an item that never leaves the count."""
     if not vault_io.file_exists(MAINTENANCE_STATE):
         return
-    try:
-        meta, body = vault_io.read_frontmatter(MAINTENANCE_STATE)
-    except Exception:  # noqa: BLE001 - a malformed index must not block the decision
-        return
-    inbox = [e for e in (meta.get("inbox") or []) if not (isinstance(e, dict) and e.get("slug") == slug)]
-    meta["inbox"] = inbox
-    meta["diffs_awaiting_review"] = len(inbox)
-    vault_io.write_frontmatter(MAINTENANCE_STATE, meta, body)
+    # Read, change and write under one hold of the lock: nightshift's staging
+    # rewrites the same index from another process.
+    with vault_io.locked():
+        try:
+            meta, body = vault_io.read_frontmatter(MAINTENANCE_STATE)
+        except Exception:  # noqa: BLE001 - a malformed index must not block the decision
+            return
+        inbox = [e for e in (meta.get("inbox") or []) if not (isinstance(e, dict) and e.get("slug") == slug)]
+        meta["inbox"] = inbox
+        meta["diffs_awaiting_review"] = len(inbox)
+        vault_io.write_frontmatter(MAINTENANCE_STATE, meta, body)
 
 
 def _stageable(root: Path, paths: list[str]) -> list[str]:

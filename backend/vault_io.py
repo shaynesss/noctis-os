@@ -5,9 +5,12 @@ are the only persistence layer (see SPEC.md EDD: "Vault access: direct
 filesystem read/write, no istefox/MCP dependency").
 """
 
+import fcntl
 import os
 import re
+import tempfile
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +42,61 @@ def is_safe_slug(value: str) -> bool:
 # that happens in the caller between read_frontmatter and write_frontmatter
 # -- full read-modify-write atomicity would need a transaction concept this
 # module doesn't have; not attempted here as disproportionate to actual risk.
-_write_lock = threading.Lock()
+#
+# **Across processes, not only threads (2026-09-29).** The lock was a
+# threading.Lock, so it serialised the backend's own threads and nothing
+# else: nightshift runs as its own process from launchd and writes
+# maintenance/state.md, the same file an accept click rewrites. `locked()`
+# now takes an flock on a file in the vault's .git as well, which every
+# process that writes through this module honours, and callers that read,
+# change and write one file hold it across all three. Re-entrant, so a
+# locked caller's own write_file does not wait on itself.
+_write_lock = threading.RLock()
+_held = threading.local()
+
+
+def _lock_path() -> Path:
+    vault = get_vault_path()
+    return (vault / ".git" if (vault / ".git").is_dir() else vault) / "noctis-write.lock"
+
+
+@contextmanager
+def locked():
+    """Hold the vault's write lock, across threads and processes."""
+    with _write_lock:
+        if getattr(_held, "depth", 0):
+            _held.depth += 1
+            try:
+                yield
+            finally:
+                _held.depth -= 1
+            return
+        with open(_lock_path(), "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            _held.depth = 1
+            try:
+                yield
+            finally:
+                _held.depth = 0
+                fcntl.flock(f, fcntl.LOCK_UN)
+
+
+def _write_atomically(path: Path, text: str) -> None:
+    """Write beside the target and rename over it, so a reader or a crash
+    sees the old file or the new one, never half of either. The mode is the
+    old file's, since a temp file is created private."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 def get_vault_path() -> Path:
@@ -95,9 +152,8 @@ def read_file(relative_path: str) -> str:
 
 def write_file(relative_path: str, content: str) -> None:
     path = _resolve_within_vault(relative_path)
-    with _write_lock:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+    with locked():
+        _write_atomically(path, content)
 
 
 class FrontmatterError(ValueError):
@@ -148,9 +204,8 @@ def write_frontmatter(relative_path: str, metadata: dict[str, Any], content: str
     path = _resolve_within_vault(relative_path)
     post = frontmatter.Post(content, **metadata)
     serialized = frontmatter.dumps(post)
-    with _write_lock:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(serialized, encoding="utf-8")
+    with locked():
+        _write_atomically(path, serialized)
 
 
 def file_exists(relative_path: str) -> bool:

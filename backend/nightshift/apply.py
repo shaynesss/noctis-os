@@ -235,11 +235,12 @@ def advance_lessons_cursor(mode: str) -> None:
     path = lessons_path(mode)
     through = len(vault_io.read_file(path).splitlines()) if vault_io.file_exists(path) else 0
 
-    state, content = vault_io.read_frontmatter(MAINTENANCE_STATE)
-    cursor = state.get("lessons_distilled_through", {}) or {}
-    cursor[mode] = through
-    state["lessons_distilled_through"] = cursor
-    vault_io.write_frontmatter(MAINTENANCE_STATE, state, content)
+    with vault_io.locked():
+        state, content = vault_io.read_frontmatter(MAINTENANCE_STATE)
+        cursor = state.get("lessons_distilled_through", {}) or {}
+        cursor[mode] = through
+        state["lessons_distilled_through"] = cursor
+        vault_io.write_frontmatter(MAINTENANCE_STATE, state, content)
 
 
 _JOB_ORIGIN_MARKER = re.compile(r"<!--\s*job-origin:\s*([\w-]+)/([\w-]+)\s*-->")

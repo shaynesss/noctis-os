@@ -455,8 +455,10 @@ def run() -> tuple[list[str], list[dict], list[dict], int]:
             # Past the gates, so this is a proposal. The file and its index
             # entry are written together or the file sits invisible
             # (inbox/README.md), and the runner owns both writes.
-            (inbox_dir / f"{slug}.md").write_text(draft, encoding="utf-8")
-            _stage(item, slug, rationale, confidence)
+            # Through vault_io, under its lock, like every other vault write.
+            with vault_io.locked():
+                vault_io.write_file(f"{MAINTENANCE_INBOX}/{slug}.md", draft)
+                _stage(item, slug, rationale, confidence)
             staged_slugs.append(slug)
 
     return staged_slugs, failed, dropped, seen
@@ -495,6 +497,11 @@ def _confidence_for(item: SlackItem, proposal_text: str) -> str | None:
 
 
 def _stage(item: SlackItem, slug: str, rationale: str, confidence: str) -> None:
+    with vault_io.locked():
+        _stage_locked(item, slug, rationale, confidence)
+
+
+def _stage_locked(item: SlackItem, slug: str, rationale: str, confidence: str) -> None:
     state, content = vault_io.read_frontmatter(STATE_PATH)
     inbox = state.get("inbox", [])
     inbox.append(

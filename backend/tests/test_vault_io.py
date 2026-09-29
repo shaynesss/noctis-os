@@ -205,3 +205,29 @@ def test_unparseable_frontmatter_names_only_the_broken_files(vault):
     bad = vault_io.unparseable_frontmatter("modes", "maintenance")
     assert len(bad) == 1
     assert bad[0].startswith("modes/dev/jobs/broken/context.md, line 3: ")
+
+
+def test_the_write_lock_holds_across_processes(vault):
+    """It was a threading.Lock, which nightshift, a separate process, never
+    saw. A second process must wait while this one holds it."""
+    import subprocess, sys, time
+    from pathlib import Path
+    backend = Path(__file__).resolve().parents[1]
+    code = ("import sys, time; sys.path.insert(0, %r); import vault_io; t=time.time()\n"
+            "with vault_io.locked(): print(round(time.time()-t, 1))") % str(backend)
+    with vault_io.locked():
+        child = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True,
+                                 env={"VAULT_PATH": str(vault_io.get_vault_path()), "PATH": "/usr/bin:/bin"})
+        time.sleep(1.5)
+    waited = float(child.communicate(timeout=20)[0].strip())
+    assert waited >= 1.0, f"the other process took the lock after {waited}s, while it was held"
+
+
+def test_the_lock_is_reentrant_and_writes_are_whole(vault):
+    with vault_io.locked():
+        with vault_io.locked():
+            vault_io.write_file("modes/dev/x.md", "first\n")
+        vault_io.write_file("modes/dev/x.md", "second\n")
+    assert vault_io.read_file("modes/dev/x.md") == "second\n"
+    leftovers = [p.name for p in (vault_io.get_vault_path() / "modes/dev").iterdir() if p.name.endswith(".tmp")]
+    assert leftovers == []
