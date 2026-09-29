@@ -47,10 +47,10 @@ from hooks import failure_log  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TIMEOUT = 2.0
 
-# Shell separators. A command is split on these first so that `ls && git add -A`
-# is examined as two segments and a `git` in one cannot borrow the arguments of
-# the next.
-SEPARATORS = re.compile(r"&&|\|\||[;|&\n]")
+# A heredoc's body is data handed to a command (`cat`, mostly: a commit
+# message), not commands, and it is where the prose that mentions `git add -A`
+# lives. Removed, with its terminator, before anything is read.
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n[ \t]*\2[ \t]*(?=\n|$)", re.S)
 
 # Git's own global options that take a value, skipped when locating the
 # subcommand so `git -C /some/path add -A` is still seen as `add`.
@@ -60,34 +60,83 @@ GLOBAL_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--e
 # starts with a dot (`.claude/settings.json`) does not and must not match.
 EVERYTHING = {".", "./", ":/", "*", "-A", "--all", "-u", "--update"}
 
+SHELLS = {"sh", "bash", "zsh", "dash"}
 
-def _segments(command: str) -> list[list[str]]:
-    out = []
-    for piece in SEPARATORS.split(command):
-        try:
-            tokens = shlex.split(piece)
-        except ValueError:
-            continue  # unbalanced quotes: not parseable, so not judged
-        if tokens:
-            out.append(tokens)
+
+def _newlines_as_separators(command: str) -> str:
+    """An unquoted newline ends a command, a quoted one is part of a string.
+
+    **Quotes first, then lines (2026-09-29).** This split on newlines before
+    it read quotes, so every multi-line command came apart into fragments with
+    unbalanced quotes, and an unparseable fragment is skipped. That let the
+    most common commit of all through: `git commit -am "$(cat <<'EOF' ...`.
+    """
+    out, quote, escaped = [], None, False
+    for ch in command:
+        if escaped:
+            escaped = False
+        elif ch == "\\" and quote != "'":
+            escaped = True
+        elif quote:
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "\n":
+            ch = ";"
+        out.append(ch)
+    return "".join(out)
+
+
+def _segments(command: str) -> list[list[str]] | None:
+    """The command's simple commands, each a token list; None if unparseable.
+
+    Tokenised whole, as a shell would, with `;`, `&&`, `|`, `(` and the rest
+    as their own tokens, then cut at them. So `ls && git add -A`, `(git add
+    -A)` and `$(git add -A)` are each seen as a git call of their own.
+    """
+    command = _newlines_as_separators(HEREDOC.sub(lambda m: "<<" + m.group(3), command))
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        tokens = list(lexer)
+    except ValueError:
+        return None  # unbalanced quotes: not parseable, so not judged
+    out, current = [], []
+    for t in tokens:
+        if t and all(c in "();<>|&" for c in t):
+            if current:
+                out.append(current)
+            current = []
+        else:
+            current.append(t)
+    if current:
+        out.append(current)
     return out
 
 
-def _subcommand(tokens: list[str]) -> tuple[str, list[str]] | None:
-    """The git subcommand and its arguments, or None if this is not a git call."""
-    try:
-        i = tokens.index("git")
-    except ValueError:
+def _is_git(token: str) -> bool:
+    return os.path.basename(token) == "git"
+
+
+def _subcommand(tokens: list[str]) -> tuple[str, list[str], str | None] | None:
+    """The git subcommand, its arguments and any `-C` directory, or None if
+    this is not a git call. `/usr/bin/git` is git."""
+    i = next((n for n, t in enumerate(tokens) if _is_git(t)), None)
+    if i is None:
         return None
     i += 1
+    where = None
     while i < len(tokens) and tokens[i].startswith("-"):
+        if tokens[i] == "-C" and i + 1 < len(tokens):
+            where = os.path.join(where, tokens[i + 1]) if where else tokens[i + 1]
         if tokens[i] in GLOBAL_WITH_VALUE:
             i += 2
         else:
             i += 1
     if i >= len(tokens):
         return None
-    return tokens[i], tokens[i + 1:]
+    return tokens[i], tokens[i + 1:], where
 
 
 def _has_short_flag(args: list[str], letter: str) -> bool:
@@ -97,32 +146,86 @@ def _has_short_flag(args: list[str], letter: str) -> bool:
                for a in args)
 
 
-def whole_tree_command(command: str) -> tuple[str, str] | None:
-    """(what it would do, the command as written), or None if it is scoped.
+def _positional(args: list[str], with_value: set[str] = frozenset()) -> list[str]:
+    """Arguments that are not options, skipping the value of any option in
+    `with_value` (`-m "wip"` is a message, not a pathspec)."""
+    out, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in with_value:
+            skip = True
+        elif not a.startswith("-"):
+            out.append(a)
+    return out
+
+
+def _judge(sub: str, args: list[str]) -> str | None:
+    positional = [a for a in args if not a.startswith("-")]
+    if sub == "add" and (any(a in EVERYTHING for a in args) or not positional):
+        return "stage every changed file"
+    if sub == "commit" and (_has_short_flag(args, "a") or "--all" in args):
+        return "commit every changed file"
+    if sub == "stash":
+        verb = positional[0] if positional else "push"
+        rest = args[args.index(verb) + 1:] if positional else args
+        if verb == "save":   # takes a message, never a pathspec
+            return "stash the whole working tree"
+        if verb == "push" and "--" not in rest and not _positional(rest, {"-m", "--message"}):
+            return "stash the whole working tree"
+    if sub == "reset" and "--hard" in args:
+        return "discard every uncommitted change"
+    if sub in {"checkout", "restore"} and any(a in EVERYTHING for a in args):
+        return "discard every uncommitted change"
+    if sub in {"checkout", "switch"} and ({"-f", "--force", "--discard-changes"} & set(args)):
+        return "discard every uncommitted change"
+    if sub == "rm" and any(a in EVERYTHING for a in args):
+        return "remove every file from the index"
+    if sub == "clean" and _has_short_flag(args, "f"):
+        return "delete every untracked file"
+    return None
+
+
+def whole_tree_command(command: str, _depth: int = 0) -> tuple[str, str, str | None] | None:
+    """(what it would do, the command as written, the directory it acts in if
+    not the session's own), or None if it is scoped.
 
     Scoped is the test, not safe: `git add backend/jobs.py` touches one file and
     is fine with company, while `git add -A` cannot know whose file it took.
+
+    The directory follows `cd` and `git -C`, because the repository a command
+    reaches is the one to ask about: a session in noctis-os running `cd
+    ../second-brain && git add -A` touches the vault, not noctis-os.
     """
-    for tokens in _segments(command):
+    segments = _segments(command)
+    if segments is None or _depth > 3:
+        return None
+    here: str | None = None
+    for tokens in segments:
+        if tokens[0] == "cd":
+            target = tokens[1] if len(tokens) > 1 else "~"
+            here = os.path.join(here, target) if here else target
+            continue
+        # A command inside a command: `bash -c '...'`, `eval ...`, and the
+        # `$(...)` or backtick forms, which arrive here as one quoted token.
+        inner = []
+        if os.path.basename(tokens[0]) in SHELLS and "-c" in tokens[:-1]:
+            inner.append(tokens[tokens.index("-c") + 1])
+        if tokens[0] == "eval":
+            inner.append(" ".join(tokens[1:]))
+        inner += [t[2:-1] if t.startswith("$(") else t.strip("`")
+                  for t in tokens if t.startswith("$(") or t.startswith("`")]
+        for text in inner:
+            if found := whole_tree_command(text, _depth + 1):
+                effect, written, where = found
+                return effect, written, (os.path.join(here, where) if here and where else where or here)
+
         found = _subcommand(tokens)
         if not found:
             continue
-        sub, args = found
-        written = " ".join(tokens)
-        positional = [a for a in args if not a.startswith("-")]
-
-        if sub == "add" and (any(a in EVERYTHING for a in args) or not positional):
-            return "stage every changed file", written
-        if sub == "commit" and (_has_short_flag(args, "a") or "--all" in args):
-            return "commit every changed file", written
-        if sub == "stash" and not positional and "--" not in args:
-            return "stash the whole working tree", written
-        if sub == "reset" and "--hard" in args:
-            return "discard every uncommitted change", written
-        if sub in {"checkout", "restore"} and any(a in EVERYTHING for a in args):
-            return "discard every uncommitted change", written
-        if sub == "clean" and _has_short_flag(args, "f"):
-            return "delete every untracked file", written
+        sub, args, where = found
+        if effect := _judge(sub, args):
+            return effect, " ".join(tokens), (os.path.join(here, where) if here and where else where or here)
     return None
 
 
@@ -191,9 +294,11 @@ def decide(payload: dict) -> str | None:
     verdict = whole_tree_command(command)
     if not verdict:
         return None
-    effect, written = verdict
+    effect, written, where = verdict
 
     cwd = str(payload.get("cwd") or os.getcwd())
+    if where:
+        cwd = os.path.normpath(os.path.join(cwd, os.path.expanduser(where)))
     others = others_in_this_repo(cwd, payload.get("session_id"))
     if not others:
         return None  # alone in the tree: this is an ordinary command

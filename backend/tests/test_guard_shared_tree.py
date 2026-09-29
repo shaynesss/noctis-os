@@ -186,3 +186,59 @@ def test_the_guard_is_registered_for_every_hosted_session():
     assert any("guard_shared_tree.py" in c for c in commands)
     assert all(e["matcher"] == "Bash" for e in entries)
     assert Path(commands[0].split()[-1]).exists(), "hook script must exist on disk"
+
+
+# --- the bypasses found 2026-09-29 --------------------------------------------
+
+HEREDOC_COMMIT = "git commit -am \"$(cat <<'EOF'\nA subject\n\nA body that says; things.\nEOF\n)\""
+
+
+@pytest.mark.parametrize("command, effect", [
+    (HEREDOC_COMMIT, "commit every changed file"),       # the most common commit of all
+    ("bash -c 'git add -A'", "stage every changed file"),
+    ("sh -c \"cd x && git add .\"", "stage every changed file"),
+    ("(git add -A)", "stage every changed file"),
+    ("echo $(git add -A)", "stage every changed file"),
+    ("eval git add -A", "stage every changed file"),
+    ("/usr/bin/git add -A", "stage every changed file"),
+    ("git stash push", "stash the whole working tree"),
+    ("git stash push -u", "stash the whole working tree"),
+    ("git stash push -m 'wip'", "stash the whole working tree"),
+    ("git stash save 'wip'", "stash the whole working tree"),
+    ("git checkout -f", "discard every uncommitted change"),
+    ("git switch -f main", "discard every uncommitted change"),
+    ("git rm -r --cached .", "remove every file from the index"),
+    ("git status\ngit add -A", "stage every changed file"),
+])
+def test_the_spellings_that_got_past_are_recognised(command, effect):
+    found = guard.whole_tree_command(command)
+    assert found is not None and found[0] == effect, command
+
+
+@pytest.mark.parametrize("command", [
+    # How a careful session commits: named paths, then a heredoc message
+    # whose prose may mention the very commands the guard refuses.
+    "git add backend/a.py && git commit -q -F - <<'EOF'\nGuard: refuses git add -A and git commit -am\n\nBody.\nEOF",
+    "git commit -m \"$(cat <<'EOF'\nfixes git add -A; and git stash\nEOF\n)\"",
+    "python3 - <<'EOF'\nprint('git add -A')\nEOF",
+    "git stash push -- backend/jobs.py",
+    "git stash push -m 'wip' backend/jobs.py",
+    "git rm --cached backend/data/history.db",
+    "git switch main",
+])
+def test_scoped_commands_with_that_prose_in_them_are_still_allowed(command):
+    assert guard.whole_tree_command(command) is None, command
+
+
+def test_the_repository_judged_is_the_one_the_command_reaches(monkeypatch):
+    """`git -C` and `cd` move a command into another repository; it was
+    judged against the session's own, so the vault could be swept from
+    noctis-os while a session in the vault was unprotected."""
+    assert guard.whole_tree_command("git -C ../second-brain add -A")[2] == "../second-brain"
+    assert guard.whole_tree_command("cd ../second-brain && git add -A")[2] == "../second-brain"
+    assert guard.whole_tree_command("git add -A")[2] is None
+
+    asked = []
+    monkeypatch.setattr(guard, "others_in_this_repo", lambda cwd, sid: asked.append(cwd) or [])
+    guard.decide(_payload("cd ../vault && git add -A", cwd="/work/repo"))
+    assert asked == ["/work/vault"]
