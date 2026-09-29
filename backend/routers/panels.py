@@ -490,6 +490,25 @@ def _upstream_only(root: Path, upstream: str) -> tuple[list[dict], int]:
     return listed, lost
 
 
+def _outgoing(upstream: str | None) -> list[str]:
+    """The rev-list arguments for what a push would send.
+
+    With an upstream, what it lacks. Without one (a new branch, or a repo
+    never pushed), what no remote has: until 2026-09-29 that case read as
+    `HEAD`, the whole history, so a new branch in noctis-os was checked
+    against every commit ever made and refused for two bodiless ones made
+    on GitHub's own editor, which were already there.
+    """
+    return [f"{upstream}..HEAD"] if upstream else ["HEAD", "--not", "--remotes"]
+
+
+def _unpushed(root: Path, upstream: str | None) -> set[str]:
+    """Full hashes of the commits no remote has. Without an upstream this
+    was the empty set, so every commit in a repo with no remote was drawn
+    as on GitHub (bello-website: 20 of 20, 2026-09-29)."""
+    return set((_git(root, "rev-list", *_outgoing(upstream)) or "").split())
+
+
 def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
     """A repository's local state. With `paths`, the commits and dirty files
     are those touching them -- how the vault is read as one project's notes
@@ -530,9 +549,7 @@ def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
 
     # The last twenty, newest first, each marked with whether the upstream
     # has it -- the honest version of "ahead by 201".
-    unpushed: set[str] = set()
-    if upstream:
-        unpushed = set((_git(root, "rev-list", f"{upstream}..HEAD") or "").split())
+    unpushed = _unpushed(root, upstream)
     commits = _commits(root, 20, paths, unpushed)
     _mark_commit_modes(root, commits)
 
@@ -592,9 +609,7 @@ def _project_notes(root: Path) -> dict | None:
     # attribution: each vault commit knows where its author session was.
     root_str = str(root.resolve()).rstrip("/")
     inside = lambda cwd: bool(cwd) and (cwd == root_str or cwd.startswith(root_str + "/"))  # noqa: E731
-    unpushed: set[str] = set()
-    if notes["upstream"]:
-        unpushed = set((_git(vault, "rev-list", f"{notes['upstream']}..HEAD") or "").split())
+    unpushed = _unpushed(vault, notes["upstream"])
     recent = _commits(vault, 60, None, unpushed)
     _mark_commit_modes(vault, recent)
     by_path = {c["full"]: c for c in notes["commits"]}
@@ -773,7 +788,11 @@ class PushRequest(BaseModel):
     expect: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
 
 
-_ATTRIBUTION = re.compile(r"^\s*(Co-Authored-By:|Claude-Session:|.*Generated with \[Claude Code\])", re.I | re.M)
+# Bracketed or not, and a space before the colon: the plain "Generated with
+# Claude Code" line and "Co-Authored-By :" both went through until
+# 2026-09-29, though the rule names them.
+_ATTRIBUTION = re.compile(
+    r"^\s*(Co-Authored-By\s*:|Claude-Session\s*:|.*Generated with \[?Claude Code\]?)", re.I | re.M)
 
 # A commit is the record (2026-09-15): the Repo view is where you read
 # where a piece of work left things, so a commit with a subject and no
@@ -783,9 +802,13 @@ _ATTRIBUTION = re.compile(r"^\s*(Co-Authored-By:|Claude-Session:|.*Generated wit
 RECORD_RULE_SINCE = 1789603200   # 2026-09-17 00:00 UTC (datetime(2026, 9, 17, tzinfo=utc).timestamp())
 
 
-def _recordless(root: Path, outgoing: str) -> list[str]:
-    """Short shas of outgoing commits, dated after the rule, that have no body."""
-    log = _git(root, "log", outgoing, "--format=%h%x1f%ct%x1f%b%x1e", timeout=20) or ""
+def _recordless(root: Path, outgoing: list[str]) -> list[str] | None:
+    """Short shas of outgoing commits, dated after the rule, that have no
+    body. None when the log could not be read, which the push treats as a
+    refusal: a check that could not run has not passed."""
+    log = _git(root, "log", *outgoing, "--format=%h%x1f%ct%x1f%b%x1e", timeout=20)
+    if log is None:
+        return None
     bare = []
     for record in log.split("\x1e"):
         parts = record.strip("\n").split("\x1f")
@@ -842,14 +865,21 @@ def repos_push(req: PushRequest) -> dict:
         remote = _git(root, "config", f"branch.{branch}.remote") or "origin"
         _git(root, "fetch", "--quiet", remote, timeout=60)
 
-    outgoing = f"{upstream}..HEAD" if upstream else "HEAD"
-    messages = _git(root, "log", outgoing, "--format=%B", timeout=20) or ""
+    outgoing = _outgoing(upstream)
+    # Fail closed. `_git` answers None on any error or timeout, and `or ""`
+    # read that as "no messages, nothing to refuse": a failed read let the
+    # push through unchecked.
+    messages = _git(root, "log", *outgoing, "--format=%B", timeout=20)
+    bare = _recordless(root, outgoing)
+    if messages is None or bare is None:
+        raise HTTPException(status_code=503, detail=(
+            "could not read the commits about to go, so they were not checked; nothing was pushed"))
     tainted = len(_ATTRIBUTION.findall(messages))
     if tainted:
         raise HTTPException(status_code=409, detail=(
-            f"{tainted} attribution line{'s' if tainted != 1 else ''} (Co-Authored-By / Claude-Session) in the "
-            f"commits about to go -- strip them first (scripts/strip_claude_trailers.py); nothing was pushed"))
-    bare = _recordless(root, outgoing)
+            f"{tainted} attribution line{'s' if tainted != 1 else ''} (Co-Authored-By, Claude-Session or "
+            f"Generated with Claude Code) in the commits about to go -- strip them first "
+            f"(git filter-repo --message-callback \"$(cat scripts/strip_claude_trailers.py)\"); nothing was pushed"))
     if bare:
         raise HTTPException(status_code=409, detail=(
             f"{len(bare)} commit{'s' if len(bare) != 1 else ''} with no body ({', '.join(bare[:5])}) -- a commit is the "

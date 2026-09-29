@@ -28,7 +28,10 @@ def test_a_repo_reads_its_local_state(tmp_path, monkeypatch, client, auth_header
     assert r["upstream"] is None and r["ahead"] is None, "no remote, no ahead/behind -- not zero"
     assert r["dirty"] == ["a.txt"]
     assert [c["subject"] for c in r["commits"]] == ["first"]
-    assert r["commits"][0]["pushed"] is True, "with no upstream nothing is 'unpushed'"
+    # No remote has it, so it is not on GitHub. This asserted the opposite
+    # until 2026-09-29, which is how bello-website read "20, all on GitHub"
+    # with no remote at all.
+    assert r["commits"][0]["pushed"] is False, "with no remote, nothing is on GitHub"
     assert r["slug"] is None and r["github_reason"] == "no remote named origin"
     assert r["cwds"] == [str(root)]
 
@@ -549,3 +552,46 @@ def test_the_same_author_in_the_same_second_is_not_a_copy_on_its_own(tmp_path, m
     client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)  # refused; fetches
     view = _one(client, auth_headers, root)
     assert view["upstream_lost"] == 1 and view["upstream_only"][0]["copied"] is False
+
+
+def test_every_wording_of_the_attribution_rule_is_refused(tmp_path, monkeypatch, client, auth_headers):
+    """The rule names a "Generated with Claude Code" line; only the bracketed
+    Markdown form was caught, and "Co-Authored-By :" slipped by its space."""
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    for i, line in enumerate(("Generated with Claude Code", "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+                 "Co-Authored-By : Claude <noreply@anthropic.com>", "claude-session: https://x")):
+        (tmp_path / str(i)).mkdir()
+        root = _with_origin(tmp_path / str(i))
+        _commit(root, "work", body=FIXTURE_BODY + "\n\n" + line)
+        r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+        assert r.status_code == 409 and "attribution line" in r.json()["detail"], line
+
+
+def test_a_check_that_cannot_read_the_commits_refuses_the_push(tmp_path, monkeypatch, client, auth_headers):
+    """`_git` answers None on an error or a timeout, and `or ""` read that as
+    nothing to refuse: the push went out unchecked."""
+    root = _with_origin(tmp_path)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    _commit(root, "tainted", body=FIXTURE_BODY + "\n\nCo-Authored-By: Claude <noreply@anthropic.com>")
+    real = panels._git
+    monkeypatch.setattr(panels, "_git", lambda root, *a, **k: None if a[:1] == ("log",) else real(root, *a, **k))
+    r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+    assert r.status_code == 503 and "not checked" in r.json()["detail"]
+    assert subprocess.run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=root,
+                          capture_output=True, text=True).stdout.strip() == "1", "nothing was pushed"
+
+
+def test_a_new_branch_is_checked_only_for_what_no_remote_has(tmp_path, monkeypatch, client, auth_headers):
+    """A branch with no upstream was checked against all of HEAD's history,
+    so in noctis-os two bodiless commits made on GitHub's editor, already
+    on origin, refused every new branch."""
+    root = _with_origin(tmp_path)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    _commit(root, "made on github, no body", body=None, at="2026-09-18T10:00:00Z")
+    subprocess.run(["git", "push", "-q", "origin", "main"], cwd=root, check=True)
+    subprocess.run(["git", "checkout", "-q", "-b", "feature"], cwd=root, check=True)
+    _commit(root, "the new work")
+    listing = _one(client, auth_headers, root)
+    assert [c["pushed"] for c in listing["commits"][:2]] == [False, True], "only the new commit is off GitHub"
+    r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+    assert r.status_code == 200 and r.json()["branch"] == "feature", r.text

@@ -551,7 +551,9 @@ function divergence(r: RepoInfo) {
     ahead, behind, diverged, lost,
     rewrite: diverged && lost === 0,
     missing: (r.upstream_only ?? []).filter((c) => !c.copied),
-    nothing: !r.upstream ? false : ahead === 0,
+    // No remote at all: there is nowhere to push, and the button's 409 said
+    // so after the click (bello-website, 2026-09-29). Say it by its absence.
+    nothing: !r.upstream ? !r.remote : ahead === 0,
   }
 }
 
