@@ -24,6 +24,10 @@ backend/runtime/*.log
 # above (local runtime state, not project source), just a different
 # extension. Added 2026-07-22 when busy tracking moved off state.md.
 backend/runtime/*.busy
+# The supervisor's one rotated copy of dev.log, and the drafts nightshift
+# keeps when a gate drops them (runner.DROPS_DIR).
+backend/runtime/*.log.*
+backend/runtime/nightshift-drops/
 
 # A Dev-mode launch writes a per-project local hook registration here (see
 # launch_surfaces._ensure_dev_hooks) -- local machine state, not source.

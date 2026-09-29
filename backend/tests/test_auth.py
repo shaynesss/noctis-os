@@ -88,3 +88,8 @@ def test_every_routes_method_passes_the_browsers_preflight(client):
         r = client.options("/v2/config", headers={
             "Origin": ALLOWED_ORIGIN, "Access-Control-Request-Method": method})
         assert r.status_code == 200, f"{method} preflight refused: {r.text}"
+
+
+def test_no_route_but_health_answers_without_the_token(client):
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert client.get(path).status_code in (401, 404), path

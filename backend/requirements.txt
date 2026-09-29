@@ -2,4 +2,6 @@ fastapi
 uvicorn[standard]
 python-dotenv
 python-frontmatter
-pywebview
+# Imported directly by vault_io.py, so declared rather than left to arrive
+# through python-frontmatter. pywebview went with the v1 shell (2026-09-12).
+PyYAML

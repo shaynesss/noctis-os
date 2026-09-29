@@ -51,7 +51,7 @@ def test_no_mode_is_noop(tmp_path, monkeypatch):
 
     mark_session_end.mark_session_end(None, "x", "other")
 
-    remaining = [p for p in tmp_path.iterdir() if p.name != "session_end_debug.log"]
+    remaining = list(tmp_path.iterdir())
     assert remaining == []
 
 

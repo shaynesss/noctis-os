@@ -56,6 +56,31 @@ START_TIMEOUT_S = 30.0
 
 _child: subprocess.Popen | None = None
 
+# The supervisor's and uvicorn's output, appended by `make` (`>> dev.log`).
+# Every terminal posts its status line every five seconds and each is an
+# access-log line, so it had reached 92MB by 2026-09-29 with no rotation.
+LOG = BACKEND_DIR / "runtime" / "dev.log"
+LOG_MAX = 20 * 1024 * 1024
+
+
+def trim_log(path: Path = LOG, limit: int = LOG_MAX) -> bool:
+    """Past `limit`, keep one copy as `dev.log.1` and empty the live file.
+
+    Truncated in place rather than renamed: the writers hold it open, and a
+    renamed file would keep receiving every line. Safe because they opened
+    it to append, so each write lands at the new end.
+    """
+    try:
+        if path.stat().st_size <= limit:
+            return False
+        import shutil
+        shutil.copyfile(path, path.with_name(path.name + ".1"))
+        with path.open("r+b") as f:
+            f.truncate(0)
+        return True
+    except OSError:
+        return False
+
 
 def _log(msg: str) -> None:
     print(f"[supervise] {msg}", flush=True)
@@ -145,6 +170,8 @@ def supervise(iterations: int | None = None) -> None:
     while iterations is None or n < iterations:
         n += 1
         time.sleep(POLL_S)
+        if trim_log():
+            _log("dev.log passed 20MB; kept as dev.log.1 and started fresh")
         if answering():
             if failures:
                 _log(f"backend back after {failures} restart{'s' if failures != 1 else ''}")

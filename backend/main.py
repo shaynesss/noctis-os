@@ -14,7 +14,10 @@ load_dotenv()
 from auth import ALLOWED_ORIGINS, require_auth  # noqa: E402
 from routers import panels, search, sessions_v2  # noqa: E402
 
-app = FastAPI(title="Noctis OS backend")
+# No /docs, /redoc or /openapi.json. They were the only routes besides /health
+# that answered without the token (found 2026-09-29), and a local single-user
+# API has no reader for them. `app.openapi()` still builds the schema in code.
+app = FastAPI(title="Noctis OS backend", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 class CrashesInsideCors:

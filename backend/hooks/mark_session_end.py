@@ -66,17 +66,10 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 
 def mark_session_end(mode: str | None, job_id: str | None, reason: str | None) -> None:
-    # Temporary instrumentation (2026-07-22): busy still flipped to idle
-    # mid-session with reason gating in place, so the "clear"/"resume"
-    # denylist isn't the whole story. Logs every invocation, gated or not,
-    # so the next occurrence has real data instead of another guess. Remove
-    # once the actual reason value is confirmed.
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-    with (RUNTIME_DIR / "session_end_debug.log").open("a", encoding="utf-8") as f:
-        f.write(
-            f"{datetime.now(timezone.utc).isoformat()} mode={mode} job_id={job_id} reason={reason!r}\n"
-        )
-
+    # The 2026-07-22 instrumentation that logged every call to
+    # session_end_debug.log is gone (2026-09-29): it asked which reason a
+    # real exit carries, 756 entries answered 'other', and it was still
+    # writing two months later.
     if not mode:
         return  # not a Noctis-launched session, nothing to mark
     if reason in NON_TERMINAL_REASONS:
