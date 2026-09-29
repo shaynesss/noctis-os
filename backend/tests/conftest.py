@@ -28,6 +28,15 @@ def _isolated_busy_marker(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_live_sessions(monkeypatch):
+    """staleness.live_jobs reads the machine's running `claude` processes, so
+    left alone a test's answer would depend on which terminals are open.
+    Nothing is live unless a test says so."""
+    import staleness
+    monkeypatch.setattr(staleness, "live_jobs", lambda: set())
+
+
+@pytest.fixture(autouse=True)
 def _isolate_settings(monkeypatch):
     """Clear settings the suite asserts defaults for.
 

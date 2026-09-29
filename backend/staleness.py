@@ -29,6 +29,9 @@ v1's mirror of those folders, kept in step by the deleted router; nothing
 writes it now, so it is not read here either.
 """
 
+import os
+import re
+import subprocess
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -59,6 +62,54 @@ LOG_NAMES = {
 }
 
 SHIPPED_STAGES = ("Ship", "Done")
+
+_ENV = {name: re.compile(rf"(?:^|\s){name}=(\S+)") for name in ("NOCTIS_MODE", "NOCTIS_JOB_ID")}
+
+
+def _env_of(ps_text: str) -> tuple[str | None, str | None]:
+    """(NOCTIS_MODE, NOCTIS_JOB_ID) from one process's `ps eww` output.
+
+    The environment is printed after the arguments, and the arguments carry
+    the whole system prompt, which can mention these names. So the last
+    match is the environment's own.
+    """
+    found = [(_ENV[n].findall(ps_text) or [None])[-1] for n in ("NOCTIS_MODE", "NOCTIS_JOB_ID")]
+    return found[0], found[1]
+
+
+def live_jobs() -> set[tuple[str, str]]:
+    """(mode, job) of every `claude` process running now.
+
+    **The log cannot tell idle from dead (2026-09-29).** A session that sits
+    open overnight writes nothing, so by the log it died at its last tool
+    call: all four "noctis-os is stale" flags from 09-19 to 09-29 were
+    sessions that were idle or later resumed, and the last was the session
+    that found this. Every hosted terminal carries NOCTIS_MODE and
+    NOCTIS_JOB_ID in its environment, so a running process with both is
+    the job being live, whatever its log says.
+
+    Asked of `ps` one process at a time: its output spans many lines per
+    process (the prompt has newlines), and `pgrep` was not used because on
+    macOS it silently leaves out its own ancestors, which dropped the very
+    session running the check. Any failure is an empty set, which is the
+    log-only reading this had before.
+    """
+    try:
+        listing = subprocess.run(["ps", "-axo", "pid=,comm="], capture_output=True,
+                                 text=True, timeout=10).stdout
+        live = set()
+        for row in listing.splitlines():
+            pid, _, comm = row.strip().partition(" ")
+            if os.path.basename(comm.strip()) != "claude":
+                continue
+            env = subprocess.run(["ps", "eww", "-o", "command=", "-p", pid],
+                                 capture_output=True, text=True, timeout=10).stdout
+            mode, job = _env_of(env)
+            if mode and job:
+                live.add((mode, job))
+        return live
+    except (OSError, subprocess.SubprocessError):
+        return set()
 
 
 def _parse_last_touched(last_touched: object) -> datetime | None:
@@ -143,13 +194,15 @@ def _last_session(folder: str, slug: str) -> tuple[datetime | None, bool]:
     return newest_log, closed_cleanly
 
 
-def flag_stale_jobs(folder: str, now: datetime | None = None) -> list[str]:
+def flag_stale_jobs(folder: str, now: datetime | None = None,
+                    live: set[tuple[str, str]] | None = None) -> list[str]:
     """Scans a mode's job folders, flags any that look abandoned
     mid-session. Returns the slugs newly flagged this pass. Writes
     `flagged: true` into the job's own context.md, which is the one place
-    the flag is read from.
+    the flag is read from. `live` is `live_jobs()` unless given.
     """
     now = now or datetime.now(timezone.utc)
+    live = live_jobs() if live is None else live
     base = FLAGGABLE.get(folder)
     if not base or not vault_io.file_exists(base):
         return []
@@ -172,6 +225,10 @@ def flag_stale_jobs(folder: str, now: datetime | None = None) -> list[str]:
         # No log means no session we can see ever worked this job, so there
         # is no death to report: `last_touched` alone cannot tell a job
         # parked in July from one abandoned in July.
+        # A session still running on this job has not died, however long
+        # ago it last wrote to the log.
+        if any((name, slug) in live for name in LOG_NAMES.get(folder, (folder,))):
+            continue
         died_at, closed_cleanly = _last_session(folder, slug)
         if died_at is None or closed_cleanly:
             continue
@@ -202,4 +259,5 @@ def flag_stale_jobs(folder: str, now: datetime | None = None) -> list[str]:
 
 def flag_pass(now: datetime | None = None) -> dict[str, list[str]]:
     """Every flaggable folder, once. What nightshift runs before its scan."""
-    return {folder: flag_stale_jobs(folder, now) for folder in FLAGGABLE}
+    live = live_jobs()
+    return {folder: flag_stale_jobs(folder, now, live) for folder in FLAGGABLE}

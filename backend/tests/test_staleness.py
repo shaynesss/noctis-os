@@ -306,3 +306,25 @@ def test_log_tail_of_a_log_with_no_timestamp_anywhere_is_no_session(vault, monke
     log = tmp_path / "x.log"
     log.write_text("garbage\nmore garbage\n", encoding="utf-8")
     assert staleness._log_tail(log) == (None, False)
+
+
+def test_a_job_with_a_live_session_is_not_flagged_however_quiet_its_log(vault, monkeypatch, tmp_path):
+    """A session left open overnight writes nothing, so by its log it died at
+    its last tool call. All four noctis-os flags from 09-19 to 09-29 were
+    that. A running process carrying the job is the job being live."""
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
+    _seed_job(vault, last_touched=(datetime.now(timezone.utc) - timedelta(days=4)).isoformat())
+    _died_here(tmp_path / "runtime", "faber", "noctis-build",
+               (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat())
+
+    assert staleness.flag_stale_jobs("dev", live={("faber", "noctis-build")}) == []
+    assert staleness.flag_stale_jobs("dev", live={("faber", "another-job")}) == ["noctis-build"]
+
+
+def test_the_environment_is_read_from_after_the_prompt():
+    """`ps eww` prints the arguments, then the environment. The arguments
+    hold the system prompt, which can itself say NOCTIS_MODE=something."""
+    text = ("/opt/homebrew/bin/claude --append-system-prompt the docs say NOCTIS_MODE=vesper\n"
+            "and NOCTIS_JOB_ID=wrong here -- HOME=/u NOCTIS_JOB_ID=noctis-os NOCTIS_MODE=faber TERM=x")
+    assert staleness._env_of(text) == ("faber", "noctis-os")
+    assert staleness._env_of("claude TERM=x") == (None, None)
