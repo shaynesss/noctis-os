@@ -504,7 +504,7 @@ export function Terminal({
           if (fetched.kind === 'offline') {
             stillborn('\r\n  the backend did not answer, so this session has no',
                       '  methodology to start with. `make doctor` says whether it is up.')
-          } else if (fetched.status >= 500) {
+          } else if ((fetched.status ?? 0) >= 500) {
             // A crash, not a refusal. Until 2026-09-28 a crash never reached
             // this branch: its 500 had no CORS headers, so it read as offline.
             stillborn(`\r\n  the backend failed while starting this session (HTTP ${fetched.status}).`,
