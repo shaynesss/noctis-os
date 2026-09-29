@@ -947,3 +947,29 @@ def test_a_malformed_status_line_report_is_kept_and_its_numbers_ignored(client):
     assert sv2._limits is before, "no reading was taken from garbage"
     assert "term-odd" in sv2._statusline, "the slot is still live"
     client.delete("/v2/sessions/statusline/term-odd", headers=AUTH)
+
+
+def test_an_indexed_sessions_tool_calls_are_named_and_its_files_listed(client):
+    """Rows the transcript indexer filed keep the tool's name as content and
+    its arguments in meta.args; the readers looked only for meta.tool, so
+    History showed every call as "tool" and every artifact list was empty.
+    Both the shape filed before this fix and the one filed after."""
+    import json as _json
+    from orchestrator.jsonl import Conversation, Turn
+    from routers import sessions_v2 as sv2
+
+    before = {"id": "t1", "args": {"file_path": "/x/notes.md", "content": "hi"}}
+    after = {"id": "t2", "tool": "Bash", "args": {"command": "make test\nand more", "description": "run"}}
+    row = sv2._store.ingest(Conversation(
+        engine_session_id="indexed-1", cwd="/x", started_at="2026-09-29T10:00:00Z",
+        messages=[{"role": "user", "content": "go", "meta": None},
+                  {"role": "tool", "content": "Write", "meta": _json.dumps(before)},
+                  {"role": "tool", "content": "Bash", "meta": _json.dumps(after)}],
+        turns=[Turn(model="claude-opus-5-5", input_tokens=1)]), "faber")
+
+    blocks = client.get(f"/v2/sessions/history/{row}", headers=AUTH).json()["blocks"]
+    tools = [(b["name"], b["target"]) for b in blocks if b["kind"] == "tool"]
+    assert tools == [("Write", "/x/notes.md"), ("Bash", "make test")]
+
+    files = client.get(f"/v2/sessions/history/{row}/artifacts", headers=AUTH).json()["artifacts"]
+    assert [(f["path"], f["tools"]) for f in files] == [("/x/notes.md", ["Write"])]

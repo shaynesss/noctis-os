@@ -22,7 +22,7 @@ import vault_io
 from engine import MODE_MODELS
 from orchestrator import jsonl
 from orchestrator.store import ConversationStore
-from transcript import blocks_from_messages
+from transcript import blocks_from_messages, tool_call
 
 log = logging.getLogger(__name__)
 
@@ -444,7 +444,8 @@ def artifacts(session_id: int) -> dict:
             meta = json.loads(message["meta"])
         except ValueError:
             continue
-        arg = _ARTIFACT_TOOLS.get(meta.get("tool", ""))
+        tool, _ = tool_call(message["content"] or "", meta)
+        arg = _ARTIFACT_TOOLS.get(tool)
         if not arg:
             continue
         path = (meta.get("args") or {}).get(arg)
@@ -460,8 +461,8 @@ def artifacts(session_id: int) -> dict:
         })
         entry["writes"] += 1
         entry["at"] = message["created_at"]          # most recent touch
-        if meta["tool"] not in entry["tools"]:
-            entry["tools"].append(meta["tool"])
+        if tool not in entry["tools"]:
+            entry["tools"].append(tool)
 
     return {"artifacts": list(seen.values())}
 

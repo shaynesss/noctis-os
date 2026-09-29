@@ -310,7 +310,7 @@ def read(path: Path) -> Conversation:
                     c.messages.append({
                         "role": "tool",
                         "content": b.get("name", ""),
-                        "meta": json.dumps({"id": b.get("id"),
+                        "meta": json.dumps({"id": b.get("id"), "tool": b.get("name", ""),
                                             "args": b.get("input") or {}}),
                     })
                 elif kind == "tool_result":

@@ -15,6 +15,26 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable
 
+# The argument that says what a call was about, in the order worth showing.
+_TARGET_ARGS = ("file_path", "notebook_path", "path", "pattern", "command", "url", "query", "description")
+
+
+def tool_call(content: str, meta: dict[str, Any]) -> tuple[str, str]:
+    """(tool name, what it acted on) for a stored tool row, in either shape.
+
+    Two writers, two shapes. The recorder stored `meta.tool` and a content of
+    "Name target"; the transcript indexer (every session since the PTY
+    migration) stores the bare name as content and the arguments in
+    `meta.args`. Readers looked only for `meta.tool`, so until 2026-09-29
+    History labelled all 6,817 indexed calls "tool" with no target, and
+    every indexed session's artifact list was empty.
+    """
+    if "args" in meta:
+        args = meta.get("args") or {}
+        target = next((str(args[k]) for k in _TARGET_ARGS if args.get(k)), "")
+        return meta.get("tool") or content or "tool", target.split("\n", 1)[0][:200]
+    return meta.get("tool") or "tool", content.split(" ", 1)[-1] if " " in content else ""
+
 
 def blocks_from_messages(rows: Iterable[Any]) -> list[dict[str, Any]]:
     blocks: list[dict[str, Any]] = []
@@ -37,9 +57,9 @@ def blocks_from_messages(rows: Iterable[Any]) -> list[dict[str, Any]]:
         elif role == "thinking":
             blocks.append({"kind": "thinking", "tokens": meta.get("tokens", 0), "ms": 0})
         elif role == "tool":
-            block = {"kind": "tool", "id": meta.get("id", ""), "name": meta.get("tool", "tool"),
-                     "target": content.split(" ", 1)[-1] if " " in content else "",
-                     "meta": "done", "body": ""}
+            name, target = tool_call(content, meta)
+            block = {"kind": "tool", "id": meta.get("id", ""), "name": name,
+                     "target": target, "meta": "done", "body": ""}
             blocks.append(block)
             if block["id"]:
                 by_tool_id[block["id"]] = block
