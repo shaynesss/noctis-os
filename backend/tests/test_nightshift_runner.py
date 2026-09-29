@@ -420,3 +420,64 @@ def test_the_runner_writes_what_the_drafter_returned_and_nothing_else(vault, mon
     assert written == "## Rationale\nA real one.\n\n## Confidence\nlow -- one entry.\n"
     state, _ = vault_io.read_frontmatter(runner.STATE_PATH)
     assert state["inbox"][0]["confidence"] == "low"
+
+
+# --- a laptop that sleeps mid-draft (2026-09-21, 09-26, 09-29) ----------------
+
+def _sleepy(monkeypatch, outcomes):
+    """Drafter calls that each take `outcomes[i]`: ("slept"|"awake", result).
+    A slept call moves the wall clock an hour while the timer does not."""
+    import time as _time
+    wall = {"t": 1_000_000.0}
+    monkeypatch.setattr(_time, "time", lambda: wall["t"])
+    calls = []
+
+    def fake(cmd, **kw):
+        kind, result = outcomes[len(calls)]
+        calls.append(kind)
+        if kind == "slept":
+            wall["t"] += 3600
+        if result is None:
+            raise subprocess.TimeoutExpired(cmd, kw.get("timeout"))
+        return result
+
+    monkeypatch.setattr(runner.subprocess, "run", fake)
+    return calls
+
+
+def _dev_item(monkeypatch):
+    _seed_distiller_reads()
+    monkeypatch.setattr(runner, "lessons_path", lambda mode: "maintenance/lessons.md")
+    return SlackItem(mode="settings", kind="undistilled-lessons",
+                     slug_hint="undistilled-dev", description="d", context="c")
+
+
+def test_a_draft_the_machine_slept_through_is_retried_on_waking(vault, monkeypatch):
+    item = _dev_item(monkeypatch)
+    calls = _sleepy(monkeypatch, [("slept", None), ("awake", _completed("## Rationale\nx\n"))])
+    draft = runner._draft_distillation(item, vault_io.get_vault_path())
+    assert calls == ["slept", "awake"] and draft.startswith("## Rationale")
+
+
+def test_an_awake_timeout_is_not_retried(vault, monkeypatch):
+    item = _dev_item(monkeypatch)
+    calls = _sleepy(monkeypatch, [("awake", None)])
+    with pytest.raises(RuntimeError) as e:
+        runner._draft_distillation(item, vault_io.get_vault_path())
+    assert calls == ["awake"] and str(e.value) == f"drafter timed out after {runner.DRAFT_TIMEOUT}s"
+
+
+def test_two_slept_timeouts_say_the_machine_slept(vault, monkeypatch):
+    item = _dev_item(monkeypatch)
+    _sleepy(monkeypatch, [("slept", None), ("slept", None)])
+    with pytest.raises(RuntimeError, match="the machine slept"):
+        runner._draft_distillation(item, vault_io.get_vault_path())
+
+
+def test_the_drafter_is_told_the_house_style(vault, monkeypatch):
+    item = _dev_item(monkeypatch)
+    seen = {}
+    monkeypatch.setattr(runner.subprocess, "run",
+                        lambda cmd, **kw: seen.setdefault("prompt", cmd[2]) and _completed("## Rationale\nx\n"))
+    runner._draft_distillation(item, vault_io.get_vault_path())
+    assert "no em dashes" in seen["prompt"]

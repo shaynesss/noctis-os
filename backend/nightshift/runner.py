@@ -191,7 +191,9 @@ verbatim from the file you read, in file order, with no line left out --
 quoting the first bullet of a list and then jumping to the next heading
 makes a block that appears nowhere. Keep the context tight, two or three
 lines either side is plenty, and a blank line you are *adding* is a `+`
-line, not a context line. If you cannot quote the surrounding lines exactly,
+line, not a context line. To change a line, remove
+the old one with `-` and add the new one with `+`: keeping the original
+as a context line leaves both in the file, and the accept refuses that. If you cannot quote the surrounding lines exactly,
 say so in the Rationale and give no diff rather than an approximate one.
 
 For Confidence: write "high" if multiple independent lessons
@@ -199,44 +201,33 @@ entries clearly support the same pattern, or "low" if you're inferring
 from a single entry or a weaker signal -- then one sentence on why. This
 is a genuine self-assessment, not a formality; judge it honestly.
 Read and Grep are the only tools you have; do not attempt any other.
+
+House style for every line you add: no em dashes, anywhere. Use a comma,
+a colon, a full stop or parentheses instead. Five of the first six
+accepted proposals put one into a live methodology file.
 """
 
-    try:
-        result = subprocess.run(
-            [
-                "claude",
-                "-p",
-                prompt,
-                "--output-format",
-                "json",
-                "--model",
-                DISTILLER_MODEL,
-                "--allowedTools",
-                "Read Grep",
-                "--disallowedTools",
-                "Bash WebFetch WebSearch Edit Write",
-                "--add-dir",
-                str(vault_path),
-            ],
-            # No `check=True`: the envelope below is the error report, and
-            # raising on the exit code throws it away unread (see above).
-            cwd=vault_path,
-            timeout=DRAFT_TIMEOUT,
-            capture_output=True,
-            text=True,
-            # Otherwise every call waits three seconds for a stdin that is
-            # never coming ("no stdin data received in 3s, proceeding without
-            # it"), three times a night for nothing.
-            stdin=subprocess.DEVNULL,
-        )
-    except subprocess.TimeoutExpired:
-        # Found while verifying the `check=True` fix against a real
-        # unreachable API: the CLI retried the connection until the timeout
-        # instead of exiting, and `TimeoutExpired`'s string is the argv too,
-        # the same 200 characters of prompt `CalledProcessError` gave. The
-        # rule is the exception, not the one exception: nothing whose text
-        # is the command line may reach the record.
-        raise RuntimeError(f"drafter timed out after {DRAFT_TIMEOUT}s") from None
+    import time
+    for attempt in (1, 2):
+        wall, mono = time.time(), time.monotonic()
+        try:
+            result = _run_drafter(prompt, vault_path)
+            break
+        except subprocess.TimeoutExpired:
+            # The laptop slept mid-draft (2026-09-21, 09-26, 09-29): the timer
+            # counts only awake time, so the call hung through the night on
+            # API errors and was killed on wake, hours later by the clock.
+            # Measured, not assumed: the wall clock ran past the timer.
+            slept = (time.time() - wall) - (time.monotonic() - mono) > 60
+            if slept and attempt == 1:
+                continue    # awake now: the timer only fires when awake
+            # `TimeoutExpired`'s string is the argv, the whole prompt, the same
+            # 200 characters `CalledProcessError` gave; nothing whose text is
+            # the command line may reach the record.
+            raise RuntimeError(
+                f"drafter timed out after {DRAFT_TIMEOUT}s"
+                + (" (the machine slept during the draft, and the retry on waking timed out too)"
+                   if slept else "")) from None
 
     draft = _result_text(result)
 
@@ -255,6 +246,37 @@ Read and Grep are the only tools you have; do not attempt any other.
         draft += f"\n<!-- cursor-advance: {target_mode}={line_count} -->\n"
 
     return draft
+
+
+def _run_drafter(prompt: str, vault_path: Path) -> subprocess.CompletedProcess:
+    """One `claude -p` drafter call. Raises TimeoutExpired past DRAFT_TIMEOUT."""
+    return subprocess.run(
+        [
+            "claude",
+            "-p",
+            prompt,
+            "--output-format",
+            "json",
+            "--model",
+            DISTILLER_MODEL,
+            "--allowedTools",
+            "Read Grep",
+            "--disallowedTools",
+            "Bash WebFetch WebSearch Edit Write",
+            "--add-dir",
+            str(vault_path),
+        ],
+        # No `check=True`: the envelope `_result_text` reads is the error
+        # report, and raising on the exit code throws it away unread.
+        cwd=vault_path,
+        timeout=DRAFT_TIMEOUT,
+        capture_output=True,
+        text=True,
+        # Otherwise every call waits three seconds for a stdin that is
+        # never coming ("no stdin data received in 3s, proceeding without
+        # it"), three times a night for nothing.
+        stdin=subprocess.DEVNULL,
+    )
 
 
 def _result_text(result: subprocess.CompletedProcess) -> str:
