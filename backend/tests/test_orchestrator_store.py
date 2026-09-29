@@ -156,3 +156,38 @@ def test_an_unknown_engine_id_has_no_row(tmp_path):
     store = ConversationStore(tmp_path / "h.db")
     assert store.find_by_engine_id("never-seen") is None
     store.close()
+
+
+def test_a_session_after_local_midnight_counts_on_the_local_day(store, monkeypatch):
+    """The grid draws local days; `date()` was the UTC day, so in BST a
+    session at 00:30 counted on the day before."""
+    import time
+    from datetime import datetime, timedelta, timezone
+    monkeypatch.setenv("TZ", "Europe/London")
+    time.tzset()
+    try:
+        # Yesterday 23:30 UTC is today 00:30 in London (BST) -- or 23:30 in
+        # winter, so the expectation follows the real offset.
+        at = (datetime.now(timezone.utc) - timedelta(days=1)).replace(hour=23, minute=30, second=0, microsecond=0)
+        sid = store.open_session("faber")
+        store.db.execute("UPDATE sessions SET started_at=? WHERE id=?", (at.isoformat(), sid))
+        store.db.commit()
+        local_day = at.astimezone().date().isoformat()
+        assert {r["day"]: r["sessions"] for r in store.daily_activity()}.get(local_day) == 1
+    finally:
+        monkeypatch.delenv("TZ")
+        time.tzset()
+
+
+def test_a_deleted_conversation_leaves_the_lifetime_figure(tmp_path, monkeypatch):
+    import json as _json
+    from orchestrator import jsonl
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    monkeypatch.setattr(jsonl, "_usage_memo", {})
+    rec = lambda mid: _json.dumps({"type": "assistant", "timestamp": "2026-09-29T10:00:00Z", "message": {
+        "id": mid, "role": "assistant", "model": "claude-opus-5-5", "content": [],
+        "usage": {"input_tokens": 10, "output_tokens": 0}}}) + "\n"
+    (tmp_path / "kept.jsonl").write_text(rec("a"), encoding="utf-8")
+    (tmp_path / "gone.jsonl").write_text(rec("b"), encoding="utf-8")
+    assert jsonl.lifetime_tokens()["tokens"] == 20
+    assert jsonl.lifetime_tokens(frozenset({"gone"}))["tokens"] == 10

@@ -341,7 +341,7 @@ def read(path: Path) -> Conversation:
     return c
 
 
-def lifetime_tokens() -> dict[str, Any]:
+def lifetime_tokens(skip: frozenset[str] = frozenset()) -> dict[str, Any]:
     """One raw number across every transcript on disk, plus what it came from.
 
     This is what the Stats page's lifetime figure becomes: read from the CLI's
@@ -361,6 +361,11 @@ def lifetime_tokens() -> dict[str, Any]:
     cost = 0.0
     since = ""
     for p in PROJECTS.glob("**/*.jsonl"):
+        # A conversation deleted from History leaves the CLI's file behind;
+        # its tokens leaving with it is what "delete" means on Stats too.
+        # They did not until 2026-09-29: 36 deleted sessions, 2.63M tokens.
+        if p.stem in skip:
+            continue
         u = scan_usage(p, resume=True)
         if not u.turns:
             continue
@@ -392,7 +397,7 @@ import time as _time
 # directory (file count and newest mtime) rather than a clock: a session that
 # is still writing bumps the mtime, so the number moves while it is live and
 # holds still while nothing is.
-_lifetime_cache: tuple[tuple[int, float], dict[str, int]] | None = None
+_lifetime_cache: tuple[tuple[int, float, int], dict[str, int]] | None = None
 _lifetime_stamp = 0.0
 _LIFETIME_MIN_INTERVAL_S = 5.0     # a signature check still stats every file
 
@@ -403,17 +408,19 @@ def _signature() -> tuple[int, float]:
     return len(files), newest
 
 
-def lifetime_tokens_cached() -> dict[str, int]:
-    """`lifetime_tokens`, recomputed only when a transcript has changed."""
+def lifetime_tokens_cached(skip: frozenset[str] = frozenset()) -> dict[str, int]:
+    """`lifetime_tokens`, recomputed only when a transcript has changed or a
+    conversation has been deleted."""
     global _lifetime_cache, _lifetime_stamp
     now = _time.monotonic()
-    if _lifetime_cache and now - _lifetime_stamp < _LIFETIME_MIN_INTERVAL_S:
+    sig_skip = hash(skip)
+    if _lifetime_cache and _lifetime_cache[0][2] == sig_skip and now - _lifetime_stamp < _LIFETIME_MIN_INTERVAL_S:
         return _lifetime_cache[1]
-    sig = _signature()
+    sig = (*_signature(), sig_skip)
     if _lifetime_cache and _lifetime_cache[0] == sig:
         _lifetime_stamp = now
         return _lifetime_cache[1]
-    result = lifetime_tokens()
+    result = lifetime_tokens(skip)
     _lifetime_cache, _lifetime_stamp = (sig, result), now
     return result
 

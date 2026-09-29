@@ -24,8 +24,10 @@ export interface Cell {
  *
  * Only days with activity come from the backend, so the grid supplies the
  * gaps rather than the payload carrying 365 mostly-zero rows. Dates are
- * matched on local YYYY-MM-DD, which is what SQLite's date() produces and
- * what the person looking at the grid means by "that day".
+ * matched on local YYYY-MM-DD, which is what the backend sends
+ * (`date(started_at, 'localtime')` since 2026-09-29; plain SQLite date() is
+ * the UTC day, which this comment used to claim was local) and what the
+ * person looking at the grid means by "that day".
  */
 export function buildGrid(today: Date, counts: Map<string, number>): Cell[][] {
   const start = new Date(today)

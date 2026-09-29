@@ -320,7 +320,7 @@ def stats() -> dict:
     # and the recorder was short by 2-5x -- output tokens included, which
     # cache re-reads cannot explain. The transcript is the more complete
     # source, and it also counts sessions Noctis never hosted.
-    disk = jsonl.lifetime_tokens_cached()
+    disk = jsonl.lifetime_tokens_cached(_store.forgotten_ids())
     return {
         "lifetime": {
             "input": disk["input"],

@@ -375,6 +375,10 @@ class ConversationStore:
                         (engine_session_id,))
         self.db.commit()
 
+    def forgotten_ids(self) -> frozenset[str]:
+        """Every engine id deleted on purpose, for readers beside the store."""
+        return frozenset(r[0] for r in self.db.execute("SELECT engine_session_id FROM forgotten"))
+
     def is_forgotten(self, engine_session_id: str) -> bool:
         return self.db.execute(
             "SELECT 1 FROM forgotten WHERE engine_session_id=?",
@@ -467,9 +471,14 @@ class ConversationStore:
 
     # ---------------------------------------------------------- stats
     def daily_activity(self, days: int = 365) -> list[sqlite3.Row]:
-        """Sessions per day, for the contribution grid."""
+        """Sessions per day, for the contribution grid.
+
+        By the machine's local day, which is the day the grid draws. Plain
+        `date()` is the UTC day, so in BST a session started between midnight
+        and one landed on the previous day's cell (2026-09-29).
+        """
         return self.db.execute(
-            "SELECT date(started_at) AS day, COUNT(*) AS sessions"
+            "SELECT date(started_at, 'localtime') AS day, COUNT(*) AS sessions"
             "  FROM sessions WHERE started_at >= date('now', ?)"
             " GROUP BY day ORDER BY day", (f"-{days} days",)).fetchall()
 
