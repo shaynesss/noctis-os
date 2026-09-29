@@ -70,3 +70,21 @@ def test_packaged_app_origin_is_accepted(auth_headers, client):
 def test_an_unrelated_origin_is_still_refused(auth_headers, client):
     r = client.get("/v2/inbox", headers={**auth_headers, "Origin": "http://evil.example"})
     assert r.status_code == 403
+
+
+def test_every_routes_method_passes_the_browsers_preflight(client):
+    """The test client never sends a preflight, so a method missing from the
+    CORS list passes every other test and fails only in the browser. PUT and
+    DELETE did exactly that: Settings could not save a prompt and a closed
+    terminal was never released. Checked against the routes themselves, so a
+    new route with a new method fails here rather than in the app."""
+    from main import app
+
+    # From the schema rather than app.routes: included routers sit behind a
+    # wrapper there, and walking it found only /health's GET.
+    methods = {m.upper() for ops in app.openapi()["paths"].values() for m in ops}
+    assert {"PUT", "DELETE"} <= methods  # the two that were missing are still routed
+    for method in sorted(methods):
+        r = client.options("/v2/config", headers={
+            "Origin": ALLOWED_ORIGIN, "Access-Control-Request-Method": method})
+        assert r.status_code == 200, f"{method} preflight refused: {r.text}"

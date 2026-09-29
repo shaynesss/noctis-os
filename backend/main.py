@@ -61,10 +61,16 @@ app.add_middleware(CrashesInsideCors)
 # localhost:5180, and the packaged app on tauri://localhost. Both come from
 # auth.py's ALLOWED_ORIGINS, the same list the bearer-auth dependency checks,
 # so there is one place that decides who is allowed in.
+#
+# The methods have to cover every route below. PUT and DELETE were missing
+# until 2026-09-29, so the browser refused its own preflight for them and
+# Settings' prompt save, History's delete and a closed terminal's release
+# never left the page: 55 refused preflights in the log, not one PUT or
+# DELETE ever arrived. test_auth checks every route's method against this.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(ALLOWED_ORIGINS),
-    allow_methods=["GET", "POST", "PATCH"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
