@@ -48,13 +48,11 @@ RESULTS = DATA_DIR / "regression.json"
 # everything on Haiku, which measured a configuration four of the five modes
 # do not ship -- and produced 12/12 then 9/12 on identical input, noise wide
 # enough that the suite could not gate anything.
-MODE_MODELS = {
-    "general": "claude-opus-5",
-    "faber": "claude-opus-5",
-    "noctua": "claude-opus-5",
-    "vesper": "claude-opus-5",
-    "maintenance": "claude-haiku-4-5",
-}
+#
+# Imported, not copied: a copy here still said Opus 5 after 7d5556c moved the
+# four modes to Opus 5.5, so from 2026-09-25 the suite tested a model no mode
+# ships -- the exact failure the paragraph above was written about.
+from engine import MODE_MODELS  # noqa: E402
 DEFAULT_MODEL = os.environ.get("REGRESSION_MODEL")      # override for a cheap smoke run
 DISALLOWED = "Bash Edit Write WebFetch WebSearch Read Grep Glob"
 PARALLEL = 3

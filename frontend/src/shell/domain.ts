@@ -51,10 +51,10 @@ export const MODE_LABEL: Record<Mode, string> = {
  * running. The engine is the authority — a duplicate that silently drifts is
  * how the status bar came to claim opus while the session ran sonnet. */
 export const MODE_INFO: Record<Mode, { blurb: string; model: string; policy?: string }> = {
-  general: { blurb: 'Questions, comparisons, anything unscoped', model: 'opus-5' },
-  faber: { blurb: 'Build: spec, implement, ship', model: 'opus-5' },
-  noctua: { blurb: 'Learn: read closely, explain, retain', model: 'opus-5' },
-  vesper: { blurb: 'Research: gather, weigh, return a verdict', model: 'opus-5' },
+  general: { blurb: 'Questions, comparisons, anything unscoped', model: 'opus-5.5' },
+  faber: { blurb: 'Build: spec, implement, ship', model: 'opus-5.5' },
+  noctua: { blurb: 'Learn: read closely, explain, retain', model: 'opus-5.5' },
+  vesper: { blurb: 'Research: gather, weigh, return a verdict', model: 'opus-5.5' },
   maintenance: {
     blurb: 'Audit the vault and propose repairs',
     model: 'haiku-4.5',

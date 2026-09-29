@@ -406,3 +406,11 @@ def test_a_refusal_clears_when_the_model_answers_in_another_session(tmp_path, mo
                                   encoding="utf-8")
     monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
     assert jsonl.refusals() == []
+
+
+def test_opus_5_5_is_priced_at_its_own_rate_not_opus_5s():
+    """It had no row, and the prefix match gave it Opus 5's rates, a fifth
+    too high. $4 / $20 / $0.20 read / $8 1h write per million."""
+    from orchestrator import pricing
+    assert pricing.list_price("claude-opus-5-5", 1_000_000, 1_000_000, 1_000_000, 1_000_000) == 32.2
+    assert pricing.list_price("claude-opus-5", 1_000_000, 1_000_000, 1_000_000, 1_000_000) == 40.5

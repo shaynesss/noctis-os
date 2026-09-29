@@ -23,6 +23,9 @@ from __future__ import annotations
 # Fable 5.1's, which is 0.025x.
 LIST_PRICES: dict[str, tuple[float, float, float, float]] = {
     "claude-fable-5-1": (10.0, 50.0, 0.25, 20.0),
+    # Opus 5.5 is cheaper than Opus 5. Until 2026-09-29 it had no row and the
+    # prefix match priced it as Opus 5, a fifth too high on 569M tokens.
+    "claude-opus-5-5": (4.0, 20.0, 0.2, 8.0),
     "claude-opus-5": (5.0, 25.0, 0.5, 10.0),
     "claude-sonnet-5": (2.0, 10.0, 0.2, 4.0),
     "claude-sonnet-4-6": (3.0, 15.0, 0.3, 6.0),

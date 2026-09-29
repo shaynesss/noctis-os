@@ -147,3 +147,12 @@ def test_a_mode_that_gains_a_methodology_is_not_still_current(tmp_path, monkeypa
     (tmp_path / "modes" / "dev").mkdir(parents=True)
     (tmp_path / "modes" / "dev" / "dev.md").write_text("# a method, at last\n")
     assert regression.prompt_hash("faber") != without
+
+
+def test_the_suite_tests_the_models_the_modes_ship():
+    """Its own copy of the table still said Opus 5 after the modes moved to
+    Opus 5.5 (7d5556c), so it tested a model nothing runs. One table now."""
+    import engine
+    from prompts import regression
+    assert regression.MODE_MODELS is engine.MODE_MODELS
+    assert engine.MODE_MODELS["faber"] == "claude-opus-5-5", "a model change updates the docs too"
