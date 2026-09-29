@@ -386,3 +386,23 @@ def test_a_reply_written_as_several_records_is_counted_once(tmp_path, monkeypatc
     assert resumed.list_cost == whole.list_cost
     assert (len(conv.turns), sum(t.output_tokens for t in conv.turns)) == (2, 47)
     assert conv.lifetime == whole.lifetime
+
+
+def test_a_refusal_clears_when_the_model_answers_in_another_session(tmp_path, monkeypatch):
+    """Answers were judged per transcript, so Fable refusing in one session
+    and answering in the next kept the banner up until the first file went
+    six hours untouched."""
+    from orchestrator import jsonl
+    proj = tmp_path / "-Users-x-repo"; proj.mkdir()
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    monkeypatch.setattr(jsonl, "_refusal_memo", {})
+    (proj / "a.jsonl").write_text("\n".join(json.dumps(r) for r in [
+        _turn("claude-fable-5-1", "2026-09-16T19:45:00Z"),
+        _refusal("2026-09-16T19:51:34Z", "out of usage credits")]) + "\n", encoding="utf-8")
+    monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
+    assert [e["model"] for e in jsonl.refusals()] == ["claude-fable-5-1"]
+
+    (proj / "b.jsonl").write_text(json.dumps(_turn("claude-fable-5-1", "2026-09-16T21:00:00Z")) + "\n",
+                                  encoding="utf-8")
+    monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
+    assert jsonl.refusals() == []

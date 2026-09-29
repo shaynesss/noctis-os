@@ -151,6 +151,10 @@ export function App() {
    * already accepts. */
   const [reports, setReports] = useState<Record<string, TermReport>>({})
   const [limits, setLimits] = useState<LiveLimits | null>(null)
+  // Its own state, not a field of `limits`: that is set only once a session
+  // has reported the windows, so after a backend restart a model the engine
+  // was refusing went unannounced until some terminal spoke (2026-09-29).
+  const [refusedNow, setRefusedNow] = useState<LiveLimits['refused']>([])
   const [maxSlots, setMaxSlots] = useState(9)
   maxSlotsRef.current = maxSlots
   slotCount.current = slots.length
@@ -160,7 +164,11 @@ export function App() {
       void get<{ slots: Record<string, TermReport> }>('/v2/sessions/statusline/all')
         .then((d) => { if (alive && d) setReports(d.slots) })
       void get<LiveLimits & { known: boolean }>('/v2/sessions/limits')
-        .then((d) => { if (alive && d?.known) setLimits(d) })
+        .then((d) => {
+          if (!alive || !d) return
+          setRefusedNow(d.refused ?? [])
+          if (d.known) setLimits(d)
+        })
       void get<{ max_concurrent: number }>('/v2/sessions')
         .then((d) => { if (alive && d) setMaxSlots(d.max_concurrent) })
     }
@@ -373,7 +381,7 @@ export function App() {
    * and returns. */
   /* One banner at a time, newest first: two models refusing at once is a
    * list nobody reads, and the newest is the one the work just hit. */
-  const refused = limits?.refused?.[0] ?? null
+  const refused = refusedNow?.[0] ?? null
   const [dismissedRefusal, setDismissedRefusal] = useState<string | null>(() => recallDismissedRefusal())
   useEffect(() => {
     // A new refusal re-arms the banner: dismissing Fable's says nothing

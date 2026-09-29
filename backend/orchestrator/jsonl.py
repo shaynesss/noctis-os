@@ -555,7 +555,13 @@ def model_label(model_id: str) -> str:
 
 def _refusals_in(path: Path) -> list[dict[str, Any]]:
     """Models this transcript shows the engine refusing, with what it said,
-    dropping any the same model answered afterwards.
+    dropping any the same model answered afterwards in this same file."""
+    refused, answered = _refusal_scan(path)
+    return [e for m, e in refused.items() if answered.get(m, "") <= e["at"]]
+
+
+def _refusal_scan(path: Path) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+    """(refusals by model, when each model last answered) in one transcript.
 
     Only the bytes written since the last pass are read. Lines are filtered
     before they are parsed: a transcript is mostly tool output, and the two
@@ -566,7 +572,7 @@ def _refusals_in(path: Path) -> list[dict[str, Any]]:
         if path.stat().st_size < offset:       # rotated, or rewritten shorter
             offset, last_model, refused, answered = 0, None, {}, {}
     except OSError:
-        return []
+        return {}, {}
 
     end = offset
     try:
@@ -602,10 +608,10 @@ def _refusals_in(path: Path) -> list[dict[str, Any]]:
                     if msg.get("usage"):
                         answered[model] = at
     except OSError:
-        return []
+        return {}, {}
 
     _refusal_memo[path] = (end, last_model, refused, answered)
-    return [e for m, e in refused.items() if answered.get(m, "") <= e["at"]]
+    return refused, answered
 
 
 def refusals(hours: float = 6.0) -> list[dict[str, Any]]:
@@ -626,11 +632,20 @@ def refusals(hours: float = 6.0) -> list[dict[str, Any]]:
     if _limit_cache and (now - _limit_stamp < _LIMIT_MIN_INTERVAL_S or _limit_cache[0] == sig):
         return _limit_cache[1]
 
+    # Answers are pooled across transcripts, not judged per file: a model
+    # that refused in one session and has since answered in another is not
+    # being refused. Per file, the banner stayed up for six hours after the
+    # model was back (2026-09-29).
     seen: dict[str, dict[str, Any]] = {}
+    last_answer: dict[str, str] = {}
     for p in recent:
-        for event in _refusals_in(p):
+        refused, answered = _refusal_scan(p)
+        for m, at in answered.items():
+            last_answer[m] = max(at, last_answer.get(m, ""))
+        for event in refused.values():
             if event["at"] > seen.get(event["model"], {}).get("at", ""):
                 seen[event["model"]] = event
-    out = sorted(seen.values(), key=lambda e: e["at"], reverse=True)
+    out = sorted((e for m, e in seen.items() if last_answer.get(m, "") <= e["at"]),
+                 key=lambda e: e["at"], reverse=True)
     _limit_cache, _limit_stamp = (sig, out), now
     return out
