@@ -11,12 +11,15 @@ MCP-speaking client driving any model can use it, including open-weight
 ones. The orchestrator, mode entry and config dirs do not travel; they are
 Claude-Code-shaped by design.
 
-Dependency-free on purpose. The protocol is small enough that hand-rolling
-it costs less than a dependency would, and it keeps the "clone it and point
-it at your own vault" story to `python3 server.py` with nothing to install.
+No MCP library, on purpose: the protocol is small enough that hand-rolling
+it costs less than a dependency would. It is not dependency-free, though,
+and said so until 2026-09-29: it imports `jobs`, which imports `vault_io`,
+which needs python-frontmatter and PyYAML. So it runs under the backend's
+venv, which is how it is registered; a bare `python3 server.py` fails with
+ModuleNotFoundError.
 
-    python3 backend/mcp/server.py            # stdio, VAULT_PATH from env
-    VAULT_PATH=/path/to/vault python3 ...
+    backend/.venv/bin/python3 backend/mcp/server.py        # stdio, VAULT_PATH from env
+    VAULT_PATH=/path/to/vault backend/.venv/bin/python3 ...
 """
 from __future__ import annotations
 
@@ -53,12 +56,6 @@ VAULT = Path(os.environ.get("VAULT_PATH", Path(__file__).resolve().parents[3] / 
 from orchestrator.store import DATA_DIR  # noqa: E402
 
 HISTORY_DB = os.environ.get("NOCTIS_HISTORY_DB") or str(DATA_DIR / "history.db")
-
-# Where to reach the backend for a permission decision. Only the permission
-# tool uses these: everything else here reads the vault directly, which is
-# what keeps "clone it and point it at your own vault" true.
-BACKEND = os.environ.get("NOCTIS_BACKEND", "http://127.0.0.1:8000")
-ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "http://localhost:5180")
 
 MODES = ("faber", "noctua", "vesper", "maintenance")
 
