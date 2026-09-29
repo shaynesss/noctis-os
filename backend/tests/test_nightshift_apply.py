@@ -297,3 +297,64 @@ def test_apply_proposal_raises_a_409_reason_for_a_target_the_vault_lacks(vault):
     except apply.DiffApplyError as exc:
         assert "not in the vault" in str(exc)
         assert "modes/nowhere/nothing.md" in str(exc)
+
+
+# The 2026-09-27 distillation, as drafted: the original step 2 kept as
+# context and its longer replacement added under it. Accepted, it left
+# dev.md with "2. Diff review" twice in a row.
+PROPOSAL_EXTENDS_A_KEPT_LINE = """## Rationale
+Adds a placeholder check to diff review.
+
+## Diff
+--- modes/dev/dev.md
++++ modes/dev/dev.md
+@@ @@
+ 1. Full test suite / manual verification pass
+ 2. Diff review, no commented-out code, no debug prints, no unused imports
++ 2. Diff review, no commented-out code, no debug prints, no unused imports. Also check for placeholder text.
+ 3. README reflects current setup
+
+## Evidence
+- modes/dev/lessons.md
+"""
+
+DEV_STEPS = ("1. Full test suite / manual verification pass\n"
+             "2. Diff review, no commented-out code, no debug prints, no unused imports\n"
+             "3. README reflects current setup\n")
+
+
+def test_a_diff_that_keeps_the_line_it_extends_is_refused_and_writes_nothing(vault):
+    vault_io.write_file("modes/dev/dev.md", DEV_STEPS)
+    try:
+        apply.apply_proposal(PROPOSAL_EXTENDS_A_KEPT_LINE)
+        assert False, "expected DiffApplyError"
+    except apply.DiffApplyError as e:
+        assert "Mark the original with '-'" in str(e)
+    assert vault_io.read_file("modes/dev/dev.md") == DEV_STEPS
+
+
+def test_the_same_change_marked_as_a_replacement_applies(vault):
+    vault_io.write_file("modes/dev/dev.md", DEV_STEPS)
+    fixed = PROPOSAL_EXTENDS_A_KEPT_LINE.replace(
+        "\n 2. Diff review, no commented-out code, no debug prints, no unused imports\n",
+        "\n- 2. Diff review, no commented-out code, no debug prints, no unused imports\n")
+    apply.apply_proposal(fixed)
+    after = vault_io.read_file("modes/dev/dev.md")
+    assert after.count("2. Diff review") == 1 and "placeholder text" in after
+
+
+def test_a_write_that_does_not_read_back_is_refused(vault, monkeypatch):
+    vault_io.write_file("maintenance/audit.md", "before\nold text here\nafter\n")
+    real = vault_io.read_file
+    calls = {"n": 0}
+
+    def read_then_lie(path):
+        calls["n"] += 1
+        return real(path) if calls["n"] == 1 else "something else"
+
+    monkeypatch.setattr(vault_io, "read_file", read_then_lie)
+    try:
+        apply.apply_proposal(PROPOSAL_WITH_DIFF)
+        assert False, "expected DiffApplyError"
+    except apply.DiffApplyError as e:
+        assert "does not read back" in str(e)

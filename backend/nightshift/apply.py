@@ -70,6 +70,30 @@ def _old_and_new_blocks(hunk_text: str) -> tuple[str, str]:
     return "\n".join(old_lines), "\n".join(new_lines)
 
 
+def _kept_line_extended(hunk_text: str) -> str | None:
+    """A `+` line that repeats a line the hunk keeps, whole, at its start.
+
+    That shape means the drafter extended a line and marked the original as
+    context (` `) when it should have been removed (`-`), so applying it
+    leaves both. It happened on 2026-09-28: an accepted distillation left
+    `dev.md` with "2. Diff review" twice in a row, the short line and its
+    longer replacement. The apply was correct to the letter of the diff,
+    so the check has to be on the diff. Short lines are left alone: a `+`
+    that begins with a kept "- " or "##" is ordinary Markdown, not this.
+    """
+    kept = [ _strip_marker(l) if l.startswith(" ") else l
+             for l in hunk_text.splitlines()
+             if not l.startswith(("+", "-", "@@"))]
+    kept = [k.strip() for k in kept if len(k.strip()) >= 20]
+    for line in hunk_text.splitlines():
+        if line.startswith("+") and not line.startswith("+++"):
+            added = _strip_marker(line).strip()
+            for k in kept:
+                if added.startswith(k):
+                    return k
+    return None
+
+
 def _hunks(diff_text: str) -> list[str]:
     """Splits a diff's body on `@@` hunk markers. A proposal touching two
     separate spots in the same file (research.md's Stage-2 list entry and
@@ -139,6 +163,10 @@ def apply_proposal(proposal_text: str) -> str | None:
         raise DiffApplyError(f"diff targets {target}, which is not in the vault") from None
 
     for hunk_text in hunks:
+        if kept := _kept_line_extended(hunk_text):
+            raise DiffApplyError(
+                f"the diff adds a longer copy of a line it also keeps, so both would be in {target}: "
+                f"\"{kept[:80]}\". Mark the original with '-' to replace it.")
         old_block, new_block = _old_and_new_blocks(hunk_text)
         if not old_block:
             raise DiffApplyError("diff has no removed lines to anchor the replacement")
@@ -154,6 +182,12 @@ def apply_proposal(proposal_text: str) -> str | None:
     # Only written once every hunk has validated cleanly -- a later hunk's
     # failure must not leave an earlier hunk's change partially applied.
     vault_io.write_file(target, current)
+    # Verify-after-write, which the methodology has always said this does
+    # (audit.md: "Apply + verify") and which nothing did until 2026-09-29.
+    # The accept route commits whatever is on disk, so a write that did not
+    # land as intended must stop here rather than be committed.
+    if vault_io.read_file(target) != current:
+        raise DiffApplyError(f"{target} does not read back as written; nothing is committed")
     return target
 
 
