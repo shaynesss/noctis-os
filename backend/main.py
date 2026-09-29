@@ -20,6 +20,32 @@ from routers import panels, search, sessions_v2  # noqa: E402
 app = FastAPI(title="Noctis OS backend", docs_url=None, redoc_url=None, openapi_url=None)
 
 
+class QuietPolls(logging.Filter):
+    """Leave the shell's polling out of the access log when it succeeds.
+
+    runtime/dev.log reached 92MB with no rotation (2026-09-29), and 89% of its
+    million lines were six routes the shell or the status line hit every few
+    seconds, answering 2xx. Their failures are the lines worth having (the
+    CORS bug was 55 refused OPTIONS), so only successes are dropped, and every
+    other request is logged as before. Filtering, not rotating: rotating in
+    place was tried the same day and is unsafe while any writer does not
+    append, which the `make dev` tree holding this file open did not.
+    """
+    ROUTES = {"/v2/sessions/statusline", "/health", "/v2/sessions/statusline/all",
+              "/v2/sessions", "/v2/sessions/limits", "/v2/inbox"}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 5:
+            path, status = str(args[2]).split("?", 1)[0], args[4]
+            if isinstance(status, int) and status < 400 and path in self.ROUTES:
+                return False
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(QuietPolls())
+
+
 class CrashesInsideCors:
     """Answer an unhandled exception with a plain 500, inside the CORS layer.
 

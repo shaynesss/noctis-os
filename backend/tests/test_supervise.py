@@ -70,14 +70,3 @@ def test_the_loop_keeps_restarting_past_the_ladder_and_resets_when_the_backend_r
     assert not any("giving up" in m for m in logs)
     assert original_answering is not answering  # the real one is what main() runs
 
-
-def test_a_log_past_its_limit_is_kept_once_and_emptied(tmp_path):
-    import supervise
-    log = tmp_path / "dev.log"
-    log.write_bytes(b"x" * 100)
-    with log.open("ab") as writer:          # a writer holding it open, as make does
-        assert supervise.trim_log(log, limit=50) is True
-        writer.write(b"after\n"); writer.flush()
-    assert (tmp_path / "dev.log.1").read_bytes() == b"x" * 100
-    assert log.read_bytes() == b"after\n", "the open appender's next line lands in the fresh file"
-    assert supervise.trim_log(log, limit=50) is False

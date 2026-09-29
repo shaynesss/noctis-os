@@ -93,3 +93,16 @@ def test_every_routes_method_passes_the_browsers_preflight(client):
 def test_no_route_but_health_answers_without_the_token(client):
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert client.get(path).status_code in (401, 404), path
+
+
+def test_the_access_log_drops_successful_polls_and_keeps_everything_else():
+    import logging
+    from main import QuietPolls
+    f = QuietPolls()
+    rec = lambda method, path, status: logging.LogRecord(
+        "uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d', ("127.0.0.1:1", method, path, "1.1", status), None)
+    assert not f.filter(rec("POST", "/v2/sessions/statusline?mode=faber&slot=t1", 200))
+    assert not f.filter(rec("GET", "/health", 200))
+    assert f.filter(rec("OPTIONS", "/v2/sessions/statusline/term-1", 400)), "a refusal is the line worth having"
+    assert f.filter(rec("GET", "/v2/sessions/limits", 500))
+    assert f.filter(rec("PUT", "/v2/prompts/system", 200)), "anything not polled is logged"
