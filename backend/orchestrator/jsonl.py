@@ -122,6 +122,25 @@ class Usage:
     # tokens so the two are always measured over the same turns.
     list_cost: float = 0.0
     unpriced_turns: int = 0
+    # What each message id has contributed so far, so a later record of the
+    # same reply replaces its figures instead of adding to them. Carried
+    # across a resumed scan, because the two records can straddle a read.
+    counted: dict[str, tuple[int, int, int, int, float | None]] = field(
+        default_factory=dict, repr=False)
+
+    def _apply(self, fig: tuple[int, int, int, int, float | None], sign: int) -> None:
+        inp, out, cached, wrote, price = fig
+        self.input_tokens += sign * inp
+        self.output_tokens += sign * out
+        self.cached_tokens += sign * cached
+        self.cache_write_tokens += sign * wrote
+        if price is None:
+            self.unpriced_turns += sign
+        else:
+            self.list_cost += sign * price
+
+    def copy(self) -> "Usage":
+        return _dc.replace(self, counted=dict(self.counted))
 
     @property
     def lifetime(self) -> int:
@@ -191,7 +210,7 @@ def scan_usage(path: Path, resume: bool = False) -> Usage:
         except OSError:
             size = 0
         if size >= memo[0]:
-            offset, u = memo[0], _dc.replace(memo[1])
+            offset, u = memo[0], memo[1].copy()
     records, end = _records_from(path, offset, partial=not resume)
     for r in records:
         if ts := r.get("timestamp"):
@@ -199,22 +218,29 @@ def scan_usage(path: Path, resume: bool = False) -> Usage:
                 u.started_at = ts
         msg = r.get("message") or {}
         if usage := msg.get("usage"):
-            u.turns += 1
             inp = int(usage.get("input_tokens", 0))
             out = int(usage.get("output_tokens", 0))
             cached = int(usage.get("cache_read_input_tokens", 0))
             wrote = int(usage.get("cache_creation_input_tokens", 0))
-            u.input_tokens += inp
-            u.output_tokens += out
-            u.cached_tokens += cached
-            u.cache_write_tokens += wrote
-            price = pricing.list_price(msg.get("model", ""), inp, out, cached, wrote)
-            if price is None:
-                u.unpriced_turns += 1
+            fig = (inp, out, cached, wrote,
+                   pricing.list_price(msg.get("model", ""), inp, out, cached, wrote))
+            # One reply, one count. The CLI writes a record per content block
+            # (thinking, text, each tool call) and every one of them repeats
+            # the reply's message id and its usage, so summing records counted
+            # each reply about twice: 5.87B tokens on 2026-09-29 against 2.82B
+            # distinct, and $4,333 list against $1,855. Where the records
+            # differ it is output_tokens, a streamed partial before the
+            # final, so the later record wins.
+            mid = msg.get("id")
+            if mid and (old := u.counted.get(mid)):
+                u._apply(old, -1)
             else:
-                u.list_cost += price
+                u.turns += 1
+            u._apply(fig, +1)
+            if mid:
+                u.counted[mid] = fig
     if resume:
-        _usage_memo[path] = (end, _dc.replace(u))
+        _usage_memo[path] = (end, u.copy())
     return u
 
 
@@ -222,6 +248,7 @@ def read(path: Path) -> Conversation:
     """Reconstruct one conversation."""
     c = Conversation(engine_session_id=path.stem)
     stamps: list[str] = []
+    turn_of: dict[str, int] = {}   # message id -> its index in c.turns
 
     for r in _records(path):
         if ts := r.get("timestamp"):
@@ -240,7 +267,7 @@ def read(path: Path) -> Conversation:
         content = msg.get("content")
 
         if usage := msg.get("usage"):
-            c.turns.append(Turn(
+            turn = Turn(
                 model=msg.get("model", ""),
                 input_tokens=int(usage.get("input_tokens", 0)),
                 output_tokens=int(usage.get("output_tokens", 0)),
@@ -248,7 +275,16 @@ def read(path: Path) -> Conversation:
                 cache_write_tokens=int(usage.get("cache_creation_input_tokens", 0)),
                 thinking_tokens=int((usage.get("output_tokens_details") or {})
                                     .get("thinking_tokens", 0)),
-            ))
+            )
+            # One turn per message id, the later record replacing the earlier:
+            # see `scan_usage` for why a reply's usage is written more than once.
+            mid = msg.get("id")
+            if mid and mid in turn_of:
+                c.turns[turn_of[mid]] = turn
+            else:
+                if mid:
+                    turn_of[mid] = len(c.turns)
+                c.turns.append(turn)
 
         if isinstance(content, str) and role:
             c.messages.append({"role": role, "content": content, "meta": None})

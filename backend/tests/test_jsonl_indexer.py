@@ -349,3 +349,40 @@ def test_a_refusal_survives_the_output_written_after_it(tmp_path, monkeypatch):
     monkeypatch.setattr(jsonl, "_limit_cache", None); monkeypatch.setattr(jsonl, "_limit_stamp", 0.0)
     assert [e["model"] for e in jsonl.refusals()] == ["claude-fable-5-1"], \
         "still refusing; the output after it says nothing about the model"
+
+
+def test_a_reply_written_as_several_records_is_counted_once(tmp_path, monkeypatch):
+    """The CLI writes one record per content block and each repeats the
+    reply's id and usage; summing records counted every reply about twice
+    (2026-09-29: 5.87B tokens shown, 2.82B real). Where they differ it is a
+    streamed partial output count, so the last record is the one kept. And
+    a resumed scan that lands between two records of one reply must not
+    count it twice either."""
+    monkeypatch.setattr(jsonl, "_usage_memo", {})
+
+    def rec(mid, out, block):
+        return {"type": "assistant", "timestamp": "2026-09-29T10:00:00Z", "message": {
+            "id": mid, "role": "assistant", "model": "claude-haiku-4-5", "content": [block],
+            "usage": {"input_tokens": 10, "output_tokens": out,
+                      "cache_read_input_tokens": 100, "cache_creation_input_tokens": 5}}}
+
+    think = {"type": "thinking", "thinking": "", "signature": "x"}
+    text = {"type": "text", "text": "hi"}
+    tool = {"type": "tool_use", "id": "t1", "name": "Read", "input": {}}
+    p = tmp_path / "s.jsonl"
+    p.write_text(json.dumps(rec("msg_a", 3, think)) + "\n" + json.dumps(rec("msg_a", 3, text)) + "\n",
+                 encoding="utf-8")
+    first = jsonl.scan_usage(p, resume=True)
+    assert (first.turns, first.input_tokens, first.output_tokens) == (1, 10, 3)
+
+    with p.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(rec("msg_a", 40, tool)) + "\n" + json.dumps(rec("msg_b", 7, text)) + "\n")
+    resumed, whole, conv = jsonl.scan_usage(p, resume=True), jsonl.scan_usage(p), jsonl.read(p)
+
+    # Two replies: msg_a at its final output of 40, and msg_b.
+    want = (2, 20, 47, 200, 10)
+    for u in (resumed, whole):
+        assert (u.turns, u.input_tokens, u.output_tokens, u.cached_tokens, u.cache_write_tokens) == want
+    assert resumed.list_cost == whole.list_cost
+    assert (len(conv.turns), sum(t.output_tokens for t in conv.turns)) == (2, 47)
+    assert conv.lifetime == whole.lifetime
