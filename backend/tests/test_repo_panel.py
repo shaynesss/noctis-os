@@ -169,16 +169,91 @@ def test_the_push_button_pushes_and_refuses_attribution_lines(tmp_path, monkeypa
     assert subprocess.run(["git", "rev-list", "--count", "origin/main..HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() == "0"
 
 
+def _git_out(root: Path, *args: str) -> str:
+    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def _commit_on_origin(bare: Path, msg: str, name: str = "Shayne", email: str = "s@s", at: str | None = None) -> str:
+    """A commit made on GitHub itself (the web editor, another machine):
+    written straight into the bare origin, so this repository has not
+    fetched it and its tracking ref still says 0 behind."""
+    import os
+    env = {**os.environ, "GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email,
+           "GIT_COMMITTER_NAME": name, "GIT_COMMITTER_EMAIL": email}
+    if at:
+        env["GIT_AUTHOR_DATE"] = env["GIT_COMMITTER_DATE"] = at
+    tree = _git_out(bare, "rev-parse", "main^{tree}")
+    sha = subprocess.run(["git", "commit-tree", tree, "-p", "main", "-m", msg], cwd=bare, env=env,
+                         capture_output=True, text=True, check=True).stdout.strip()
+    _git_out(bare, "update-ref", "refs/heads/main", sha)
+    return sha
+
+
 def test_a_diverged_branch_needs_an_explicit_force(tmp_path, monkeypatch, client, auth_headers):
     root = _with_origin(tmp_path)
     monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
-    # Rewrite the pushed commit: same content, new hash -- what filter-repo leaves behind.
-    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend", "-m", "first, reworded\n\n" + FIXTURE_BODY], cwd=root, check=True)
+    # Rewrite the pushed commit as the trailer strip does: same subject and
+    # content, a different body, a new hash -- what filter-repo leaves behind.
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "--amend", "-m", "first\n\n" + FIXTURE_BODY], cwd=root, check=True)
     r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
-    assert r.status_code == 409 and "force" in r.json()["detail"]
+    assert r.status_code == 409 and "history rewritten here" in r.json()["detail"]
+    # The view knows it is a rewrite: GitHub's one commit has a copy here.
+    view = _one(client, auth_headers, root)
+    assert view["behind"] == 1 and view["upstream_lost"] == 0 and view["upstream_only"][0]["copied"] is True
     r = client.post("/v2/repos/push", json={"cwd": str(root), "force": True}, headers=auth_headers)
+    assert r.status_code == 400 and "names the GitHub commit" in r.json()["detail"]
+    r = client.post("/v2/repos/push", json={"cwd": str(root), "force": True, "expect": view["upstream_sha"]}, headers=auth_headers)
     assert r.status_code == 200 and r.json()["force"] is True
-    assert subprocess.run(["git", "log", "-1", "--format=%s", "origin/main"], cwd=root, capture_output=True, text=True).stdout.strip() == "first, reworded"
+    assert _git_out(root, "rev-parse", "origin/main") == _git_out(root, "rev-parse", "HEAD")
+
+
+def test_new_work_on_github_is_named_and_not_mistaken_for_a_rewrite(tmp_path, monkeypatch, client, auth_headers):
+    """2026-09-29: two commits made on GitHub were never fetched here. The
+    view said 0 behind, the push came back as git's bare "[rejected]", and a
+    fresh view would have offered a force push, calling it a rewrite, which
+    would have deleted them."""
+    root = _with_origin(tmp_path)
+    bare = tmp_path / "origin.git"
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    _commit(root, "local work")
+    demo = _commit_on_origin(bare, "demo")
+    assert _one(client, auth_headers, root)["behind"] == 0, "not fetched yet: the stale picture"
+
+    r = client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)
+    detail = r.json()["detail"]
+    assert r.status_code == 409 and "GitHub has 1 commit this branch does not" in detail
+    assert '"demo" (Shayne, ' in detail and "Bring it in first" in detail
+    assert _git_out(bare, "rev-parse", "main") == demo, "nothing was pushed"
+
+    # The push's fetch leaves the view true, and it names the commit.
+    view = _one(client, auth_headers, root)
+    assert view["behind"] == 1 and view["ahead"] == 1 and view["upstream_lost"] == 1
+    assert view["upstream_only"] == [{"sha": demo[:7], "subject": "demo", "author": "Shayne",
+                                      "at": view["upstream_only"][0]["at"], "copied": False}]
+    assert view["upstream_sha"] == demo
+
+
+def test_a_force_push_replaces_only_what_it_was_shown(tmp_path, monkeypatch, client, auth_headers):
+    """The person confirms against a list. If GitHub moves after that, the
+    force would delete a commit nobody was shown, so it refuses."""
+    root = _with_origin(tmp_path)
+    bare = tmp_path / "origin.git"
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    _commit(root, "local work")
+    _commit_on_origin(bare, "demo")
+    client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)  # refused; fetches
+    shown = _one(client, auth_headers, root)["upstream_sha"]
+    later = _commit_on_origin(bare, "made after the view was read")
+
+    r = client.post("/v2/repos/push", json={"cwd": str(root), "force": True, "expect": shown}, headers=auth_headers)
+    assert r.status_code == 409 and "changed since this view was read" in r.json()["detail"]
+    assert _git_out(bare, "rev-parse", "main") == later, "nothing was replaced"
+
+    # Confirmed against what is there now, it goes: deleting GitHub's two is
+    # the person's explicit choice, made against their names.
+    r = client.post("/v2/repos/push", json={"cwd": str(root), "force": True, "expect": later}, headers=auth_headers)
+    assert r.status_code == 200 and r.json()["force"] is True
+    assert _git_out(bare, "rev-parse", "main") == _git_out(root, "rev-parse", "HEAD")
 
 
 def test_a_projects_notes_are_read_from_the_vault_under_the_project(tmp_path, monkeypatch, client, auth_headers):
@@ -459,3 +534,18 @@ def test_the_records_figures_are_the_records_not_the_vaults(tmp_path, monkeypatc
     assert n["vault_ahead"] == 5, "the whole vault is five ahead"
     assert n["ahead"] == 2, "the record is two ahead -- the two commits that touch it"
     assert sum(1 for c in n["commits"] if not c["pushed"]) == 2
+
+
+def test_the_same_author_in_the_same_second_is_not_a_copy_on_its_own(tmp_path, monkeypatch, client, auth_headers):
+    """The worst case for telling a rewrite from new work: both commits empty
+    (so their changes compare equal), same author, same second. Only the
+    subject tells them apart, and it must, because calling GitHub's commit a
+    copy would tell the person a force push loses nothing."""
+    root = _with_origin(tmp_path)
+    monkeypatch.setattr(panels, "_safe_home_dir", lambda raw: Path(raw))
+    same = "2026-09-18T13:41:00+00:00"
+    _commit(root, "local, empty", at=same)
+    _commit_on_origin(tmp_path / "origin.git", "on GitHub, empty", name="t", email="t@t", at=same)
+    client.post("/v2/repos/push", json={"cwd": str(root)}, headers=auth_headers)  # refused; fetches
+    view = _one(client, auth_headers, root)
+    assert view["upstream_lost"] == 1 and view["upstream_only"][0]["copied"] is False

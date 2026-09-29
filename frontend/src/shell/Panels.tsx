@@ -86,6 +86,15 @@ export interface RepoInfo {
   slug: string | null
   /** Why there is no slug, when there is none. */
   github_reason: string | null
+  /** The upstream's tip, full hash: a force push names it, and the backend
+   *  refuses the force if the upstream has moved since. */
+  upstream_sha?: string | null
+  /** When behind: the upstream's own commits, newest first (the first ten),
+   *  each `copied` when a rewritten copy of it is on this branch. */
+  upstream_only?: { sha: string; subject: string; author: string; at: number; copied: boolean }[]
+  /** How many of all the upstream's own commits have no copy here: what a
+   *  force push would delete. 0 while behind means a rewrite here. */
+  upstream_lost?: number
   /** The open terminals' directories that resolve to this repository. */
   cwds: string[]
   /** For a dev job's project: the vault side -- the job's notes folder and
@@ -510,58 +519,155 @@ function Ext({ href, className, children }: { href: string; className?: string; 
   )
 }
 
-/* The push, as a button. A session never pushes -- permissions deny it to a
- * hosted one and the prompt sends every other one here -- so this is the
- * person's hand, running `git push` as the machine's git identity through
- * the same credential helper a terminal would use. Force is a second,
- * separate click, offered only when origin has commits this branch does
- * not (a rewritten history); a plain push is never turned into a force. The
- * backend also refuses any push whose commits carry an attribution line. */
-function PushButton({ r, onPushed }: { r: RepoInfo; onPushed?: () => void }) {
-  const [state, setState] = useState<'idle' | 'confirm-force' | 'pushing' | 'done' | 'failed'>('idle')
-  const [note, setNote] = useState<string | null>(null)
+/* The push. A session never pushes -- permissions deny it to a hosted one
+ * and the prompt sends every other one here -- so this is the person's
+ * hand, running `git push` as the machine's git identity through the same
+ * credential helper a terminal would use. The backend also refuses any push
+ * whose commits carry an attribution line.
+ *
+ * Two parts, because they need different room (2026-09-29): the control on
+ * the fold's lid, and a notice, a full-width line under it. git's rejection
+ * used to share the lid with the title, cut off at "[rejec…" and drawn over
+ * the title, which is not a message anyone can act on.
+ *
+ * Ahead and behind at once has two causes that need opposite answers, and
+ * the backend says which (`upstream_lost`). A history rewritten here, every
+ * GitHub commit with a copy on this branch, is a force push: a second click,
+ * and nothing lost. Commits made on GitHub that this branch lacks are named,
+ * and the answer is to bring them in; a force stays possible, behind a
+ * prompt listing what it deletes. Until then every divergence was called a
+ * rewrite and offered a force, which on 2026-09-29 would have deleted two
+ * commits made on GitHub. Either force carries the GitHub tip that was
+ * shown, and the backend refuses it if GitHub has moved since. */
+export type PushState = 'idle' | 'confirm-force' | 'pushing' | 'done' | 'failed'
+
+/** Where a branch stands against its upstream, as the push reads it. */
+function divergence(r: RepoInfo) {
   const ahead = r.ahead ?? 0, behind = r.behind ?? 0
   const diverged = ahead > 0 && behind > 0
-  const nothing = !r.upstream ? false : ahead === 0
-  if (nothing && state === 'idle') return null
+  // Not known counts as lost: a harmless rewrite has to be shown, not assumed.
+  const lost = r.upstream_lost ?? behind
+  return {
+    ahead, behind, diverged, lost,
+    rewrite: diverged && lost === 0,
+    missing: (r.upstream_only ?? []).filter((c) => !c.copied),
+    nothing: !r.upstream ? false : ahead === 0,
+  }
+}
+
+/** The line under the lid: a push's result, a force's consequences, or the
+ *  commits GitHub has that this branch lacks. A component of its own so the
+ *  tests can read every state of it without clicking. */
+export function PushNotice({ r, state, note }: { r: RepoInfo; state: PushState; note: string | null }) {
+  const { behind, diverged, lost, rewrite, missing } = divergence(r)
+  const s = (n: number) => (n === 1 ? '' : 's')
+  const named = (
+    <ul className="m-0 mt-[4px] list-none p-0">
+      {missing.map((c) => (
+        <li key={c.sha} className="flex flex-wrap gap-x-[8px]">
+          <span className="text-ink-faint">{c.sha}</span>
+          <span className="text-ink">{c.subject}</span>
+          <span className="text-ink-faint">{c.author} · {ago(c.at)}</span>
+        </li>
+      ))}
+      {lost > missing.length && <li className="text-ink-faint">and {lost - missing.length} more</li>}
+    </ul>
+  )
+  let content: React.ReactNode = null
+  if (state === 'failed' && note) {
+    content = <p className="m-0 whitespace-pre-wrap break-words" style={{ color: 'var(--color-faber)' }}>{note}</p>
+  } else if (state === 'done' && note) {
+    content = <p className="m-0 text-ink-dim">{note}</p>
+  } else if (state === 'confirm-force') {
+    content = rewrite
+      ? <p className="m-0 text-ink-dim">History rewritten here: a force push replaces GitHub&apos;s {behind} commit{s(behind)} with their rewritten copies on this branch. Nothing is lost.</p>
+      : <div className="text-ink-dim">A force push deletes {lost} commit{s(lost)} from GitHub that {lost === 1 ? 'is' : 'are'} not on this branch in any form:{named}</div>
+  } else if (diverged && !rewrite) {
+    content = (
+      <div className="text-ink-dim">
+        GitHub has {lost} commit{s(lost)} this branch doesn&apos;t. Bring {lost === 1 ? 'it' : 'them'} in first
+        (git pull, or ask a session to merge {r.upstream}), then push.{named}
+      </div>
+    )
+  }
+  return content && <div className="px-4 pb-[9px] font-mono text-[11px] leading-[1.55]">{content}</div>
+}
+
+function usePush(r: RepoInfo, onSettled?: () => void): { control: React.ReactNode; notice: React.ReactNode } {
+  const [state, setState] = useState<PushState>('idle')
+  const [note, setNote] = useState<string | null>(null)
+  const { ahead, diverged, rewrite, nothing } = divergence(r)
 
   const run = async (force: boolean) => {
     setState('pushing'); setNote(null)
-    const out = await post<{ pushed: boolean; as: string; force: boolean }>('/v2/repos/push', { cwd: r.cwds[0] ?? r.root, force })
-    if ('error' in out) { setState('failed'); setNote(out.error); return }
-    setState('done'); setNote(`pushed${out.force ? ' (force)' : ''} as ${out.as || 'you'}`)
-    onPushed?.()
+    const out = await post<{ pushed: boolean; as: string; force: boolean }>('/v2/repos/push',
+      { cwd: r.cwds[0] ?? r.root, force, ...(force ? { expect: r.upstream_sha } : {}) })
+    if ('error' in out) { setState('failed'); setNote(out.error) }
+    else { setState('done'); setNote(`pushed${out.force ? ' (force)' : ''} as ${out.as || 'you'}`) }
+    // Read again either way: a refused push has just fetched, so the figures
+    // it leaves are GitHub's as of now, not as of the last fetch.
+    onSettled?.()
   }
-  return (
-    <span className="flex items-center gap-[8px] font-mono text-[11px]">
-      {note && <span className={`max-w-[360px] truncate ${state === 'failed' ? '' : 'text-ink-dim'}`}
-                     style={state === 'failed' ? { color: 'var(--color-faber)' } : undefined} title={note}>{note}</span>}
-      {state === 'confirm-force' ? (
-        <>
-          <span className="text-ink-dim">history rewritten — replace origin's {behind}?</span>
-          <button type="button" onClick={() => void run(true)}
-                  className="rounded-control border px-[8px] py-[2px] text-ink hover:bg-elevated" style={{ borderColor: 'var(--color-faber)' }}>
-            force push
-          </button>
-          <button type="button" onClick={() => setState('idle')} className="rounded-control border border-line px-[8px] py-[2px] text-ink-faint hover:text-ink">cancel</button>
-        </>
-      ) : state === 'done' ? null : (
-        <button type="button" disabled={state === 'pushing'}
-                title={r.vault_ahead != null && r.vault_ahead !== ahead ? `a push is the whole repository's: ${r.vault_ahead} commits leave, ${ahead} of them this record's` : undefined}
-                onClick={() => (diverged ? setState('confirm-force') : void run(false))}
-                className="rounded-control px-[9px] py-[2px] text-ink transition-opacity hover:opacity-90 disabled:opacity-40"
-                style={{ background: 'var(--color-sig)', outline: diverged ? '1px solid var(--color-faber)' : undefined }}>
-          {state === 'pushing' ? 'pushing…' : !r.upstream ? `publish ${r.branch ?? 'branch'}` : diverged ? 'push · force' : `push ${ahead}`}
+  const notice = <PushNotice r={r} state={state} note={note} />
+
+  let control: React.ReactNode = null
+  if (state === 'confirm-force') {
+    control = (
+      <span className="flex items-center gap-[8px]">
+        <button type="button" onClick={() => void run(true)}
+                className="rounded-control border px-[8px] py-[2px] text-ink hover:bg-elevated" style={{ borderColor: 'var(--color-faber)' }}>
+          force push
         </button>
-      )}
-    </span>
+        <button type="button" onClick={() => setState('idle')} className="rounded-control border border-line px-[8px] py-[2px] text-ink-faint hover:text-ink">cancel</button>
+      </span>
+    )
+  } else if (state === 'done' || nothing) {
+    control = null
+  } else if (diverged && !rewrite) {
+    // Not the push colour: pushing cannot succeed until GitHub's are here,
+    // and a force is the exception, so it is the quiet button.
+    control = (
+      <button type="button" disabled={state === 'pushing'} onClick={() => setState('confirm-force')}
+              className="rounded-control border border-line px-[8px] py-[2px] text-ink-faint hover:text-ink disabled:opacity-40">
+        {state === 'pushing' ? 'pushing…' : 'force…'}
+      </button>
+    )
+  } else {
+    control = (
+      <button type="button" disabled={state === 'pushing'}
+              title={r.vault_ahead != null && r.vault_ahead !== ahead ? `a push is the whole repository's: ${r.vault_ahead} commits leave, ${ahead} of them this record's` : undefined}
+              onClick={() => (rewrite ? setState('confirm-force') : void run(false))}
+              className="rounded-control px-[9px] py-[2px] text-ink transition-opacity hover:opacity-90 disabled:opacity-40"
+              style={{ background: 'var(--color-sig)', outline: rewrite ? '1px solid var(--color-faber)' : undefined }}>
+        {state === 'pushing' ? 'pushing…' : !r.upstream ? `publish ${r.branch ?? 'branch'}` : rewrite ? 'push · force' : `push ${ahead}`}
+      </button>
+    )
+  }
+  return { control, notice }
+}
+
+/* The Commits fold with its push: the control on the lid, the notice under
+ * it. Its own component so each fold holds its own push state. */
+function CommitsFold({ r, meta, open, onToggle, grow, onPushed, children }: {
+  r: RepoInfo; meta: string; open: boolean; onToggle: () => void; grow?: boolean; onPushed?: () => void; children: React.ReactNode
+}) {
+  const push = usePush(r, onPushed)
+  return (
+    <Fold title="Commits" meta={meta} open={open} onToggle={onToggle} grow={grow} notice={push.notice}
+          right={<>{push.control}<span className={open ? 'mt-[6px]' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
+      {children}
+    </Fold>
   )
 }
 
 /* A section inside a module: a fold with a title and a count, the body
  * under it. Folded, it says how many; open, it shows them. */
-function Fold({ title, meta, open, onToggle, right, empty = false, grow = false, children }: {
+function Fold({ title, meta, open, onToggle, right, notice, empty = false, grow = false, children }: {
   title: string; meta?: React.ReactNode; open: boolean; onToggle: () => void; right?: React.ReactNode
+  /** Full width under the lid, shown open or closed: what the lid's control
+   *  has to say, with room to say all of it. It brings its own padding, so a
+   *  notice with nothing to say takes no room. */
+  notice?: React.ReactNode
   /** Take the card's spare height, with the header centred in it while closed
    *  (2026-09-16): modules in a row share a height, and the last fold is
    *  where a shorter card's space goes. */
@@ -583,6 +689,7 @@ function Fold({ title, meta, open, onToggle, right, empty = false, grow = false,
         </button>
         {right && <span className="flex shrink-0 flex-col items-center justify-center py-[6px] pr-4 font-mono text-[11px]">{right}</span>}
       </div>
+      {notice}
       {open && !empty && children}
     </div>
   )
@@ -722,11 +829,10 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
 
       <Stand path={r.root} r={r} />
       <Dirty files={r.dirty} />
-      <Fold title="Commits" meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
-            open={commitsOpen} onToggle={() => toggle('code')} grow={!rec}
-            right={<><PushButton r={r} onPushed={onChanged} /><span className={commitsOpen ? 'mt-[6px]' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
+      <CommitsFold r={r} meta={local ? `${local} of ${r.commits.length} not on GitHub` : `${r.commits.length}, all on GitHub`}
+                   open={commitsOpen} onToggle={() => toggle('code')} grow={!rec} onPushed={onChanged}>
         <CommitList commits={r.commits} />
-      </Fold>
+      </CommitsFold>
 
       {rec && (
         <>
@@ -737,16 +843,15 @@ function RepoModule({ r, terminals, folded, onChanged }: { r: RepoInfo; terminal
               shown by the file each last touched. */}
           <Stand path={`${rec.root}/${rec.paths[0]}`} r={rec} />
           <Dirty files={rec.dirty} />
-          <Fold title="Commits" meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}, all on GitHub`}
-                open={recordOpen} onToggle={() => toggle('record')} grow
-                right={<><PushButton r={rec} onPushed={onChanged} /><span className={recordOpen ? 'mt-[6px]' : 'invisible h-0 overflow-hidden'}><Legend /></span></>}>
+          <CommitsFold r={rec} meta={rec.ahead ? `${rec.ahead} of ${rec.commits.length} not on GitHub` : `${rec.commits.length}, all on GitHub`}
+                       open={recordOpen} onToggle={() => toggle('record')} grow onPushed={onChanged}>
             {/* Commits, like the project's (2026-09-16): a list of files
                 with the commit that last touched each put twelve unpushed
                 commits beside three red rows, because twelve commits had
                 touched one file. Rows and figures now count the same thing;
                 a session's commit wears "from here". */}
             <CommitList commits={rec.commits} paths={rec.paths} />
-          </Fold>
+          </CommitsFold>
         </>
       )}
 

@@ -7,7 +7,7 @@
  * both lists empty. */
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { GithubCard, Repo, type GithubInfo, type RepoInfo, type RepoTerminal } from './Panels'
+import { GithubCard, PushNotice, Repo, type GithubInfo, type PushState, type RepoInfo, type RepoTerminal } from './Panels'
 import { CARD_WIDTH } from './domain'
 
 const base: RepoInfo = {
@@ -110,14 +110,62 @@ describe('Repo view', () => {
     expect(t).toContain('publish job/12-thing')
   })
 
-  it('offers a force push only when the histories disagree, and a plain one otherwise', () => {
-    const diverged = text({ ahead: 281, behind: 280 })
-    expect(diverged).toContain('↑ 281 not on GitHub'); expect(diverged).toContain('↓ 280 behind')
-    expect(diverged).toContain('push · force')
+  it('offers a force push for a history rewritten here, and a plain one otherwise', () => {
+    // A rewrite: every GitHub commit has a copy on this branch (the trailer strip).
+    const rewritten = text({ ahead: 281, behind: 280, upstream_lost: 0 })
+    expect(rewritten).toContain('↑ 281 not on GitHub'); expect(rewritten).toContain('↓ 280 behind')
+    expect(rewritten).toContain('push · force')
+    expect(rewritten).not.toContain('GitHub has')
     const plain = text({ ahead: 3, behind: 0 })
     expect(plain).toContain('push 3')
     expect(plain).not.toContain('force')
     expect(text({})).not.toContain('push ')
+  })
+
+  const demo = (): Partial<RepoInfo> => ({
+    ahead: 3, behind: 2, upstream_lost: 2, upstream_sha: '2357ebf'.padEnd(40, '0'),
+    upstream_only: [
+      { sha: '2357ebf', subject: 'demo', author: 'Shayne', at: Math.floor(Date.now() / 1000) - 11 * 86400, copied: false },
+      { sha: 'dad3c3f', subject: 'demo vid', author: 'Shayne', at: Math.floor(Date.now() / 1000) - 11 * 86400, copied: false },
+    ],
+  })
+
+  it('names commits made on GitHub and says to bring them in, never calling them a rewrite', () => {
+    // 2026-09-29: this used to read "push · force", and its prompt called
+    // GitHub's two demo commits a rewritten history to be replaced.
+    const t = text(demo())
+    expect(t).toContain('GitHub has 2 commits this branch doesn')
+    expect(t).toContain('Bring them in first (git pull, or ask a session to merge origin/main), then push.')
+    expect(t).toContain('demo vid'); expect(t).toContain('Shayne · 11d')
+    expect(t).not.toContain('push · force'); expect(t).not.toContain('push 3')
+    expect(t).toContain('force…')
+  })
+
+  it('takes a divergence it cannot classify for new work, not a rewrite', () => {
+    const t = text({ ahead: 3, behind: 2 })
+    expect(t).toContain('GitHub has 2 commits this branch doesn')
+    expect(t).not.toContain('push · force')
+  })
+
+  const notice = (repo: Partial<RepoInfo>, state: PushState, note: string | null = null) =>
+    renderToStaticMarkup(<PushNotice r={{ ...base, ...repo }} state={state} note={note} />)
+
+  it('asks for a force by listing what it deletes, or by saying nothing is lost when that is true', () => {
+    const deletes = strip(notice(demo(), 'confirm-force'))
+    expect(deletes).toContain('A force push deletes 2 commits from GitHub that are not on this branch in any form')
+    expect(deletes).toContain('demo vid')
+    const rewrite = strip(notice({ ahead: 281, behind: 280, upstream_lost: 0 }, 'confirm-force'))
+    expect(rewrite).toContain('replaces GitHub')
+    expect(rewrite).toContain('280 commits with their rewritten copies on this branch. Nothing is lost.')
+  })
+
+  it("shows git's refusal whole, on its own line, and nothing at all when there is nothing to say", () => {
+    // It was one truncated span in the lid, cut at "[rejec…" over the title.
+    const refusal = 'To https://github.com/me/x.git\n ! [rejected] main -> main (fetch first)\nhint: Updates were rejected because the remote contains work that you do not have locally.'
+    const html = notice({ ahead: 3 }, 'failed', refusal)
+    expect(html).toContain('whitespace-pre-wrap'); expect(html).not.toContain('truncate')
+    expect(html).toContain('the remote contains work that you do not have locally.')
+    expect(notice({ ahead: 3 }, 'idle')).toBe('')
   })
 
   it('counts what is not on GitHub, what is behind, and what is uncommitted -- figures and files, no sentence', () => {

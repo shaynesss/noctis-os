@@ -440,6 +440,56 @@ def _commits(root: Path, n: int, paths: list[str] | None, unpushed: set[str], re
     return commits
 
 
+UPSTREAM_LISTED = 10
+
+
+def _upstream_only(root: Path, upstream: str) -> tuple[list[dict], int]:
+    """The upstream's commits this branch does not have, newest first (the
+    first ten), and how many of all of them have no copy here.
+
+    "Behind" alone cannot tell the two reasons a branch is behind apart, and
+    they need opposite answers. A history rewritten here (the trailer strip
+    rewords every commit) leaves the upstream holding the old versions, each
+    with a copy on this branch: a force push replaces them and loses nothing.
+    Work added on GitHub (on 2026-09-18, two README commits) has no copy
+    here: a force push deletes it, and the answer is to bring it in.
+
+    A copy has the same author and authored time, which rewording, amending,
+    rebasing and filter-repo all keep, and also keeps the subject or the
+    change itself (git's `--cherry-pick`). Every rewrite keeps one of those
+    two; the trailer strip keeps both. Either test alone was wrong once:
+    comparing changes counts any two empty commits as copies, and the same
+    author in the same second is not proof on its own. So an empty commit's
+    change is no evidence, and it needs its subject: one reworded as well
+    reads as not here, which errs safe and holds no work anyway. A wrong
+    "copy" is the dangerous direction, since it tells the person a force
+    push loses nothing.
+    """
+    fields = "%an%x1f%ae%x1f%at"
+    here: dict[str, set[str]] = {}
+    for line in (_git(root, "log", f"{upstream}..HEAD", f"--format={fields}%x1f%s", timeout=20) or "").splitlines():
+        name, email, authored, subject = (line.split("\x1f") + [""] * 4)[:4]
+        here.setdefault(f"{name}\x1f{email}\x1f{authored}", set()).add(subject)
+    no_same_change = set((_git(root, "rev-list", "--left-only", "--cherry-pick", f"{upstream}...HEAD",
+                               timeout=20) or "").split())
+    changes = set()   # upstream-only commits that change something; a merge shows none
+    for record in (_git(root, "log", "--format=%x1e%H", "--shortstat", f"HEAD..{upstream}", timeout=20) or "").split("\x1e"):
+        sha, _, stat = record.strip().partition("\n")
+        if sha and stat.strip():
+            changes.add(sha)
+    log = _git(root, "log", f"HEAD..{upstream}", f"--format=%H%x1f%h%x1f%s%x1f{fields}%x1f%ct", timeout=20) or ""
+    listed, lost = [], 0
+    for line in log.splitlines():
+        full, short, subject, name, email, authored, at = (line.split("\x1f") + [""] * 7)[:7]
+        subjects = here.get(f"{name}\x1f{email}\x1f{authored}")
+        copied = subjects is not None and (subject in subjects or (full in changes and full not in no_same_change))
+        lost += not copied
+        if len(listed) < UPSTREAM_LISTED:
+            listed.append({"sha": short, "subject": subject, "author": name,
+                           "at": int(at) if at.isdigit() else 0, "copied": copied})
+    return listed, lost
+
+
 def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
     """A repository's local state. With `paths`, the commits and dirty files
     are those touching them -- how the vault is read as one project's notes
@@ -456,11 +506,17 @@ def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
         branch = None  # detached: git's name for "no branch" is not a branch name
     upstream = _git(root, "rev-parse", "--abbrev-ref", "@{u}")
     ahead = behind = None
+    upstream_sha = None
+    upstream_only: list[dict] = []
+    upstream_lost = 0
     if upstream:
         counts = _git(root, "rev-list", "--left-right", "--count", f"{upstream}...HEAD")
         if counts:
             b, a = counts.split()
             ahead, behind = int(a), int(b)
+        upstream_sha = _git(root, "rev-parse", upstream)
+        if behind:
+            upstream_only, upstream_lost = _upstream_only(root, upstream)
     porcelain = _git(root, "status", "--porcelain") or ""
     # By status code, not by column: `_git` strips its output, and a first
     # line of " M path" loses its leading space, so a fixed `l[3:]` cut the
@@ -489,6 +545,7 @@ def _repo_at(root: Path, paths: list[str] | None = None) -> dict:
     out = {
         "root": str(root), "name": root.name, "branch": branch, "upstream": upstream,
         "ahead": ahead, "behind": behind, "dirty": dirty, "commits": commits,
+        "upstream_sha": upstream_sha, "upstream_only": upstream_only, "upstream_lost": upstream_lost,
         "remote": remote_url, "slug": slug, "github_reason": reason,
     }
     if notes_read is not None:
@@ -710,6 +767,10 @@ def _mark_commit_modes(root: Path, commits: list[dict]) -> None:
 class PushRequest(BaseModel):
     cwd: str = Field(min_length=1)
     force: bool = False
+    # The upstream tip the person was shown when they confirmed a force push.
+    # The force goes only while the upstream is still there, so what they
+    # were told it deletes is exactly what it deletes.
+    expect: str | None = Field(default=None, pattern=r"^[0-9a-f]{40}$")
 
 
 _ATTRIBUTION = re.compile(r"^\s*(Co-Authored-By:|Claude-Session:|.*Generated with \[Claude Code\])", re.I | re.M)
@@ -751,10 +812,15 @@ def repos_push(req: PushRequest) -> dict:
     message in the range about to go is read, and one `Co-Authored-By`,
     `Claude-Session` or "Generated with Claude Code" line stops the push
     -- the 2026-09-15 incident was four such lines that had never been
-    read before they went. **Divergence:** a rewritten history needs
-    `force`, and the view asks for that explicitly; a plain push is never
-    turned into a force here. Force is `--force-with-lease`, so a remote
-    that moved since the last fetch still refuses.
+    read before they went. **Divergence:** the upstream is fetched first,
+    because "behind" is only as fresh as the last fetch: on 2026-09-29 the
+    view said 0 behind while GitHub held two commits made there eleven days
+    before, and git's own rejection was the first anyone heard of them.
+    Commits there with no copy here are named and the push stops: bring
+    them in. A history rewritten here needs `force`, which the view asks
+    for separately; a plain push is never turned into a force. A force
+    carries `expect`, the upstream tip the person was shown, and is leased
+    on it, so it can only replace what they were told it replaces.
     """
     try:
         resolved = _safe_home_dir(req.cwd)
@@ -770,6 +836,11 @@ def repos_push(req: PushRequest) -> dict:
     if not _git(root, "remote", "get-url", "origin"):
         raise HTTPException(status_code=409, detail="no remote named origin")
     upstream = _git(root, "rev-parse", "--abbrev-ref", "@{u}")
+    if upstream:
+        # A failed fetch (offline) leaves the last one's picture, and git's own
+        # refusal behind it; the push would fail the same way in either case.
+        remote = _git(root, "config", f"branch.{branch}.remote") or "origin"
+        _git(root, "fetch", "--quiet", remote, timeout=60)
 
     outgoing = f"{upstream}..HEAD" if upstream else "HEAD"
     messages = _git(root, "log", outgoing, "--format=%B", timeout=20) or ""
@@ -789,14 +860,33 @@ def repos_push(req: PushRequest) -> dict:
         counts = _git(root, "rev-list", "--left-right", "--count", f"{upstream}...HEAD")
         if counts:
             behind = int(counts.split()[0])
+    force = req.force and behind > 0   # nothing to replace is a plain push
     if behind and not req.force:
+        listed, lost = _upstream_only(root, upstream)
+        if lost:
+            named = [f'"{c["subject"]}" ({c["author"]}, {datetime.fromtimestamp(c["at"]).strftime("%-d %b")})'
+                     for c in listed if not c["copied"]][:3]
+            more = f" and {lost - len(named)} more" if lost > len(named) else ""
+            raise HTTPException(status_code=409, detail=(
+                f"GitHub has {lost} commit{'s' if lost != 1 else ''} this branch does not: {', '.join(named)}{more}. "
+                f"Bring {'them' if lost != 1 else 'it'} in first (git pull, or ask a session to merge {upstream}), "
+                f"then push; nothing was pushed"))
         raise HTTPException(status_code=409, detail=(
-            f"origin has {behind} commit{'s' if behind != 1 else ''} this branch does not -- a rewritten history "
-            f"needs a force push, which is a separate confirmation; nothing was pushed"))
+            f"history rewritten here: GitHub's {behind} commit{'s' if behind != 1 else ''} all have rewritten copies "
+            f"on this branch, so replacing them loses nothing, but that is a force push, a separate confirmation; "
+            f"nothing was pushed"))
+    if force:
+        if not req.expect:
+            raise HTTPException(status_code=400, detail=(
+                "a force push names the GitHub commit it replaces (expect); nothing was pushed"))
+        if req.expect != _git(root, "rev-parse", upstream):
+            raise HTTPException(status_code=409, detail=(
+                "GitHub has changed since this view was read, so the force push would replace commits you were not "
+                "shown; look again before forcing; nothing was pushed"))
 
     args = ["push"]
-    if req.force:
-        args.append("--force-with-lease")
+    if force:
+        args.append(f"--force-with-lease=refs/heads/{branch}:{req.expect}")
     if not upstream:
         args.append("-u")
     args += ["origin", branch]
@@ -809,7 +899,7 @@ def repos_push(req: PushRequest) -> dict:
     if out.returncode != 0:
         raise HTTPException(status_code=502, detail=(out.stderr or out.stdout or "git push failed").strip()[-600:])
     _GITHUB_CACHE.pop(_github_slug(_git(root, "remote", "get-url", "origin")) or "", None)
-    return {"pushed": True, "branch": branch, "force": req.force,
+    return {"pushed": True, "branch": branch, "force": force,
             "as": _git(root, "config", "user.name") or "", "output": (out.stderr or out.stdout).strip()[-600:]}
 
 
