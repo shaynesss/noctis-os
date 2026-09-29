@@ -45,7 +45,14 @@ def negotiate(requested: str | None) -> str:
     """The version to answer with: theirs if we speak it, else our newest."""
     return requested if requested in PROTOCOL_VERSIONS else PROTOCOL_FALLBACK
 VAULT = Path(os.environ.get("VAULT_PATH", Path(__file__).resolve().parents[3] / "second-brain"))
-HISTORY_DB = os.environ.get("NOCTIS_HISTORY_DB")
+# The backend's own conversation store unless told otherwise, read from
+# store.py so the two cannot name different files. It used to be the env
+# var alone, and nothing ever set it: history_search answered "unset" in
+# every session on the machine until 2026-09-29, while the universal prompt
+# told each of them to use it.
+from orchestrator.store import DATA_DIR  # noqa: E402
+
+HISTORY_DB = os.environ.get("NOCTIS_HISTORY_DB") or str(DATA_DIR / "history.db")
 
 # Where to reach the backend for a permission decision. Only the permission
 # tool uses these: everything else here reads the vault directly, which is
@@ -175,9 +182,8 @@ def t_vault_search(args: dict) -> dict:
 
 
 def t_history_search(args: dict) -> dict:
-    if not HISTORY_DB or not Path(HISTORY_DB).exists():
-        return text("No conversation history available (NOCTIS_HISTORY_DB unset).")
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    if not Path(HISTORY_DB).exists():
+        return text(f"No conversation history available (no database at {HISTORY_DB}).")
     from orchestrator.store import ConversationStore
 
     store = ConversationStore(HISTORY_DB)

@@ -140,3 +140,32 @@ def test_server_runs_with_no_third_party_dependencies(vault):
     """The 'clone it and point it at your own vault' story depends on this:
     the env below has no site-packages beyond the stdlib on PATH."""
     assert call(vault, "worklist")
+
+
+def test_history_search_finds_the_backends_store_with_no_setting(tmp_path):
+    """Launched the way every session launches it: no NOCTIS_HISTORY_DB.
+    It answered "unset" everywhere until 2026-09-29, because the server read
+    only that variable and nothing set it. Now it opens the file the backend
+    writes, which here is under NOCTIS_DATA_DIR."""
+    from orchestrator.jsonl import Conversation, Turn
+    from orchestrator.store import ConversationStore
+
+    data = tmp_path / "data"
+    data.mkdir()
+    store = ConversationStore(data / "history.db")
+    store.ingest(Conversation(engine_session_id="s1", cwd="/x", started_at="2026-09-29T10:00:00Z",
+                              messages=[{"role": "user", "content": "the zebra ledger question", "meta": None}],
+                              turns=[Turn(model="claude-opus-5-5", input_tokens=1)]),
+                 "faber")
+    store.close()
+
+    reqs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18"}},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+             "params": {"name": "history_search", "arguments": {"query": "zebra ledger"}}}]
+    out = subprocess.run([sys.executable, str(SERVER)], capture_output=True, text=True, timeout=90,
+                         input="\n".join(json.dumps(r) for r in reqs) + "\n",
+                         env={"PATH": "/usr/bin:/bin", "VAULT_PATH": str(tmp_path),
+                              "NOCTIS_DATA_DIR": str(data)})
+    reply = [json.loads(l) for l in out.stdout.splitlines() if l.strip()]
+    said = [r for r in reply if r.get("id") == 2][0]["result"]["content"][0]["text"]
+    assert "zebra ledger" in said, said

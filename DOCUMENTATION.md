@@ -444,7 +444,7 @@ Two variables are required. Everything else has a working default.
 | `NOCTIS_MAX_CONCURRENT` | no | `4`, max `9` | Sessions that may run at once. A budget on the 5-hour window, not a machine limit. Above 9 is clamped, with a log line naming `MAX_CONCURRENT_CEILING`, raise it there if you need more. |
 | `NOCTIS_CLAUDE_BIN` | no | PATH, then common install paths | Absolute path to `claude`. Needed for a non-standard install, or to pin a build. |
 | `NOCTIS_DATA_DIR` | no | `backend/data/` | SQLite history and the search index. |
-| `NOCTIS_HISTORY_DB` | no | derived | Explicit DB path for the MCP server, which runs as its own process. |
+| `NOCTIS_HISTORY_DB` | no | the backend's `data/history.db` | DB path for the MCP server's `history_search`, which runs as its own process. Defaults to the store's own path (`NOCTIS_DATA_DIR`, else `backend/data`), read from `orchestrator/store.py`; until 2026-09-29 it had no default and nothing set it. |
 | `NOCTIS_BACKEND` | no | `http://127.0.0.1:8000` | Where the MCP server reaches the backend. |
 | `NOCTIS_RECAP_MODEL` | no | `claude-haiku-4-5` | Model for `one_shot`, the session recap. |
 | `NIGHTSHIFT_DISTILLER_MODEL` | no | `claude-haiku-4-5` | Model for overnight lessons distillation. |
