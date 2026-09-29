@@ -11,6 +11,82 @@ are complete and verified live. Nothing is left in the build order: the
 2026-09-15 rather than built, because the commit log is the record and needs
 no writer.
 
+### A full audit, and what it found working only on paper (2026-09-29)
+
+Seven read-only checks compared every doc's claims with the code, the logs
+and the live app. Everything below was found that way, fixed with a test that
+fails on the old code, and committed one fix at a time.
+
+- **Settings could not save a prompt, History could not delete, and a closed
+  terminal was never released.** CORS allowed GET, POST and PATCH; the browser
+  refused its own preflight for PUT and DELETE. dev.log held 55 refused
+  preflights and not one PUT or DELETE. `test_auth` now preflights every
+  routed method (629a433).
+- **Lifetime tokens and list price were about double.** A reply's usage is
+  repeated on every content block's record; both readers summed records. One
+  count per message id now: 2.83B tokens and $1,886, not 5.87B and $4,333.
+  Claude Code's own `/stats` sums the same way; all 5,262 multi-record replies
+  share one request id (323b989).
+- **`history_search` answered "unset" in every session**: it read only
+  `NOCTIS_HISTORY_DB` and nothing set it. It opens the backend's store by
+  default (a89a235).
+- **An accepted proposal left step 2 twice in `dev.md`.** Accept now refuses a
+  diff that keeps the line it extends, and reads the file back (3e16e1c). The
+  duplicate itself is staged in the inbox for Shayne to accept.
+- **Staleness flagged live sessions as abandoned**: all four noctis-os flags
+  from 09-19 to 09-29 were idle sessions, the last one the session that found
+  it. A job with a running `claude` carrying it is skipped (47ce6ba). A
+  continuation line starting with a bare date can no longer crash the pass
+  (73ed31b).
+- **The push checked the whole history of a new branch**, failed open on a git
+  error, missed the plain "Generated with Claude Code" line, and drew a repo
+  with no remote as all on GitHub (50a8b84).
+- **The shared-tree guard let the commonest commit through**, `git commit -am`
+  with a heredoc message, and a dozen other forms. It reads a command as a
+  shell does now, and follows `cd` and `git -C` (0dfedc0).
+- **History named every indexed tool call "tool"** and listed no artifacts:
+  two stored shapes, readers for one (acb1aa0).
+- **The refusal banner** cleared only when the model answered in the same
+  transcript, and did not show after a restart until a terminal spoke
+  (c26aeb1).
+- **Nightshift lost three nights to the laptop sleeping mid-draft.** Held awake
+  with `caffeinate`, a slept timeout retried on waking, each run's log dated;
+  the drafter is told the house style and how to write a replacement
+  (b2211a1). The launchd job was reloaded: it had kept the pre-timezone-change
+  time and ran at 02:00 BST.
+- **Opus 5.5 was priced as Opus 5**, and the regression suite tested Opus 5
+  from its own copy of the model table (b5a4a5c).
+- **The vault lock worked within one process only.** An flock across
+  processes now, writes by rename, index read-modify-writes held under it
+  (6b59020).
+- Also: the Activity grid counts local days and deleted conversations leave
+  the lifetime total (d79052c); successful polls no longer fill dev.log (it
+  had reached 92MB; an in-place rotation was tried first and removed, because
+  a writer that does not append left a hole of NUL bytes), the 07-22 debug
+  log is gone, `/docs` is closed, requirements drop pywebview and declare PyYAML
+  (056da0e); comments naming deleted code corrected (bab2ab9); the MCP
+  server's dependency claim corrected (9ed128d).
+
+Not changed, and recorded in DOCUMENTATION §21: `SESSION_END` is per mode and
+job; three house rules have no code behind them; retrieval scores 78% against
+its 80% gate; launch at login is loaded but not enabled; most regression cases
+can barely fail.
+
+### Before the audit (2026-09-19 to 09-28)
+
+- **A failed drafter reports its reason, not its command line** (035753b,
+  09-19). `check=True` raised with the argv as its message, ten kilobytes of
+  prompt; the envelope the code was written to read now says what happened,
+  and a timeout is its own sentence.
+- **Opus 5.5 is the default for General, Faber, Noctua and Vesper** (7d5556c,
+  09-25). Opus 5 stays in the launcher's chooser.
+- **One unparseable job card no longer stops every session of a mode**
+  (ca96718, 09-28). A card whose YAML failed to parse made every Faber launch
+  a 500; it is skipped, a crash's 500 now carries CORS headers so the shell can
+  say it crashed, and `make doctor` checks the vault.
+- **The Repo tab reads GitHub before pushing** (579497d, 09-29): a fetch first,
+  and new work is never called a rewrite.
+
 ### The drafter never wrote a thing, and the reason was in its own output (2026-09-18)
 
 - **Advance hands its proposal back; the runner writes it.** The distiller was

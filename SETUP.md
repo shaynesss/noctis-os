@@ -23,12 +23,13 @@ The one-time, machine-level checklist. Two scripts do almost all of it; this fil
 Bootstrap's step 5 renders `launchd/com.noctis-os.nightshift.plist.template`, launchd expands neither `~` nor variables in its paths, so the tracked file is a template with `__REPO_ROOT__` placeholders and is never loaded directly, into `~/Library/LaunchAgents/` and loads it. Nightly at 03:00 it runs `scripts/nightshift_run.sh` → `backend/nightshift/runner.py`. The script exports a `PATH` with Homebrew's bin on it, because launchd's own has none and from 2026-08-05 to 09-15 every night failed to find `claude`. Every run is recorded in `backend/data/nightshift.json`, and Settings → Maintenance says how the last one ended.
 
 - Run it now rather than at 03:00: `launchctl start com.noctis-os.nightshift`
+- After changing the machine's timezone, reload the job (`launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.noctis-os.nightshift.plist`, then `launchctl bootstrap` the same path): launchd keeps the time it computed under the old zone, which ran it at 02:00 BST for ten days after 2026-09-19.
 - Log: `backend/runtime/nightshift.log` (gitignored, like every runtime file)
 - Unload: `launchctl unload ~/Library/LaunchAgents/com.noctis-os.nightshift.plist`
 - The rendered plist holds an absolute repo path: re-run `make bootstrap` if the checkout moves.
 
 ## Running it
 
-`make dev` opens the native window, Opt+Space summon, tray, launch-at-login; closing hides it, the tray and the hotkey are the ways back, with the backend under `backend/supervise.py`, which restarts it if it stops answering. `make browser` is the fallback for backend-only work: a browser tab at `:5180` and `uvicorn --reload` in place of the window and the supervisor. `make open-app` is the double-clickable wrapper around `make dev`. `make doctor` says what is up. The two paths side by side: `DOCUMENTATION.md` §14.
+`make dev` opens the native window, Opt+Space summon, tray (the launch-at-login plugin is loaded but not switched on); closing hides it, the tray and the hotkey are the ways back, with the backend under `backend/supervise.py`, which restarts it if it stops answering. `make browser` is the fallback for backend-only work: a browser tab at `:5180` and `uvicorn --reload` in place of the window and the supervisor. `make open-app` is the double-clickable wrapper around `make dev`. `make doctor` says what is up. The two paths side by side: `DOCUMENTATION.md` §14.
 
 Nothing else. The backend reads and writes `second-brain/` off disk, no Obsidian (an optional viewer, demoted from prerequisite on 2026-09-07), no MCP dependency of its own.

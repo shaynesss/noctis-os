@@ -83,10 +83,10 @@ Five modes, and they differ by **method**, never by capability. Every mode gets 
 
 | Mode | For | Model |
 |---|---|---|
-| **General** | questions, comparisons, anything unscoped | Opus 5 |
-| **Faber** | build: spec, implement, ship | Opus 5 |
-| **Noctua** | learn: read closely, explain, retain | Opus 5 |
-| **Vesper** | research: gather, weigh, return a verdict | Opus 5 |
+| **General** | questions, comparisons, anything unscoped | Opus 5.5 |
+| **Faber** | build: spec, implement, ship | Opus 5.5 |
+| **Noctua** | learn: read closely, explain, retain | Opus 5.5 |
+| **Vesper** | research: gather, weigh, return a verdict | Opus 5.5 |
 | **Maintenance** | audit the vault and propose repairs | Haiku 4.5 |
 
 It runs on an existing Claude subscription with no API billing, because it drives the vendor's own CLI rather than calling an API with a key.

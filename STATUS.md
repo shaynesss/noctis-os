@@ -1,6 +1,6 @@
 # STATUS.md
 
-Last updated: 2026-09-17
+Last updated: 2026-09-29
 
 Current state, not aspirational. History lives in [`CHANGELOG.md`](CHANGELOG.md); the reference is [`DOCUMENTATION.md`](DOCUMENTATION.md).
 
@@ -8,9 +8,9 @@ Current state, not aspirational. History lives in [`CHANGELOG.md`](CHANGELOG.md)
 
 **v2 is the daily driver, and the session is a real terminal.** The app hosts the interactive Claude Code CLI in a pseudo-terminal per tab; the `-p` orchestrator that preceded it is deleted. Stage 1 complete; Stage 2 items 1–9 closed, and nothing is left in the build order, the `launchd`-on-wake scheduler that was item 6's last piece was closed on 2026-09-15 rather than built, because the commit log is the record. v1 is gone entirely.
 
-**Verified 2026-09-17 (evening):** 371 backend tests, 74 frontend, `tsc -b` and `cargo check` clean. The shared-tree guard was also checked against the live condition rather than only its fixtures: two Faber terminals genuinely open in this repository, `git add -A` refused naming the other terminal, `git add <path>` and a bulk command in the vault both allowed.
+**Audited 2026-09-29.** Seven read-only checks compared every doc's claims with the code, the logs and the live app. Most of what they found is fixed; each fix has a test that fails on the old code. The CHANGELOG's 09-29 entry lists them, and DOCUMENTATION §21 lists what was left and why.
 
-*Not re-run on 09-17: `make doctor` and the Playwright pass over the rail tabs, both last green 2026-09-16 (evening). Said plainly because this file's previous entry claimed a verification date for checks that had not been re-run under it, which is the same defect the day spent fixing elsewhere. (The number in a commit body is a claim; `make test` is the check.)*
+**Verified 2026-09-29:** 462 backend tests, 82 frontend, `tsc -b` and `cargo check` clean, `make doctor` green. Checked live against the running backend: PUT and DELETE preflights answer 200, Stats reads 2.83B lifetime tokens, `history_search` returns past conversations, staleness sees the open Faber jobs as live. *Not re-run: the Playwright pass over the rail tabs, last green 2026-09-16, and the prompt regression suite, whose record is stale against the current prompts.*
 
 v2's premise: the app drives Claude Code as a subprocess rather than calling the API, so it runs on the existing subscription at no marginal cost. The interface is the deliverable, v2 exists to stop Claude Desktop being the entry point.
 
@@ -20,28 +20,29 @@ The spec, the product brief and the PTY migration record live in the vault: `sec
 
 Verified live, not only by tests.
 
-- **Terminal**: the real `claude`, one per tab, in the app's palette. A fresh session opens by saying what it is; sessions survive a reload (the PTY registry outlives the page and reattaches with a replay), resume by engine session id, split into a grid (`⌘⇧-number`; a row to three, then 2×2, 3×2, 3×3), and a split's tabs drag as one bracket.
-- **Repo**: the memory: one module per repository the open terminals are in. A lid (name, branch, the terminals' sprites, the GitHub link) and then one anatomy, used twice: the code's block, with its path, the figures (not on GitHub, behind, uncommitted), the uncommitted files, and a Commits fold with the push on its lid; and, for a dev job's project, the record's block under it at `<vault>/wiki/<Project>/`, with the record's own figures and its own commits. A commit opens to its body on click; red and green dots say pushed or not; each wears the sprite of whose work it was, by the transcript that made it. The repositories are read at once, and a revisit paints from the last answer while the fresh one loads. The **push button** runs as you, refuses attribution lines and bodiless commits (dated after 2026-09-17), and asks separately before a force push.
-- **Stats**: the 5-hour and 7-day windows, lifetime tokens by kind read from the CLI's own transcripts, a year of activity, and every session's history indexed from those transcripts; `⌘K` searches it.
-- **Settings**: the universal prompt and each mode's overlay, edited in the vault in place (uncommitted; Repo commits them), with the **regression suite** in the same block: thirteen cases scoped to what an edit affects, each recorded against the prompt and methodology it ran on, with live progress and a line saying whether the record is current; and **Maintenance**: nightshift's last run as one sentence, and its proposals with accept/reject.
-- **Nightshift**: nightly at 03:00 under `launchd`. Its first step is the staleness pass (a job untouched six hours with no clean session end is flagged in its own context); then the scan, which stages a status note for each flagged job and a distillation draft for each mode with undistilled lessons, into `maintenance/inbox/` where Settings reads. Its first run since the PATH fix, 2026-09-16 03:04, completed and recorded `quiet`.
-- **MCP server**: five tools against the real vault, stdio, no third-party dependencies (it imports `retrieval/` and `jobs.py` from beside it), usable from any MCP client; registered at user scope so every session on the machine has `vault_search`.
-- **Shell**: Tauri 2, Opt+Space summon, tray, launch-at-login; `⌘T` mode entry, `⌘⇧H` handoff, `⌘W` close, `⌘1–9` focus.
-- **Limits**: the 5-hour and 7-day windows in the status bar, and a banner naming any model the engine is refusing, with the message it gave, read from the transcripts and cleared when that model answers again.
+- **Terminal**: the real `claude`, one per tab, in the app's palette. A fresh session opens by saying what it is; sessions survive a reload (the PTY registry outlives the page and reattaches with a replay), resume by engine session id, split into a grid (`⌘⇧-number`; a row to three, then 2×2, 3×2, 3×3), and a split's tabs drag as one bracket. General, Faber, Noctua and Vesper run Opus 5.5 by default; Maintenance runs Haiku 4.5.
+- **Repo**: one module per repository the open terminals are in. A lid (name, branch, the terminals' sprites, the GitHub link) and one anatomy, used twice: the code's block (path, figures, uncommitted files, a Commits fold with the push on its lid), and for a dev job's project the record's block at `<vault>/wiki/<Project>/`. A commit opens to its body on click; dots say pushed or not, and a repository with no remote reads as not on GitHub. The **push button** runs as you, fetches first, checks exactly what no remote has, refuses attribution lines (every wording) and bodiless commits dated after 2026-09-17, refuses if it cannot read the commits, and asks separately before a leased force push.
+- **Stats**: the 5-hour and 7-day windows, lifetime tokens by kind (one count per reply, deleted conversations excluded), a year of activity by local day, and every session's history indexed from the CLI's transcripts, tool calls named; `⌘K` searches it.
+- **Settings**: the universal prompt and each mode's overlay, edited in the vault in place and saved (the save could not reach the backend until 2026-09-29); the **regression suite** in the same block; and **Maintenance**: nightshift's last run as one sentence, and its proposals with accept/reject. Accept refuses a diff that keeps the line it extends and reads the file back before it commits.
+- **Nightshift**: nightly at 03:00 under `launchd`, held awake with `caffeinate` on AC power, and a draft the machine slept through retried on waking. Its first step is the staleness pass (a job untouched six hours with no clean session end and no live process is flagged); then the scan, which stages a distillation draft for each mode with undistilled lessons into `maintenance/inbox/`.
+- **MCP server**: five tools against the real vault, stdio, no MCP library, run under the backend's venv (it needs python-frontmatter and PyYAML); registered at user scope, so every session on the machine has `vault_search` and `history_search`.
+- **Shell**: Tauri 2, Opt+Space summon, tray; `⌘K` search, `⌘T` mode entry, `⌘⇧H` handoff, `⌘W` close, `⌘R` reload and reattach, `⌘1–9` focus, `⌘⇧1–9` split.
+- **Limits**: the 5-hour and 7-day windows in the status bar, and a banner naming any model the engine is refusing, with the message it gave, read from the transcripts and cleared when that model answers again in any session.
 - **Telemetry**: hooks attribute actions to a mode and job for hosted sessions; the status line feeds the bar and survives a reload. The two telemetry hooks come from a project's own `.claude/settings.local.json`, so they fire only in projects that register them (`second-brain` and `articulation-loop` do not, see DOCUMENTATION §21).
-- **The shared-tree guard**: a `PreToolUse` hook refuses whole-tree git commands (`add -A`, `commit -a`, `reset --hard`, `clean -f` and the rest) while another live session is in the same repository, and only then. It rides in the argv, so it holds in every project. Built 2026-09-17 after two sessions committed each other's working trees.
+- **The shared-tree guard**: a `PreToolUse` hook refuses whole-tree git commands while another live session is in the same repository, and only then. It reads a command as a shell does, so multi-line commits, `bash -c`, `$(...)` and `cd`/`git -C` into another repository are all judged. It rides in the argv, so every **hosted** session carries it in every project; a session Noctis did not launch does not.
 
 ## Next
 
-1. **The commit log as memory, in use.** It shipped 2026-09-15 evening; a week of mornings opening on Repo will say whether a commit body's last paragraph is enough to restart from, and whether the push's refusal of bodiless commits (from 2026-09-17) bites at the right moment.
-2. **The regression suite ran for the first time on 2026-09-16: 13 of 13 pass**, current against that evening's prompts. What it has not done is fail, so the assertions are unproven in the direction that matters: a deliberately broken prompt would say whether a case can catch anything.
-3. **Nightshift's drops are recorded from tonight.** Until 2026-09-17 a draft that failed one of the three inbox-contract gates was discarded with no record and no artefact, so two nights of three distiller calls each read as quiet (`seen: 3, staged: 0, failed: 0`). The gate now names itself and the draft is kept under `backend/runtime/nightshift-drops/`. Three modes are over their cursor (dev, research, maintenance), so tonight should produce either three proposals or three named drops. Read the kept drafts before changing the contract they failed.
+1. **Accept the staged `dev.md` fix.** Settings → Maintenance holds one proposal: remove the duplicated step 2 of the ship gate, left by the 09-28 accept.
+2. **Run the regression suite** from Settings. Its record predates the current prompts, r08 and r09 were tightened on 09-29, and the rest of its cases can barely fail, so a deliberately broken prompt is still the test of whether it can catch anything.
+3. **Decide three things the audit left open**: whether to switch on launch at login; whether hosted sessions should stop receiving `system.md` twice (argv and `~/.claude/CLAUDE.md`); and whether to tune retrieval, which scores 78% against its 80% gate.
+4. **Tonight's nightshift run** should start at 03:00 BST and its log line should say so; it is the first run since the launchd reload and the sleep retry.
 
 ## Known gaps, accepted
 
-- `busy` has no self-healing path if a `SessionEnd` hook never fires (force-quit, sleep).
-- Nightshift's apply has no schema-aware validation of the target file beyond the accept click.
-- Commit attribution by transcript matches on the subject line: two commits with one subject both credit the first session that ran it (DOCUMENTATION §21).
+- The busy marker is written and cleared but nothing reads it; `SESSION_END` is per mode and job, so one of two sessions on a job ending marks it closed for both.
+- Three house rules have no code behind them (no mode rewrites methodology, no secrets in the vault, only Shayne pushes): any session can read the API token and call those routes. Accepted for a local single-user machine.
+- Commit attribution by transcript matches on the subject line; a subject with a quote, a backslash or an em dash never matches (DOCUMENTATION §21).
 
 ## Deploy
 
