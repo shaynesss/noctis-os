@@ -1031,3 +1031,22 @@ def test_an_attached_file_is_kept_under_a_pasteable_name(client, tmp_path, monke
     assert client.post("/v2/sessions/attach", params={"name": "e.txt"}, content=b"",
                        headers={**AUTH, "Content-Type": "application/octet-stream"}).status_code == 400
     assert client.post("/v2/sessions/attach", params={"name": "x"}, content=b"x").status_code == 401
+
+
+def test_activity_carries_each_days_tokens_and_the_days_with_only_tokens(client, monkeypatch):
+    from datetime import date, timedelta
+    from orchestrator import jsonl
+    from routers import sessions_v2 as sv2
+    today = date.today().isoformat()
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    ancient = (date.today() - timedelta(days=500)).isoformat()
+    sv2._store.close_session(sv2._store.open_session("faber"))
+    monkeypatch.setattr(jsonl, "index_new", lambda *a, **k: None)
+    monkeypatch.setattr(jsonl, "lifetime_tokens_cached", lambda skip=frozenset(): {
+        "input": 0, "output": 0, "cached": 0, "cache_write": 0, "turns": 0, "since": "",
+        "list_cost": 0.0, "priced_turns": 0,
+        "daily": {today: 1_500_000, yesterday: 42, ancient: 7}})
+    rows = {r["day"]: r for r in client.get("/v2/sessions/stats", headers=AUTH).json()["activity"]}
+    assert rows[today]["sessions"] >= 1 and rows[today]["tokens"] == 1_500_000
+    assert rows[yesterday] == {"day": yesterday, "sessions": 0, "tokens": 42}, "tokens with no session still show"
+    assert ancient not in rows, "outside the grid's year"

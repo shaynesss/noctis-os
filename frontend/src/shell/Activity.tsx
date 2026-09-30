@@ -1,19 +1,19 @@
-/* Contribution grid — Stage 2 item 3.
+/* Contribution grid, Stage 2 item 3.
  *
  * One general grid, not per-mode. The mode split is already legible from the
  * tabs and the character strip, and a single grid answers the only question
- * this panel is really for: *am I actually using this?* — which is v1's
+ * this panel is really for: *am I actually using this?*, which is v1's
  * failure mode made visible.
  *
- * Ramp is Faber red rather than GitHub green: the Design Brief says the
- * character accents are the only chromatic events on screen, and most cells
- * sit near-black, so the grid reads as texture with occasional warm hits
- * rather than a slab of colour.
+ * The ramp is the signature (since 2026-09-15; it began as Faber red), and
+ * most cells sit near-black, so the grid reads as texture with occasional
+ * warm hits rather than a slab of colour.
  *
- * Data will come from `store.daily_activity()` (sessions per day). Mocked
- * here per dev.md §3.0 — screens before wiring. */
+ * Real data: sessions per local day from `store.daily_activity()` and each
+ * day's tokens from the transcripts, both through `/v2/sessions/stats`. A
+ * cell's hover names both (2026-09-30). */
 
-import { buildGrid } from './grid'
+import { buildGrid, cellTitle, compactTokens, iso } from './grid'
 import { Unreachable } from './Async'
 import { Beam } from './Panels'
 
@@ -48,13 +48,13 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 
 export function Activity(
-  { days }: { days: { day: string; sessions: number }[] | null | false },
+  { days }: { days: { day: string; sessions: number; tokens?: number }[] | null | false },
 ) {
   /* Absent data is not zero activity.
    *
    * This was handed `[]` while the request was still in flight or had
    * failed, so a year of real work rendered as "0 sessions in the last
-   * year" — a measurement, stated confidently, of something that had not
+   * year" -- a measurement, stated confidently, of something that had not
    * been measured. It sat directly above a "Lifetime tokens" panel that
    * handled the same two states properly, which is what made it obvious.
    *
@@ -81,6 +81,11 @@ export function Activity(
   today.setHours(0, 0, 0, 0)
   const weeks = buildGrid(today, new Map(days.map((d) => [d.day, d.sessions])))
   const total = weeks.flat().reduce((n, c) => n + c.count, 0)
+  // Tokens by day, for the hover (2026-09-30). Colour stays by sessions: a
+  // day's tokens are mostly cache re-reads, which grow with how long a
+  // conversation is rather than with how much happened in it.
+  const tokens = new Map(days.map((d) => [d.day, d.tokens ?? 0]))
+  const yearTokens = weeks.flat().reduce((n, c) => n + (c.future ? 0 : tokens.get(iso(c.date)) ?? 0), 0)
 
   // A month label sits above the first week that begins that month, which is
   // the only placement that stays aligned as the year rolls.
@@ -96,7 +101,9 @@ export function Activity(
       <Beam><div className="rounded-card border border-line bg-surface px-4 py-[14px]">
         <div className="mb-[14px] flex items-baseline gap-2">
           <b className="text-[14px] font-semibold text-ink tabular-nums">{total}</b>
-          <span className="font-mono text-[10.5px] text-ink-faint">sessions in the last year</span>
+          <span className="font-mono text-[10.5px] text-ink-faint">
+            sessions in the last year{yearTokens ? ` · ${compactTokens(yearTokens)} tokens` : ''}
+          </span>
         </div>
 
         {/* Wide content scrolls inside its own container so the app body never
@@ -127,7 +134,7 @@ export function Activity(
               col.map((c, d) => (
                 <div
                   key={`${w}-${d}`}
-                  title={`${c.count || 'No'} session${c.count === 1 ? '' : 's'} · ${c.date.toDateString().slice(4)}`}
+                  title={cellTitle(c.date, c.count, tokens.get(iso(c.date)) ?? 0)}
                   className="aspect-square w-full rounded-[2px]"
                   style={{ background: level(c.count), visibility: c.future ? 'hidden' : undefined }}
                 />

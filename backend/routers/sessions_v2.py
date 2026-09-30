@@ -426,14 +426,24 @@ def stats() -> dict:
             "list_cost": disk["list_cost"],
             "priced_turns": disk["priced_turns"],
         },
-        # Sessions per day for the contribution grid. Only days with activity
-        # are returned; the grid fills the gaps, which keeps the payload
-        # proportional to what happened rather than to the window.
-        "activity": [
-            {"day": r["day"], "sessions": r["sessions"]}
-            for r in _store.daily_activity(days=365)
-        ],
+        # Sessions and tokens per day for the contribution grid. Only days
+        # with activity are returned; the grid fills the gaps, which keeps the
+        # payload proportional to what happened rather than to the window.
+        # Tokens come from the same reading as the lifetime figure, so a
+        # day's hover and the total agree; a day can have tokens and no
+        # session (one that ran past midnight, or one Noctis did not host).
+        "activity": _activity(disk.get("daily") or {}),
     }
+
+
+def _activity(tokens_by_day: dict[str, int], days: int = 365) -> list[dict]:
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=days)).isoformat()
+    sessions = {r["day"]: r["sessions"] for r in _store.daily_activity(days=days)}
+    out = []
+    for day in sorted(set(sessions) | {d for d in tokens_by_day if d >= since}):
+        out.append({"day": day, "sessions": sessions.get(day, 0), "tokens": tokens_by_day.get(day, 0)})
+    return out
 
 
 @router.get("/history/{session_id}")

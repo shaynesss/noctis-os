@@ -125,11 +125,19 @@ class Usage:
     # What each message id has contributed so far, so a later record of the
     # same reply replaces its figures instead of adding to them. Carried
     # across a resumed scan, because the two records can straddle a read.
-    counted: dict[str, tuple[int, int, int, int, float | None]] = field(
+    counted: dict[str, tuple[int, int, int, int, float | None, str]] = field(
         default_factory=dict, repr=False)
+    # Tokens by the local day each reply was written, for the Activity
+    # grid's hover (2026-09-30). The same one-count-per-reply as the totals,
+    # so the days add up to the lifetime figure exactly.
+    daily: dict[str, int] = field(default_factory=dict, repr=False)
 
-    def _apply(self, fig: tuple[int, int, int, int, float | None], sign: int) -> None:
-        inp, out, cached, wrote, price = fig
+    def _apply(self, fig: tuple[int, int, int, int, float | None, str], sign: int) -> None:
+        inp, out, cached, wrote, price, day = fig
+        if day:
+            self.daily[day] = self.daily.get(day, 0) + sign * (inp + out + cached + wrote)
+            if not self.daily[day]:
+                del self.daily[day]
         self.input_tokens += sign * inp
         self.output_tokens += sign * out
         self.cached_tokens += sign * cached
@@ -140,7 +148,7 @@ class Usage:
             self.list_cost += sign * price
 
     def copy(self) -> "Usage":
-        return _dc.replace(self, counted=dict(self.counted))
+        return _dc.replace(self, counted=dict(self.counted), daily=dict(self.daily))
 
     @property
     def lifetime(self) -> int:
@@ -188,6 +196,18 @@ def _records_from(path: Path, offset: int, partial: bool) -> "tuple[list[dict[st
 _usage_memo: dict[Path, tuple[int, Usage]] = {}
 
 
+def _local_day(ts: object) -> str:
+    """The machine's local date of an ISO timestamp, "" if there is none.
+    Local because the grid draws local days (store.daily_activity)."""
+    if not isinstance(ts, str) or not ts:
+        return ""
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone().date().isoformat()
+    except ValueError:
+        return ""
+
+
 def scan_usage(path: Path, resume: bool = False) -> Usage:
     """The token figures of one transcript, without building the conversation.
 
@@ -223,7 +243,8 @@ def scan_usage(path: Path, resume: bool = False) -> Usage:
             cached = int(usage.get("cache_read_input_tokens", 0))
             wrote = int(usage.get("cache_creation_input_tokens", 0))
             fig = (inp, out, cached, wrote,
-                   pricing.list_price(msg.get("model", ""), inp, out, cached, wrote))
+                   pricing.list_price(msg.get("model", ""), inp, out, cached, wrote),
+                   _local_day(r.get("timestamp")))
             # One reply, one count. The CLI writes a record per content block
             # (thinking, text, each tool call) and every one of them repeats
             # the reply's message id and its usage, so summing records counted
@@ -360,6 +381,7 @@ def lifetime_tokens(skip: frozenset[str] = frozenset()) -> dict[str, Any]:
     inp = out = cached = cache_write = 0
     cost = 0.0
     since = ""
+    daily: dict[str, int] = {}
     for p in PROJECTS.glob("**/*.jsonl"):
         # A conversation deleted from History leaves the CLI's file behind;
         # its tokens leaving with it is what "delete" means on Stats too.
@@ -380,12 +402,15 @@ def lifetime_tokens(skip: frozenset[str] = frozenset()) -> dict[str, Any]:
         cache_write += u.cache_write_tokens
         cost += u.list_cost
         unpriced += u.unpriced_turns
+        for day, n in u.daily.items():
+            daily[day] = daily.get(day, 0) + n
         if u.started_at and (not since or u.started_at < since):
             since = u.started_at
     return {"tokens": total, "turns": turns, "sessions": sessions,
             "input": inp, "output": out, "cached": cached,
             "cache_write": cache_write, "since": since,
-            "list_cost": round(cost, 2), "priced_turns": turns - unpriced}
+            "list_cost": round(cost, 2), "priced_turns": turns - unpriced,
+            "daily": daily}
 
 
 # ------------------------------------------------------------ beside the recorder

@@ -2,7 +2,7 @@
  *
  * Named grid.ts, not activity.ts: on a case-insensitive filesystem that
  * collides with Activity.tsx and the wrong file wins the import. The same
- * mistake as markdown.ts beside Markdown.tsx, made twice in one afternoon —
+ * mistake as markdown.ts beside Markdown.tsx, made twice in one afternoon:
  * a lowercase sibling of a component file is the trap.
  *
  * Its own module because this is where the bug was: the component held a
@@ -47,8 +47,24 @@ export function buildGrid(today: Date, counts: Map<string, number>): Cell[][] {
   return weeks
 }
 
+/** A token count the way the hover reads it: 950, 48.2K, 48.2M, 2.90B. */
+export function compactTokens(n: number): string {
+  if (n < 1_000) return String(n)
+  if (n < 1_000_000) return `${(n / 1_000).toFixed(1)}K`
+  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  return `${(n / 1_000_000_000).toFixed(2)}B`
+}
+
+/** One cell's hover: sessions, then tokens when there were any, then the
+ *  date. "Sep 29" style, the way the month labels read. */
+export function cellTitle(date: Date, sessions: number, tokens: number): string {
+  const s = `${sessions || 'No'} session${sessions === 1 ? '' : 's'}`
+  const t = tokens ? ` · ${compactTokens(tokens)} tokens` : ''
+  return `${s}${t} · ${date.toDateString().slice(4)}`
+}
+
 /** Local YYYY-MM-DD. `toISOString` would shift the date across a timezone
  *  boundary and put a late-evening session on the following day. */
-function iso(d: Date): string {
+export function iso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }

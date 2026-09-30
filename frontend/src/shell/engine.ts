@@ -28,7 +28,9 @@ export interface Stats {
     /** API list price of those turns -- never a charge -- and how many of them it covers. */
     list_cost: number; priced_turns: number
   }
-  activity: { day: string; sessions: number }[]
+  /** Days with activity only. `tokens` is that local day's share of the
+   *  lifetime figure, so the days add up to it. */
+  activity: { day: string; sessions: number; tokens?: number }[]
 }
 
 /** GET a JSON route. Returns null on any failure rather than throwing.

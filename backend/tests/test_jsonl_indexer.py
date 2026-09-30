@@ -414,3 +414,29 @@ def test_opus_5_5_is_priced_at_its_own_rate_not_opus_5s():
     from orchestrator import pricing
     assert pricing.list_price("claude-opus-5-5", 1_000_000, 1_000_000, 1_000_000, 1_000_000) == 32.2
     assert pricing.list_price("claude-opus-5", 1_000_000, 1_000_000, 1_000_000, 1_000_000) == 40.5
+
+
+def test_tokens_are_filed_by_local_day_and_add_up_to_the_total(tmp_path, monkeypatch):
+    """The grid's hover reads these. One count per reply, as the total is,
+    so the days sum to the lifetime figure; a reply whose later record
+    replaces an earlier one moves its day's figure with it."""
+    import time
+    monkeypatch.setenv("TZ", "Europe/London"); time.tzset()
+    try:
+        monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+        monkeypatch.setattr(jsonl, "_usage_memo", {})
+        def rec(mid, ts, out):
+            return json.dumps({"type": "assistant", "timestamp": ts, "message": {
+                "id": mid, "role": "assistant", "model": "claude-opus-5-5", "content": [],
+                "usage": {"input_tokens": 10, "output_tokens": out, "cache_read_input_tokens": 100,
+                          "cache_creation_input_tokens": 0}}}) + "\n"
+        (tmp_path / "a.jsonl").write_text(
+            rec("m1", "2026-09-28T12:00:00Z", 5)
+            + rec("m1", "2026-09-28T12:00:01Z", 40)          # same reply, final output count
+            + rec("m2", "2026-09-28T23:30:00Z", 0), encoding="utf-8")   # 00:30 BST on the 29th
+        (tmp_path / "b.jsonl").write_text(rec("m3", "2026-09-29T09:00:00Z", 0), encoding="utf-8")
+        life = jsonl.lifetime_tokens()
+        assert life["daily"] == {"2026-09-28": 150, "2026-09-29": 220}
+        assert sum(life["daily"].values()) == life["tokens"]
+    finally:
+        monkeypatch.delenv("TZ"); time.tzset()
