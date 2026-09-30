@@ -9,7 +9,7 @@ https://github.com/user-attachments/assets/88fd5c2a-23ae-4470-b232-35093867e561
 <p align="center">
   <img alt="license" src="https://img.shields.io/badge/license-MIT-blue.svg" />
   <img alt="platform" src="https://img.shields.io/badge/platform-macOS-black.svg" />
-  <img alt="status" src="https://img.shields.io/badge/status-mid--build-orange.svg" />
+  <img alt="status" src="https://img.shields.io/badge/status-v2.0.0%20shipped-brightgreen.svg" />
 </p>
 
 Noctis is a personal system in two halves. A **brain**: a folder of plain markdown that any model can read, with a standard protocol in front of it. A **body**: an app that runs AI sessions against that folder. Today the body hosts the Claude Code CLI. Swap it for something else and the brain keeps everything it learned.
