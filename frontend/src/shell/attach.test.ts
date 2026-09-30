@@ -29,3 +29,12 @@ describe('attach', () => {
     expect(pasted).toEqual([])
   })
 })
+
+describe('an ended session', () => {
+  it('refuses a file and says why, before anything is uploaded', async () => {
+    const pasted: string[] = []
+    registerPaster('term-3', (t) => pasted.push(t), () => false)
+    expect(await attachFiles('term-3', [new File(['x'], 'a.png')])).toMatch(/has ended/)
+    expect(pasted).toEqual([])
+  })
+})

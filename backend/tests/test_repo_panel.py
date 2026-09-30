@@ -610,3 +610,8 @@ def test_a_sentence_about_the_rule_is_not_an_attribution_line():
         assert panels._ATTRIBUTION.search(line), line
     for line in allowed:
         assert not panels._ATTRIBUTION.search(line), line
+
+
+def test_the_spaced_link_form_is_refused_too():
+    assert panels._ATTRIBUTION.search("Generated with Claude Code (https://claude.com/claude-code)")
+    assert panels._outgoing(None) == ["HEAD", "--not", "--remotes=origin"]

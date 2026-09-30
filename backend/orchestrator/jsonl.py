@@ -386,7 +386,9 @@ def lifetime_tokens(skip: frozenset[str] = frozenset()) -> dict[str, Any]:
         # A conversation deleted from History leaves the CLI's file behind;
         # its tokens leaving with it is what "delete" means on Stats too.
         # They did not until 2026-09-29: 36 deleted sessions, 2.63M tokens.
-        if p.stem in skip:
+        # A deleted conversation's subagents too: their files sit under
+        # `<session>/subagents/` and carry their own ids.
+        if p.stem in skip or (p.parent.name == "subagents" and p.parent.parent.name in skip):
             continue
         u = scan_usage(p, resume=True)
         if not u.turns:

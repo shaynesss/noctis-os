@@ -46,7 +46,7 @@ Hook-driven action-feed logs (high-churn, ephemeral) are **not** vault content, 
 
 ## Build order (locked, and complete)
 
-git for the vault → mode folders (methodology + lessons + state + agents) → backend → frontend → telemetry → nightshift. All built; v2 is the daily driver. The `launchd`-on-wake scheduler that was the last item is no longer needed: the Repo view's commit log replaced the morning brief on 2026-09-15, and every commit's body says where it leaves things. (The app opens on Terminal since 2026-09-17; the Repo view is one click away.) A session that reads this should not conclude the frontend is still to be scaffolded, a Faber probe did exactly that on 2026-09-15 from the previous wording.
+git for the vault → mode folders (methodology + lessons + state + agents) → backend → frontend → telemetry → nightshift. All built; v2 is the daily driver. The `launchd`-on-wake scheduler that was the last item is no longer needed: the Repo view's commit log replaced the morning brief on 2026-09-15, and every commit's body says where it leaves things. (The app opens on the view last used since 2026-09-17, Terminal on a first run; the Repo view is one click away.) A session that reads this should not conclude the frontend is still to be scaffolded, a Faber probe did exactly that on 2026-09-15 from the previous wording.
 
 ## Design tooling
 

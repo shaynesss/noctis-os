@@ -38,7 +38,7 @@ Verified live, not only by tests.
 0. **Switch to the app: `make switch`**, on Shayne's word, when nothing in a terminal is mid-reply. Then tag `v2.0.0` and move the job to Ship.
 1. **Accept the staged `dev.md` fix.** Settings → Maintenance holds one proposal: remove the duplicated step 2 of the ship gate, left by the 09-28 accept.
 2. **Run the regression suite** from Settings. Its record predates the current prompts, r08 and r09 were tightened on 09-29, and the rest of its cases can barely fail, so a deliberately broken prompt is still the test of whether it can catch anything.
-3. **Decided 2026-09-30**: open at login, yes (the app switches it on once); the app keeps opening on Terminal and the spec's criterion 5 is amended to match; retrieval ships at 78% as a known gap. **Still open**: whether hosted sessions should stop receiving `system.md` twice (argv and `~/.claude/CLAUDE.md`).
+3. **Decided 2026-09-30**: open at login, yes (the app switches it on once); the app keeps opening on the view last used (Terminal on a first run), and the spec's criterion 5 is amended to "one click away" to match; retrieval ships at 78% as a known gap. **Still open**: whether hosted sessions should stop receiving `system.md` twice (argv and `~/.claude/CLAUDE.md`).
 4. **Tonight's nightshift run** should start at 03:00 BST and its log line should say so; it is the first run since the launchd reload and the sleep retry.
 
 ## Known gaps, accepted

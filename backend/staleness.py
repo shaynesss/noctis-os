@@ -257,8 +257,16 @@ def flag_stale_jobs(folder: str, now: datetime | None = None,
         if acknowledged and acknowledged >= died_at:
             continue
 
-        metadata["flagged"] = True
-        vault_io.write_frontmatter(job_path, metadata, content)
+        # Re-read under the lock and change only the flag: the card was read
+        # at the top of this loop, and an acknowledge click in the backend
+        # may have written it since (review, 2026-09-30).
+        with vault_io.locked():
+            fresh, content = vault_io.read_frontmatter(job_path)
+            acknowledged = _parse_last_touched(fresh.get("flag_acknowledged_at"))
+            if acknowledged and acknowledged >= died_at:
+                continue
+            fresh["flagged"] = True
+            vault_io.write_frontmatter(job_path, fresh, content)
         newly_flagged.append(slug)
 
     return newly_flagged

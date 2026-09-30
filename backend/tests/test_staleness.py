@@ -339,3 +339,24 @@ def test_a_continuation_line_starting_with_a_bare_date_is_not_an_entry(vault, mo
     _died_here(tmp_path / "runtime", "dev", "noctis-build", old,
                line="Bash git commit -m 'notes\n2026-09-11 (record audit + backfill)'")
     assert staleness.flag_stale_jobs("dev") == ["noctis-build"]
+
+
+def test_an_acknowledge_that_lands_between_read_and_write_is_kept(vault, monkeypatch, tmp_path):
+    """The pass reads every card first and writes the flag later; an
+    acknowledge click in between must not be overwritten by the flag."""
+    monkeypatch.setattr(staleness, "RUNTIME_DIR", tmp_path / "runtime")
+    old = (datetime.now(timezone.utc) - timedelta(hours=10)).isoformat()
+    _seed_job(vault, last_touched=(datetime.now(timezone.utc) - timedelta(days=4)).isoformat())
+    _died_here(tmp_path / "runtime", "dev", "noctis-build", old)
+    real = vault_io.read_frontmatter
+    calls = {"n": 0}
+
+    def read_then_acknowledged(path):
+        calls["n"] += 1
+        meta, body = real(path)
+        if calls["n"] > 1:        # the re-read under the lock sees the click
+            meta = {**meta, "flag_acknowledged_at": datetime.now(timezone.utc).isoformat()}
+        return meta, body
+
+    monkeypatch.setattr(vault_io, "read_frontmatter", read_then_acknowledged)
+    assert staleness.flag_stale_jobs("dev") == []

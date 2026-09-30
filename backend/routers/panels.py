@@ -499,7 +499,9 @@ def _outgoing(upstream: str | None) -> list[str]:
     against every commit ever made and refused for two bodiless ones made
     on GitHub's own editor, which were already there.
     """
-    return [f"{upstream}..HEAD"] if upstream else ["HEAD", "--not", "--remotes"]
+    # origin's, not any remote's: the push goes to origin, and a commit that
+    # exists only on a fork would otherwise go there unchecked.
+    return [f"{upstream}..HEAD"] if upstream else ["HEAD", "--not", "--remotes=origin"]
 
 
 def _unpushed(root: Path, upstream: str | None) -> set[str]:
@@ -799,7 +801,7 @@ class PushRequest(BaseModel):
 # emoji and close with the link, and nothing else.
 _ATTRIBUTION = re.compile(
     r"^\s*(Co-Authored-By\s*:|Claude-Session\s*:"
-    r"|\W*Generated with \[?Claude Code\]?(\([^)\s]*\))?[\s.]*$)", re.I | re.M)
+    r"|\W*Generated with \[?Claude Code\]?(\s*\([^)\s]*\))?[\s.]*$)", re.I | re.M)
 
 # A commit is the record (2026-09-15): the Repo view is where you read
 # where a piece of work left things, so a commit with a subject and no
@@ -1352,15 +1354,18 @@ def acknowledge_flag(mode: str, slug: str) -> dict:
     context = f"{base}/{slug}/context.md"
     if not vault_io.file_exists(context):
         raise HTTPException(status_code=404, detail=f"No such job: {mode}/{slug}")
-    try:
-        meta, body = vault_io.read_frontmatter(context)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=f"Cannot read {context}: {exc}")
-    if not meta.get("flagged"):
-        raise HTTPException(status_code=409, detail=f"{mode}/{slug} is not flagged")
-    meta["flagged"] = False
-    meta["flag_acknowledged_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    vault_io.write_frontmatter(context, meta, body)
+    # Read, change and write under one hold: nightshift's staleness pass
+    # writes the same card from another process (review, 2026-09-30).
+    with vault_io.locked():
+        try:
+            meta, body = vault_io.read_frontmatter(context)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=f"Cannot read {context}: {exc}")
+        if not meta.get("flagged"):
+            raise HTTPException(status_code=409, detail=f"{mode}/{slug} is not flagged")
+        meta["flagged"] = False
+        meta["flag_acknowledged_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        vault_io.write_frontmatter(context, meta, body)
     committed = _commit_vault(
         f"Acknowledge {mode}/{slug}'s flag",
         "A flag says a session died mid-build: the job's runtime log went six hours\n"

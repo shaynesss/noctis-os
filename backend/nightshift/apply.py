@@ -289,10 +289,11 @@ def close_job(mode: str, slug: str, resolution: str) -> None:
     # root-level `maintenance/jobs`, outside `modes/` entirely.
     job_path = f"{jobs_dir(mode)}/{slug}/context.md"
     if vault_io.file_exists(job_path):
-        job_meta, job_content = vault_io.read_frontmatter(job_path)
-        job_meta["stage"] = "Done"
-        job_meta["status"] = resolution
-        job_meta["last_touched"] = datetime.now(timezone.utc).isoformat()
-        vault_io.write_frontmatter(job_path, job_meta, job_content)
+        with vault_io.locked():
+            job_meta, job_content = vault_io.read_frontmatter(job_path)
+            job_meta["stage"] = "Done"
+            job_meta["status"] = resolution
+            job_meta["last_touched"] = datetime.now(timezone.utc).isoformat()
+            vault_io.write_frontmatter(job_path, job_meta, job_content)
 
 

@@ -440,3 +440,16 @@ def test_tokens_are_filed_by_local_day_and_add_up_to_the_total(tmp_path, monkeyp
         assert sum(life["daily"].values()) == life["tokens"]
     finally:
         monkeypatch.delenv("TZ"); time.tzset()
+
+
+def test_a_deleted_conversations_subagents_leave_the_total_with_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(jsonl, "PROJECTS", tmp_path)
+    monkeypatch.setattr(jsonl, "_usage_memo", {})
+    rec = lambda mid: json.dumps({"type": "assistant", "timestamp": "2026-09-29T10:00:00Z", "message": {
+        "id": mid, "role": "assistant", "model": "claude-opus-5-5", "content": [],
+        "usage": {"input_tokens": 10, "output_tokens": 0}}}) + "\n"
+    (tmp_path / "gone.jsonl").write_text(rec("a"), encoding="utf-8")
+    (tmp_path / "gone" / "subagents").mkdir(parents=True)
+    (tmp_path / "gone" / "subagents" / "agent-1.jsonl").write_text(rec("b"), encoding="utf-8")
+    (tmp_path / "kept.jsonl").write_text(rec("c"), encoding="utf-8")
+    assert jsonl.lifetime_tokens(frozenset({"gone"}))["tokens"] == 10

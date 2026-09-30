@@ -64,8 +64,6 @@ function fromRemembered(r: RememberedSlot): Slot {
 }
 
 export function App() {
-  // The app opens on Repo (2026-09-15): the commit log is where a piece of
-  // work was left, so it is what you open the app to read.
   /* Opens where you left it (2026-09-17). Repo was the landing view while
    * the commit log was new, then Terminal; both were a guess about what you
    * would want next, and what you want next is what you were doing.

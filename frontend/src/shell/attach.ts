@@ -14,11 +14,17 @@ import { upload } from './engine'
 /** Each mounted terminal's way to paste, by slot id. A paste goes through
  *  xterm, so it honours the CLI's bracketed-paste mode and arrives the way
  *  a real terminal's paste would. */
-const pasters = new Map<string, (text: string) => void>()
+/** A mounted terminal's paste, and whether its session is still running:
+ *  an ended one keeps its pane (and its `r` to restart) but cannot take
+ *  a file, and a drop on it said nothing (review, 2026-09-30). */
+interface Paster { paste: (text: string) => void; alive: () => boolean }
+const pasters = new Map<string, Paster>()
 
-export function registerPaster(id: string, paste: (text: string) => void): () => void {
-  pasters.set(id, paste)
-  return () => { if (pasters.get(id) === paste) pasters.delete(id) }
+export function registerPaster(id: string, paste: (text: string) => void,
+                               alive: () => boolean = () => true): () => void {
+  const entry = { paste, alive }
+  pasters.set(id, entry)
+  return () => { if (pasters.get(id) === entry) pasters.delete(id) }
 }
 
 /** A path as a terminal types a dropped file: backslash before anything a
@@ -28,8 +34,9 @@ export function escapePath(p: string): string {
 }
 
 export async function attachFiles(id: string, files: File[]): Promise<string | null> {
-  const paste = pasters.get(id)
-  if (!paste) return 'that terminal is not open'
+  const target = pasters.get(id)
+  if (!target) return 'that terminal is not open'
+  if (!target.alive()) return 'that session has ended (press r in it to start a new one)'
   if (!files.length) return null
   const kept: string[] = []
   for (const f of files) {
@@ -37,7 +44,7 @@ export async function attachFiles(id: string, files: File[]): Promise<string | n
     if ('error' in out) return `${f.name}: ${out.error}`
     kept.push(escapePath(out.path))
   }
-  paste(kept.join(' ') + ' ')
+  target.paste(kept.join(' ') + ' ')
   return null
 }
 

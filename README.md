@@ -157,7 +157,7 @@ The same logic is why the wiki is searched rather than loaded. Years of pages co
 
 ## The app, tab by tab
 
-The window opens on **Terminal**.
+The window opens on whichever view you last used, **Terminal** on a first run.
 
 ### Terminal
 

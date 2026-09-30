@@ -25,3 +25,11 @@ describe('the activity grid', () => {
     expect(iso(new Date(2026, 0, 5))).toBe('2026-01-05')
   })
 })
+
+describe('token labels at a unit boundary', () => {
+  it('moves up a unit instead of printing 1000.0', () => {
+    expect(compactTokens(999_950)).toBe('1.0M')
+    expect(compactTokens(999_960_000)).toBe('1.00B')
+    expect(compactTokens(999_940)).toBe('999.9K')
+  })
+})

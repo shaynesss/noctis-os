@@ -50,8 +50,11 @@ export function buildGrid(today: Date, counts: Map<string, number>): Cell[][] {
 /** A token count the way the hover reads it: 950, 48.2K, 48.2M, 2.90B. */
 export function compactTokens(n: number): string {
   if (n < 1_000) return String(n)
-  if (n < 1_000_000) return `${(n / 1_000).toFixed(1)}K`
-  if (n < 1_000_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  // The unit is chosen after rounding, or 999,950 read "1000.0K".
+  const k = Number((n / 1_000).toFixed(1))
+  if (k < 1_000) return `${k.toFixed(1)}K`
+  const m = Number((n / 1_000_000).toFixed(1))
+  if (m < 1_000) return `${m.toFixed(1)}M`
   return `${(n / 1_000_000_000).toFixed(2)}B`
 }
 

@@ -353,10 +353,9 @@ export function Terminal({
       // What a drop or the attach button pastes into: xterm's own paste, so
       // the CLI's bracketed-paste mode is honoured as for a typed paste.
       cleanups.push(registerPaster(id, (text) => {
-        if (dead.current) return
         term_.paste(text)
         term_.focus()
-      }))
+      }, () => !dead.current))
       const stillborn = (...lines: string[]) => {
         for (const l of lines) term_.writeln(l)
         term_.writeln('\r\n\x1b[2m  press \x1b[0mr\x1b[2m to try again\x1b[0m')

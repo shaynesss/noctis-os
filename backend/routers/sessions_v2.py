@@ -223,8 +223,9 @@ async def statusline(payload: dict, mode: str | None = None,
         _mode_of[sid] = mode
 
     # The rolling windows are a property of the account, not of one session,
-    # so the newest report from any terminal is the right answer for all of
-    # them -- the same "newest wins" the manager applies to Limits events.
+    # so every terminal's report is merged into one reading for all of them
+    # (`_later_reading`: the higher figure within a window, a later window
+    # over an earlier one). It was "newest report wins" until 2026-09-29.
     #
     # Shape-checked rather than trusted: the payload is whatever this CLI
     # version writes, and this route runs every five seconds for every
