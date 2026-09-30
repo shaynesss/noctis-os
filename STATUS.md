@@ -1,12 +1,14 @@
 # STATUS.md
 
-Last updated: 2026-09-29
+Last updated: 2026-09-30
 
 Current state, not aspirational. History lives in [`CHANGELOG.md`](CHANGELOG.md); the reference is [`DOCUMENTATION.md`](DOCUMENTATION.md).
 
 ## Current state
 
 **v2 is the daily driver, and the session is a real terminal.** The app hosts the interactive Claude Code CLI in a pseudo-terminal per tab; the `-p` orchestrator that preceded it is deleted. Stage 1 complete; Stage 2 items 1–9 closed, and nothing is left in the build order, the `launchd`-on-wake scheduler that was item 6's last piece was closed on 2026-09-15 rather than built, because the commit log is the record. v1 is gone entirely.
+
+**v2.0 is prepared and one command from shipped (2026-09-30).** It ships as a packaged `/Applications/Noctis.app`, with the backend as a login service, instead of the `tauri dev` runner that restarts the app, and ends every terminal, on any Rust change. The release build compiles and the service is validated; `make switch` moves over, keeping every tab. **Not yet run**, on Shayne's instruction: it waits for his go, and until then the dev window is what runs.
 
 **Audited 2026-09-29.** Seven read-only checks compared every doc's claims with the code, the logs and the live app. Most of what they found is fixed; each fix has a test that fails on the old code. The CHANGELOG's 09-29 entry lists them, and DOCUMENTATION §21 lists what was left and why.
 
@@ -20,9 +22,9 @@ The spec, the product brief and the PTY migration record live in the vault: `sec
 
 Verified live, not only by tests.
 
-- **Terminal**: the real `claude`, one per tab, in the app's palette. A fresh session opens by saying what it is; sessions survive a reload (the PTY registry outlives the page and reattaches with a replay), resume by engine session id, split into a grid (`⌘⇧-number`; a row to three, then 2×2, 3×2, 3×3), and a split's tabs drag as one bracket. General, Faber, Noctua and Vesper run Opus 5.5 by default; Maintenance runs Haiku 4.5.
+- **Terminal**: the real `claude`, one per tab, in the app's palette. A file or photo dropped on a pane, or picked with the paperclip beside the tab strip's `+`, is attached to that session: a copy is kept under `backend/runtime/drops/` and its path pasted in, which Claude Code turns into an image for a picture. A fresh session opens by saying what it is; sessions survive a reload (the PTY registry outlives the page and reattaches with a replay), resume by engine session id, split into a grid (`⌘⇧-number`; a row to three, then 2×2, 3×2, 3×3), and a split's tabs drag as one bracket. General, Faber, Noctua and Vesper run Opus 5.5 by default; Maintenance runs Haiku 4.5.
 - **Repo**: one module per repository the open terminals are in. A lid (name, branch, the terminals' sprites, the GitHub link) and one anatomy, used twice: the code's block (path, figures, uncommitted files, a Commits fold with the push on its lid), and for a dev job's project the record's block at `<vault>/wiki/<Project>/`. A commit opens to its body on click; dots say pushed or not, and a repository with no remote reads as not on GitHub. The **push button** runs as you, fetches first, checks exactly what no remote has, refuses attribution lines (every wording) and bodiless commits dated after 2026-09-17, refuses if it cannot read the commits, and asks separately before a leased force push.
-- **Stats**: the 5-hour and 7-day windows, lifetime tokens by kind (one count per reply, deleted conversations excluded), a year of activity by local day, and every session's history indexed from the CLI's transcripts, tool calls named; `⌘K` searches it.
+- **Stats**: the 5-hour and 7-day windows (the highest reading across terminals, not the last report), lifetime tokens by kind (one count per reply, deleted conversations excluded), a year of activity by local day with each day's sessions and tokens on hover, and every session's history indexed from the CLI's transcripts, tool calls named; `⌘K` searches it.
 - **Settings**: the universal prompt and each mode's overlay, edited in the vault in place and saved (the save could not reach the backend until 2026-09-29); the **regression suite** in the same block; and **Maintenance**: nightshift's last run as one sentence, and its proposals with accept/reject. Accept refuses a diff that keeps the line it extends and reads the file back before it commits.
 - **Nightshift**: nightly at 03:00 under `launchd`, held awake with `caffeinate` on AC power, and a draft the machine slept through retried on waking. Its first step is the staleness pass (a job untouched six hours with no clean session end and no live process is flagged); then the scan, which stages a distillation draft for each mode with undistilled lessons into `maintenance/inbox/`.
 - **MCP server**: five tools against the real vault, stdio, no MCP library, run under the backend's venv (it needs python-frontmatter and PyYAML); registered at user scope, so every session on the machine has `vault_search` and `history_search`.
@@ -33,9 +35,10 @@ Verified live, not only by tests.
 
 ## Next
 
+0. **Switch to the app: `make switch`**, on Shayne's word, when nothing in a terminal is mid-reply. Then tag `v2.0.0` and move the job to Ship.
 1. **Accept the staged `dev.md` fix.** Settings → Maintenance holds one proposal: remove the duplicated step 2 of the ship gate, left by the 09-28 accept.
 2. **Run the regression suite** from Settings. Its record predates the current prompts, r08 and r09 were tightened on 09-29, and the rest of its cases can barely fail, so a deliberately broken prompt is still the test of whether it can catch anything.
-3. **Decide three things the audit left open**: whether to switch on launch at login; whether hosted sessions should stop receiving `system.md` twice (argv and `~/.claude/CLAUDE.md`); and whether to tune retrieval, which scores 78% against its 80% gate.
+3. **Decided 2026-09-30**: open at login, yes (the app switches it on once); the app keeps opening on Terminal and the spec's criterion 5 is amended to match; retrieval ships at 78% as a known gap. **Still open**: whether hosted sessions should stop receiving `system.md` twice (argv and `~/.claude/CLAUDE.md`).
 4. **Tonight's nightshift run** should start at 03:00 BST and its log line should say so; it is the first run since the launchd reload and the sleep retry.
 
 ## Known gaps, accepted

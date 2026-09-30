@@ -349,19 +349,21 @@ A **quick-capture inbox** takes a link plus a note; the next dev session sorts i
 
 ---
 
-## 14. Running it: two paths
+## 14. Running it: the app, and two ways to develop it
 
-| | `make dev` | `make browser` |
-|---|---|---|
-| Window | native Tauri window | browser tab at `:5180` |
-| Backend | supervised by `backend/supervise.py` | `uvicorn --reload` |
-| Typecheck | `[tsc]` stream | `[tsc]` stream |
-| Vite | started by `tauri dev` | started directly |
+| | `/Applications/Noctis.app` (v2.0) | `make dev` | `make browser` |
+|---|---|---|---|
+| Window | release build, bundled frontend (`tauri://localhost`) | debug build under `tauri dev` | browser tab at `:5180` |
+| Backend | the login service `com.noctis-os.backend` (supervise.py, kept alive by launchd) | the service if loaded, else a supervisor it starts | `uvicorn --reload` |
+| Code changes | `make app` rebuilds and reinstalls | reload on save; **a Rust change restarts the window and ends every terminal** | reload on save |
+| Starts at login | yes, switched on once by the app itself | no | no |
 
-**You develop in the window you use.** `make dev` is the app; `make browser`
+**v2.0 is the packaged app** (decided 2026-09-30). `tauri dev` rebuilds and relaunches the shell whenever anything under `src-tauri/` changes, and the PTY registry lives in that process, so under it a one-line comment edit in `pty.rs` ended every open terminal (09-29, observed as exit 137 in the middle of a command). The release build has no watcher and no dev server; the backend, which `make dev` used to start, is its own launchd service, installed by `bootstrap.sh` step 5 from `launchd/com.noctis-os.backend.plist.template`, with a PATH that has Homebrew on it and its output on `runtime/dev.log` as before. `make app` builds and installs the bundle (building writes only `frontend/dist` and `src-tauri/target`, which a running `make dev` does not watch). **`make switch` moves a machine from the dev window to the app, once**: it hands itself to launchd as a one-off job (it has to outlive the window it closes), installs the service, quits `make dev` and opens the app, logging to `runtime/switch.log`. The open tabs survive the move because the backend keeps them too (`GET/PUT /v2/sessions/arrangement`): localStorage belongs to one origin, and `localhost:5180` and `tauri://localhost` are two.
+
+**You develop in the dev window**, with the app closed (both register the same global hotkey). `make browser`
 is the fallback for backend-only work where a Rust build is not worth paying
 for. **Everything but the terminal is identical**: a terminal needs the PTY host, so under `make browser` the pane says so and every other view works.
-`make open-app` is a double-clickable bundle around `make dev`. `make reload`
+`make open-app` is the old double-clickable bundle around `make dev` (`desktop/NoctisOS.app`), for development only now. `make reload`
 kills the backend so the supervisor restarts it on new code, a deliberate
 restart takes the same path as a crash, which is the point of crash-only
 design rather than a special case beside it.

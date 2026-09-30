@@ -187,16 +187,22 @@ macOS · Python 3.11+ · Node 18+ · Claude Code CLI installed and logged in.
 git clone https://github.com/shaynesss/noctis-os.git
 cd noctis-os
 make setup       # this checkout: backend venv, npm install
-make bootstrap   # this machine: tooling check, ~/.claude/CLAUDE.md symlink, .env with a token, nightshift under launchd
+make bootstrap   # this machine: tooling check, ~/.claude/CLAUDE.md symlink, .env with a token, nightshift and the backend under launchd
+make app         # build the app and install /Applications/Noctis.app
 ```
 
 `make bootstrap` writes `.env` with a generated `NOCTIS_API_TOKEN` and the vault's path; set `VITE_API_TOKEN` to the same token. `./bootstrap/bootstrap.sh --dry-run` shows what it would touch first.
 
+Then open **Noctis** from Applications. It opens at login from then on; the backend runs as a login service, so the app is only the window.
+
+For working on Noctis itself, with the app closed:
+
 ```bash
-make dev       # the app: Tauri window, supervised backend, typecheck
+make dev       # the dev window: tauri dev, the backend (the service if loaded), typecheck
 make browser   # backend-only work: browser tab, hot reload, no Rust build
 make doctor    # what is up, what is down, any capability gaps
 make test      # pytest + tsc -b + vitest
+make switch    # once, on a machine that ran the dev window: move to the app, tabs kept
 ```
 
 The app expects a vault laid out like `second-brain/` above: `prompts/`, `modes/<dev|learn|research>/`, `maintenance/`, `wiki/`. The methodology files are the author's own and are not in this repository, so a fresh machine needs its own before the modes mean anything. [`SETUP.md`](SETUP.md) is the by-hand checklist; [`DOCUMENTATION.md`](DOCUMENTATION.md) has every setting.

@@ -11,6 +11,32 @@ are complete and verified live. Nothing is left in the build order: the
 2026-09-15 rather than built, because the commit log is the record and needs
 no writer.
 
+### v2.0 prepared: files into a session, tokens by day, and a packaged app (2026-09-30)
+
+- **Drop a file or photo on a terminal, or attach one with the paperclip**
+  beside the tab strip's `+` (f89a901). The window has swallowed every file
+  drop since 09-17, when a dropped PDF replaced the app, and a web page is
+  never told where a dropped file lives. So the bytes go to
+  `POST /v2/sessions/attach`, a copy is kept under `backend/runtime/drops/`
+  (a week), and its path is pasted into that terminal through xterm's paste,
+  as a real terminal would type it. Claude Code turns an image path into an
+  attached image.
+- **The Activity grid's hover shows the day's tokens**, and the header the
+  year's (969a898): "3 sessions · 48.2M tokens · Sep 29 2026". The Lifetime
+  panel's own figures by local day; the days sum to the total exactly.
+- **The 5-hour bar no longer drops back** to an idle terminal's stale
+  figure (177244f): readings merge per window, the higher one winning.
+- **The push refused a sentence that quoted the attribution rule**
+  (df52f47): it matches a line that is an attribution now, not one that
+  mentions it.
+- **The packaged app, prepared** (9182cdc, a9f13f5): the backend as a login
+  service, `make app`, `make switch`, open at login once, and the open tabs
+  kept by the backend so the app's first launch restores them. Not switched
+  over yet.
+- Ship gate: pyflakes clean (three unused test imports removed, 1851211);
+  pip-audit: no known vulnerabilities; npm audit: none in what ships, two
+  moderate in `vitest` (a test runner, fixed only by a major upgrade, left).
+
 ### A full audit, and what it found working only on paper (2026-09-29)
 
 Seven read-only checks compared every doc's claims with the code, the logs
