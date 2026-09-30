@@ -102,7 +102,9 @@ describe('remembering which terminals were open', () => {
   it('round-trips mode, directory, session id and the slot id', () => {
     // The slot id is what a reload reattaches by: the PTY registry outlives
     // the page and is keyed by it.
-    rememberSlots([{ id: 'term-faber-1a2b', mode: 'faber', cwd: '/r', sessionId: 'abc' }, { mode: 'general', cwd: '/v' }])
+    // A fake sender: the real one PUTs to the backend, and this fixture once
+    // replaced the real saved tabs on every test run (2026-09-30).
+    rememberSlots([{ id: 'term-faber-1a2b', mode: 'faber', cwd: '/r', sessionId: 'abc' }, { mode: 'general', cwd: '/v' }], () => {})
     expect(recallSlots()).toEqual([
       { id: 'term-faber-1a2b', mode: 'faber', cwd: '/r', sessionId: 'abc' }, { mode: 'general', cwd: '/v' },
     ])

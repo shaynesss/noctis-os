@@ -63,6 +63,23 @@ if ! curl -s -o /dev/null http://127.0.0.1:8000/health; then
 fi
 say "backend up under launchd: $(launchctl print "gui/$(id -u)/com.noctis-os.backend" 2>/dev/null | grep -m1 'state =' | xargs)"
 
+# 2b. The tabs the app will restore must be the ones open now. On 09-30 a
+#     test had overwritten the saved list with two fixtures; this is the
+#     check that would have stopped the switch instead of opening on them.
+token="$(grep '^NOCTIS_API_TOKEN=' "$REPO/.env" | cut -d= -f2-)"
+check="$(curl -s -H "Authorization: Bearer $token" http://127.0.0.1:8000/v2/sessions/arrangement \
+         | python3 -c 'import json,sys; print(" ".join(sorted(t.get("id","") for t in json.load(sys.stdin)["slots"])))')"
+live="$(curl -s -H "Authorization: Bearer $token" http://127.0.0.1:8000/v2/sessions/statusline/all \
+        | python3 -c 'import json,sys; print(" ".join(sorted(json.load(sys.stdin)["slots"])))')"
+say "kept tabs: ${check:-none}"
+say "open now:  ${live:-none}"
+for slot in $live; do
+  case " $check " in
+    *" $slot "*) ;;
+    *) say "FAILED: $slot is open but not in the saved tabs; the dev window was left open"; exit 1 ;;
+  esac
+done
+
 # 3. The dev window: `make dev` and everything under it (vite, tsc --watch,
 #    `tauri dev`, the debug shell). Its own trap ends the group.
 dev="$(pgrep -a -f '^/Library/Developer/CommandLineTools/usr/bin/make dev$|^make dev$' | head -1)"

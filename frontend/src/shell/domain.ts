@@ -159,7 +159,8 @@ const OPEN_SLOTS_KEY = 'noctis.open-slots'
  * and the dev window (http://localhost:5180) and the packaged app
  * (tauri://localhost) are two, so the app's first launch would have opened
  * with no tabs. The backend copy is sent only when it changed: this runs on
- * every status-line report, every few seconds. */
+ * every status-line report, every few seconds. A test passes its own `send`:
+ * the default is a real PUT, and test-setup.ts fails any test that makes one. */
 let lastSent = ''
 
 export function rememberSlots(
