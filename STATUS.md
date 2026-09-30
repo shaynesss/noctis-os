@@ -8,11 +8,11 @@ Current state, not aspirational. History lives in [`CHANGELOG.md`](CHANGELOG.md)
 
 **v2 is the daily driver, and the session is a real terminal.** The app hosts the interactive Claude Code CLI in a pseudo-terminal per tab; the `-p` orchestrator that preceded it is deleted. Stage 1 complete; Stage 2 items 1–9 closed, and nothing is left in the build order, the `launchd`-on-wake scheduler that was item 6's last piece was closed on 2026-09-15 rather than built, because the commit log is the record. v1 is gone entirely.
 
-**v2.0 is prepared and one command from shipped (2026-09-30).** It ships as a packaged `/Applications/Noctis.app`, with the backend as a login service, instead of the `tauri dev` runner that restarts the app, and ends every terminal, on any Rust change. The release build compiles and the service is validated; `make switch` moves over, keeping every tab. **Not yet run**, on Shayne's instruction: it waits for his go, and until then the dev window is what runs.
+**v2.0 shipped on 2026-09-30.** Noctis runs as a packaged `/Applications/Noctis.app`, with the backend as the login service `com.noctis-os.backend`, instead of the `tauri dev` runner that restarts the app, and ends every terminal, on any Rust change. It opens at login (a background login agent, `~/Library/LaunchAgents/Noctis.plist`). The switch ran at 13:40 and every tab came back resumed. The dev window (`make dev`) is for working on Noctis itself, with the app closed.
 
 **Audited 2026-09-29.** Seven read-only checks compared every doc's claims with the code, the logs and the live app. Most of what they found is fixed; each fix has a test that fails on the old code. The CHANGELOG's 09-29 entry lists them, and DOCUMENTATION §21 lists what was left and why.
 
-**Verified 2026-09-29:** 462 backend tests, 82 frontend, `tsc -b` and `cargo check` clean, `make doctor` green. Checked live against the running backend: PUT and DELETE preflights answer 200, Stats reads 2.83B lifetime tokens, `history_search` returns past conversations, staleness sees the open Faber jobs as live. *Not re-run: the Playwright pass over the rail tabs, last green 2026-09-16, and the prompt regression suite, whose record is stale against the current prompts.*
+**Verified 2026-09-30, after the switch:** 487 backend tests, 94 frontend, `tsc -b` clean, `make doctor` green (backend under launchd, frontend bundled in the app). Checked live: the service running, all five tabs restored and reporting from the app. *Not re-run: the Playwright pass over the rail tabs (last green 2026-09-16), and the prompt regression suite, whose record is stale against the current prompts.*
 
 v2's premise: the app drives Claude Code as a subprocess rather than calling the API, so it runs on the existing subscription at no marginal cost. The interface is the deliverable, v2 exists to stop Claude Desktop being the entry point.
 
@@ -35,7 +35,6 @@ Verified live, not only by tests.
 
 ## Next
 
-0. **Switch to the app: `make switch`**, on Shayne's word, when nothing in a terminal is mid-reply. Then tag `v2.0.0` and move the job to Ship.
 1. **Accept the staged `dev.md` fix.** Settings → Maintenance holds one proposal: remove the duplicated step 2 of the ship gate, left by the 09-28 accept.
 2. **Run the regression suite** from Settings. Its record predates the current prompts, r08 and r09 were tightened on 09-29, and the rest of its cases can barely fail, so a deliberately broken prompt is still the test of whether it can catch anything.
 3. **Decided 2026-09-30**: open at login, yes (the app switches it on once); the app keeps opening on the view last used (Terminal on a first run), and the spec's criterion 5 is amended to "one click away" to match; retrieval ships at 78% as a known gap. **Still open**: whether hosted sessions should stop receiving `system.md` twice (argv and `~/.claude/CLAUDE.md`).

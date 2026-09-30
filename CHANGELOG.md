@@ -1,6 +1,14 @@
 # Changelog
 
-## v2.0.0-dev: Stage 2 (in progress)
+## v2.0.0: shipped 2026-09-30
+
+**Shipped as a packaged app.** `/Applications/Noctis.app` (a release build, no
+dev server), the backend as the launchd login service
+`com.noctis-os.backend`, open at login. The switch from the dev window ran on
+2026-09-30 at 13:40 (`make switch`): the service came up, all five open tabs
+were restored and resumed in the app, and the dev window closed. Ship gate:
+487 backend and 94 frontend tests, tsc, cargo check and `make doctor` clean;
+no secrets tracked; pip-audit clean; npm audit clean for what ships.
 
 **v2 replaces Claude Desktop as the entry point. The app drives Claude Code as
 a subprocess, so it runs on the existing subscription with no API billing.**

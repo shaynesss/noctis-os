@@ -70,9 +70,11 @@ doctor:
 		&& echo "up    http://127.0.0.1:$${PORT:-8000}" \
 		|| echo "DOWN  -> make dev   (or: make reload)"
 	@printf 'frontend '
-	@curl -sf -m 2 -o /dev/null http://localhost:5180 \
-		&& echo 'up    http://localhost:5180' \
-		|| echo 'DOWN  -> make dev'
+	@if pgrep -a -f '/Applications/Noctis.app/Contents/MacOS/noctis$$' >/dev/null; then \
+		echo 'up    /Applications/Noctis.app (bundled; no dev server needed)'; \
+	elif curl -sf -m 2 -o /dev/null http://localhost:5180; then \
+		echo 'up    http://localhost:5180 (dev)'; \
+	else echo 'DOWN  -> open Noctis, or make dev to work on it'; fi
 	@printf 'imports  '
 	@cd backend && .venv/bin/python -c 'import main' >/dev/null 2>&1 \
 		&& echo 'ok    (if backend is DOWN it is absent, not broken)' \
