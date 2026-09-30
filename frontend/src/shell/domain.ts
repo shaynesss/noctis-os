@@ -13,6 +13,8 @@
  * model the session was not running.
  */
 
+import { get, put } from './engine'
+
 export type Mode = 'general' | 'faber' | 'noctua' | 'vesper' | 'maintenance'
 
 export const MODE_ACCENT: Record<Mode, string> = {
@@ -152,30 +154,60 @@ export function recallDismissedRefusal(): string | null {
 
 const OPEN_SLOTS_KEY = 'noctis.open-slots'
 
-export function rememberSlots(slots: readonly RememberedSlot[]): void {
+/* Kept in two places since 2026-09-30: this window's localStorage, and the
+ * backend (`/v2/sessions/arrangement`). localStorage belongs to one origin,
+ * and the dev window (http://localhost:5180) and the packaged app
+ * (tauri://localhost) are two, so the app's first launch would have opened
+ * with no tabs. The backend copy is sent only when it changed: this runs on
+ * every status-line report, every few seconds. */
+let lastSent = ''
+
+export function rememberSlots(
+  slots: readonly RememberedSlot[],
+  send: (slots: readonly RememberedSlot[]) => void = sendArrangement,
+): void {
+  const body = JSON.stringify(slots)
   try {
-    localStorage.setItem(OPEN_SLOTS_KEY, JSON.stringify(slots))
+    localStorage.setItem(OPEN_SLOTS_KEY, body)
   } catch {
     // A window that cannot remember its arrangement still works.
   }
+  if (body !== lastSent) {
+    lastSent = body
+    send(slots)
+  }
+}
+
+function sendArrangement(slots: readonly RememberedSlot[]): void {
+  // A copy that did not land is sent again on the next save, rather than
+  // counted as sent: the backend may be restarting, or older than this page.
+  void put('/v2/sessions/arrangement', slots).then((ok) => { if (!ok) lastSent = '' })
+}
+
+export function validSlots(parsed: unknown): RememberedSlot[] {
+  if (!Array.isArray(parsed)) return []
+  return parsed.filter(
+    (t): t is RememberedSlot =>
+      typeof t === 'object' && t !== null
+      && typeof (t as RememberedSlot).mode === 'string'
+      && typeof (t as RememberedSlot).cwd === 'string'
+      && ((t as RememberedSlot).id === undefined || typeof (t as RememberedSlot).id === 'string'),
+  )
 }
 
 export function recallSlots(): RememberedSlot[] {
   try {
     const raw = localStorage.getItem(OPEN_SLOTS_KEY)
-    if (!raw) return []
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (t): t is RememberedSlot =>
-        typeof t === 'object' && t !== null
-        && typeof (t as RememberedSlot).mode === 'string'
-        && typeof (t as RememberedSlot).cwd === 'string'
-        && ((t as RememberedSlot).id === undefined || typeof (t as RememberedSlot).id === 'string'),
-    )
+    return raw ? validSlots(JSON.parse(raw)) : []
   } catch {
     return []
   }
+}
+
+/** The backend's copy, for a window whose own storage is empty. */
+export async function recallSlotsFromBackend(): Promise<RememberedSlot[]> {
+  const got = await get<{ slots: unknown }>('/v2/sessions/arrangement')
+  return got ? validSlots(got.slots) : []
 }
 
 /* Which characters the strip shows, in order. Their *state* is not here:

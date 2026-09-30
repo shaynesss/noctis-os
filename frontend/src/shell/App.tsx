@@ -27,7 +27,7 @@ import { Reader } from './Reader'
 import { Terminals, newSlot, shortenHome, type Slot } from './Terminals'
 import { Transcript } from './Transcript'
 import { useFetched } from './useFetched'
-import { MODE_ACCENT, MODE_LABEL, PANE_COLUMN, recallDismissedRefusal, recallSlots, recallView, rememberDismissedRefusal, rememberSlots, rememberView, type Mode } from './domain'
+import { MODE_ACCENT, MODE_LABEL, PANE_COLUMN, recallDismissedRefusal, recallSlots, recallSlotsFromBackend, recallView, rememberDismissedRefusal, rememberSlots, rememberView, type Mode, type RememberedSlot } from './domain'
 import './tokens.css'
 
 /** What a terminal's statusLine reports, the parts the shell reads. */
@@ -53,6 +53,16 @@ export function ungroupSingles(slots: Slot[]): Slot[] {
   return slots.map((s) => (s.group && (counts.get(s.group) ?? 0) < 2 ? { ...s, group: undefined } : s))
 }
 
+/** A remembered tab as a slot: its own id, so a live session can be
+ *  reattached, and its engine session id, so a gone one comes back resumed. */
+function fromRemembered(r: RememberedSlot): Slot {
+  return newSlot(r.mode, r.cwd, {
+    ...(r.id ? { id: r.id } : {}),
+    ...(r.group ? { group: r.group } : {}),
+    resumeId: r.sessionId,
+  })
+}
+
 export function App() {
   // The app opens on Repo (2026-09-15): the commit log is where a piece of
   // work was left, so it is what you open the app to read.
@@ -68,16 +78,28 @@ export function App() {
    * carrying the engine session id its terminal reported, so it comes back
    * *resumed* rather than blank. A machine with nothing remembered gets one
    * General terminal, which is the front door. */
-  const [slots, setSlots] = useState<Slot[]>(() => {
-    const remembered = recallSlots()
-    if (remembered.length === 0) return [newSlot('general', HOME_CWD)]
-    return remembered.map((r) => newSlot(r.mode, r.cwd, {
-      ...(r.id ? { id: r.id } : {}),
-      ...(r.group ? { group: r.group } : {}),
-      resumeId: r.sessionId,
-    }))
-  })
+  const [slots, setSlots] = useState<Slot[]>(() => recallSlots().map(fromRemembered))
+  /* Nothing remembered here: a first run, or the packaged app's first launch,
+   * whose origin cannot read the dev window's storage. The backend kept a
+   * copy (2026-09-30), so ask it before opening anything, rather than
+   * spawning a General terminal only to replace it. Until it answers the
+   * strip is empty and nothing is saved, so the empty list cannot overwrite
+   * the copy it is waiting for. */
+  const [restoring, setRestoring] = useState(() => slots.length === 0)
+  useEffect(() => {
+    if (!restoring) return
+    let alive = true
+    void recallSlotsFromBackend().then((kept) => {
+      if (!alive) return
+      const restored = kept.map(fromRemembered)
+      setSlots(restored.length ? restored : [newSlot('general', HOME_CWD)])
+      setRestoring(false)
+    })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [active, setActive] = useState<string | null>(() => slots[0]?.id ?? null)
+  useEffect(() => { if (active === null && slots[0]) setActive(slots[0].id) }, [active, slots])
   const slotsRef = useRef(slots)
   const activeRef = useRef(active)
   slotsRef.current = slots
@@ -226,6 +248,7 @@ export function App() {
    * made one; until then the slot's resume id, if it had one, is the best
    * known. */
   useEffect(() => {
+    if (restoring) return
     rememberSlots(slots.map((s) => ({
       id: s.id,
       mode: s.mode,
@@ -238,7 +261,7 @@ export function App() {
         ? reports[s.id]?.session_id
         : s.resumeId,
     })))
-  }, [slots, reports])
+  }, [slots, reports, restoring])
 
   /* Overlays. Each owns the keyboard while it is open. */
   const [palette, setPalette] = useState(false)

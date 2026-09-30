@@ -1050,3 +1050,21 @@ def test_activity_carries_each_days_tokens_and_the_days_with_only_tokens(client,
     assert rows[today]["sessions"] >= 1 and rows[today]["tokens"] == 1_500_000
     assert rows[yesterday] == {"day": yesterday, "sessions": 0, "tokens": 42}, "tokens with no session still show"
     assert ancient not in rows, "outside the grid's year"
+
+
+def test_the_open_tabs_are_kept_for_a_window_on_another_origin(client, tmp_path, monkeypatch):
+    """The dev window and the packaged app keep localStorage apart, so the
+    tabs are kept here as well; the first launch of the app restores them."""
+    from routers import sessions_v2 as sv2
+    monkeypatch.setattr(sv2, "ARRANGEMENT", tmp_path / "arrangement.json")
+    assert client.get("/v2/sessions/arrangement", headers=AUTH).json() == {"slots": []}
+    tabs = [{"id": "term-faber-1", "mode": "faber", "cwd": "/x", "sessionId": "abc", "group": "g1"},
+            {"mode": "general", "cwd": "/y"},
+            {"mode": 3, "cwd": "/bad"},                      # dropped, as recallSlots drops it
+            {"mode": "vesper", "cwd": "/z", "extra": "nope", "sessionId": 5}]
+    assert client.put("/v2/sessions/arrangement", json=tabs, headers=AUTH).json() == {"kept": 3}
+    assert client.get("/v2/sessions/arrangement", headers=AUTH).json()["slots"] == [
+        {"id": "term-faber-1", "mode": "faber", "cwd": "/x", "sessionId": "abc", "group": "g1"},
+        {"mode": "general", "cwd": "/y"},
+        {"mode": "vesper", "cwd": "/z"}]
+    assert client.get("/v2/sessions/arrangement").status_code == 401

@@ -319,6 +319,42 @@ async def attach(request: Request, name: str = Query(min_length=1, max_length=25
     return {"path": str(target), "bytes": len(body)}
 
 
+# The shell's open tabs, kept beside the page's own copy (2026-09-30). The
+# page remembers its arrangement in localStorage, which belongs to one
+# origin: the dev window (http://localhost:5180) and the packaged app
+# (tauri://localhost) cannot read each other's, so moving to the app would
+# have opened it with no tabs. Kept here too, the first launch of either can
+# restore what the other had open, each tab resuming its conversation.
+ARRANGEMENT = Path(os.environ.get("NOCTIS_DATA_DIR", Path(__file__).resolve().parents[1] / "data")) / "arrangement.json"
+
+
+@router.get("/arrangement")
+def arrangement() -> dict:
+    try:
+        slots = json.loads(ARRANGEMENT.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        slots = []
+    return {"slots": slots if isinstance(slots, list) else []}
+
+
+@router.put("/arrangement")
+def remember_arrangement(slots: list[dict]) -> dict:
+    """Shape-checked the way `recallSlots` checks it: a mode and a cwd, both
+    strings, and the rest optional strings. Anything else is dropped rather
+    than refused, as the page drops it on the way back in."""
+    keep = []
+    for s in slots[:32]:
+        if not (isinstance(s.get("mode"), str) and isinstance(s.get("cwd"), str)):
+            continue
+        keep.append({k: v for k, v in s.items()
+                     if k in ("mode", "cwd", "sessionId", "id", "group") and isinstance(v, str)})
+    ARRANGEMENT.parent.mkdir(parents=True, exist_ok=True)
+    tmp = ARRANGEMENT.with_suffix(".tmp")
+    tmp.write_text(json.dumps(keep), encoding="utf-8")
+    os.replace(tmp, ARRANGEMENT)
+    return {"kept": len(keep)}
+
+
 @router.delete("/statusline/{slot}")
 def statusline_close(slot: str) -> dict:
     """The shell says a terminal has gone.
