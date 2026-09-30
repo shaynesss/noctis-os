@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 import interactive
@@ -261,6 +261,62 @@ async def statusline(payload: dict, mode: str | None = None,
                 if merged != _limits or incoming == merged:
                     _limits = merged
     return {"ok": True}
+
+
+# Where a file dropped on a terminal, or picked with its attach button, is
+# kept so the session can read it. Runtime, not vault: it is a machine
+# artefact, gitignored like the logs. A week is long enough for the session
+# that took it, and the folder must not grow without end.
+DROPS_DIR = Path(__file__).resolve().parents[1] / "runtime" / "drops"
+DROP_MAX_BYTES = 50 * 1024 * 1024
+DROP_KEEP_S = 7 * 24 * 3600
+
+
+def _drop_name(name: str) -> str:
+    """A filename safe to paste into a terminal: the base name only, with
+    anything but letters, digits, dot, dash and underscore made a dash."""
+    import re
+    base = Path(name).name or "file"
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", base).strip("-.") or "file"
+    return safe[-120:]
+
+
+@router.post("/attach")
+async def attach(request: Request, name: str = Query(min_length=1, max_length=255)) -> dict:
+    """Keep one file for a session, and say where it is.
+
+    **Why a copy (2026-09-30).** A terminal given a dropped file types its
+    path, and Claude Code turns an image path into an attached image. The
+    page cannot do that: the webview owns drag and drop here (the tab strip
+    reorders with it), and a web page is never told where a dropped file
+    lives, only what is in it. So the shell sends the bytes, this keeps them
+    under `runtime/drops/`, and the shell pastes the path it gets back. The
+    session reads a copy, not the original location.
+    """
+    size = int(request.headers.get("content-length") or 0)
+    if size > DROP_MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"{name} is over {DROP_MAX_BYTES // (1024 * 1024)}MB")
+    body = await request.body()
+    if not body:
+        raise HTTPException(status_code=400, detail=f"{name} arrived empty")
+    if len(body) > DROP_MAX_BYTES:
+        raise HTTPException(status_code=413, detail=f"{name} is over {DROP_MAX_BYTES // (1024 * 1024)}MB")
+    DROPS_DIR.mkdir(parents=True, exist_ok=True)
+    cutoff = time.time() - DROP_KEEP_S
+    for old in DROPS_DIR.iterdir():
+        try:
+            if old.is_file() and old.stat().st_mtime < cutoff:
+                old.unlink()
+        except OSError:
+            pass
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    target = DROPS_DIR / f"{stamp}-{_drop_name(name)}"
+    n = 1
+    while target.exists():
+        n += 1
+        target = DROPS_DIR / f"{stamp}-{n}-{_drop_name(name)}"
+    target.write_bytes(body)
+    return {"path": str(target), "bytes": len(body)}
 
 
 @router.delete("/statusline/{slot}")

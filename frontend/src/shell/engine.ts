@@ -94,6 +94,21 @@ export interface HistoryTranscript {
   blocks: Block[]
 }
 
+/** POST a file's bytes as the body. The path it was kept at, or why not. */
+export async function upload(path: string, file: Blob): Promise<{ path: string } | { error: string }> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${API_TOKEN}`, 'Content-Type': 'application/octet-stream' },
+      body: file,
+    })
+    const body = await res.json().catch(() => ({}))
+    return res.ok ? { path: String(body.path) } : { error: String(body.detail ?? `HTTP ${res.status}`) }
+  } catch {
+    return { error: 'the backend did not answer' }
+  }
+}
+
 /** DELETE a route. Returns whether it succeeded. */
 export async function del(path: string): Promise<boolean> {
   try {

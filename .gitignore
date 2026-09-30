@@ -28,6 +28,8 @@ backend/runtime/*.busy
 # keeps when a gate drops them (runner.DROPS_DIR).
 backend/runtime/*.log.*
 backend/runtime/nightshift-drops/
+# Files dropped on a terminal or picked with its attach button (sessions_v2.DROPS_DIR).
+backend/runtime/drops/
 
 # The project's own hook registration (the telemetry hooks, with this
 # machine's absolute paths baked in) -- local machine state, not source.

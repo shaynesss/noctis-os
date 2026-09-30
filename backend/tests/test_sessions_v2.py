@@ -1002,3 +1002,32 @@ def test_an_idle_terminals_stale_window_does_not_pull_the_bar_down(client):
     assert five_hour() == {"used": 0.03, "resets_at": 1790716200}
     report("term-idle", 56, 1790698200)         # still naming the old window
     assert five_hour() == {"used": 0.03, "resets_at": 1790716200}
+
+
+def test_an_attached_file_is_kept_under_a_pasteable_name(client, tmp_path, monkeypatch):
+    """A dropped or picked file: its bytes arrive, a copy is kept, and the
+    path that comes back is safe to paste into a terminal as it is."""
+    import os, time
+    from routers import sessions_v2 as sv2
+    monkeypatch.setattr(sv2, "DROPS_DIR", tmp_path / "drops")
+    r = client.post("/v2/sessions/attach", params={"name": "Screen Shot 2026-09-30 at 12.49 (1).png"},
+                    content=b"\x89PNG fake", headers={**AUTH, "Content-Type": "application/octet-stream"})
+    assert r.status_code == 200, r.text
+    path = r.json()["path"]
+    assert open(path, "rb").read() == b"\x89PNG fake"
+    assert path.endswith("-Screen-Shot-2026-09-30-at-12.49-1-.png") or path.endswith("-Screen-Shot-2026-09-30-at-12.49-1.png")
+    assert " " not in path and "(" not in path
+
+    again = client.post("/v2/sessions/attach", params={"name": "../../etc/passwd"}, content=b"x",
+                        headers={**AUTH, "Content-Type": "application/octet-stream"}).json()["path"]
+    assert os.path.dirname(again) == str(tmp_path / "drops"), "a name cannot leave the folder"
+
+    stale = tmp_path / "drops" / "old.png"; stale.write_bytes(b"x")
+    os.utime(stale, (time.time() - 8 * 24 * 3600,) * 2)
+    client.post("/v2/sessions/attach", params={"name": "new.png"}, content=b"x",
+                headers={**AUTH, "Content-Type": "application/octet-stream"})
+    assert not stale.exists(), "a week-old drop is cleared"
+
+    assert client.post("/v2/sessions/attach", params={"name": "e.txt"}, content=b"",
+                       headers={**AUTH, "Content-Type": "application/octet-stream"}).status_code == 400
+    assert client.post("/v2/sessions/attach", params={"name": "x"}, content=b"x").status_code == 401

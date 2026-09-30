@@ -18,6 +18,7 @@ import { listen } from '@tauri-apps/api/event'
 import { inTauri } from './host'
 import '@xterm/xterm/css/xterm.css'
 import { del, getResult, post } from './engine'
+import { attachFiles, carriesFiles, registerPaster } from './attach'
 import type { Mode } from './domain'
 
 /** Read a design token, so the terminal cannot drift from the rest of the UI. */
@@ -151,6 +152,20 @@ export function Terminal({
   onExit?: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
+  /* A file dragged over this pane, and what the last attach said if it
+   * failed. The page is where a drop lands (see attach.ts). */
+  const [dropping, setDropping] = useState(false)
+  const [attachNote, setAttachNote] = useState<string | null>(null)
+  const onDrop = (e: React.DragEvent) => {
+    if (!carriesFiles(e)) return
+    e.preventDefault()
+    setDropping(false)
+    const files = Array.from(e.dataTransfer.files)
+    void attachFiles(id, files).then((err) => {
+      setAttachNote(err)
+      if (err) setTimeout(() => setAttachNote(null), 6000)
+    })
+  }
   /* Restarting reuses the mount path rather than adding a second one.
    * Bumping this re-runs the effect below, which tears the old session down
    * and spawns a fresh one through exactly the code that opened the first. */
@@ -335,6 +350,13 @@ export function Terminal({
         }
         void invoke('pty_write', { id, data: d })
       })
+      // What a drop or the attach button pastes into: xterm's own paste, so
+      // the CLI's bracketed-paste mode is honoured as for a typed paste.
+      cleanups.push(registerPaster(id, (text) => {
+        if (dead.current) return
+        term_.paste(text)
+        term_.focus()
+      }))
       const stillborn = (...lines: string[]) => {
         for (const l of lines) term_.writeln(l)
         term_.writeln('\r\n\x1b[2m  press \x1b[0mr\x1b[2m to try again\x1b[0m')
@@ -578,9 +600,26 @@ export function Terminal({
   // only xterm's own padding, so 8px above and below on the host fitted one
   // row too many and the bottom row was cut at the status bar -- hidden
   // while the bar painted its own ground, plain once the bar became glass.
+  //
+  // A file dropped here is attached to this session (attach.ts); the window
+  // itself still ignores a drop anywhere else (main.tsx).
   return (
-    <div className="h-full w-full overflow-hidden px-[10px] py-[8px]">
+    <div className="relative h-full w-full overflow-hidden px-[10px] py-[8px]"
+         onDragOver={(e) => { if (carriesFiles(e)) { e.preventDefault(); setDropping(true) } }}
+         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropping(false) }}
+         onDrop={onDrop}>
       <div ref={host} data-terminal className="h-full w-full overflow-hidden" />
+      {dropping && (
+        <div className="pointer-events-none absolute inset-[6px] flex items-center justify-center rounded-card border border-dashed font-mono text-[12px] text-ink"
+             style={{ borderColor: accent, background: 'rgba(15,15,15,0.55)' }}>
+          drop to attach to this session
+        </div>
+      )}
+      {attachNote && (
+        <div className="absolute bottom-[10px] left-[12px] right-[12px] rounded-control border border-line bg-sheet px-[10px] py-[6px] font-mono text-[11px] text-ink">
+          could not attach: {attachNote}
+        </div>
+      )}
     </div>
   )
 }

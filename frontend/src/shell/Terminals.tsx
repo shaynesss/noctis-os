@@ -18,8 +18,9 @@
  * with that one focused; selecting an ungrouped tab shows it alone. The
  * group travels with the arrangement across a reload.
  */
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Terminal } from './Terminal'
+import { attachFiles } from './attach'
 import { MODE_LABEL, type Mode } from './domain'
 import { ModeMark, Pill, usePill } from './Chrome'
 
@@ -214,7 +215,7 @@ export function Terminals({ slots, active, accent, hidden, shownCwd, onSelect, o
                  // leaves 6px inside, which is the pill's own corner -- so it
                  // nests instead of crossing the bracket's curve.
                  className="relative flex cursor-grab items-center rounded-card border border-line p-[2px] active:cursor-grabbing"
-                 title="shown together — drag to move the group">
+                 title="shown together: drag to move the group">
               {run.map((s, k) => (
                 <div key={s.id} className="flex items-center">
                   {k > 0 && <span className="mx-[1px] h-[14px] w-px bg-line" />}
@@ -232,12 +233,13 @@ export function Terminals({ slots, active, accent, hidden, shownCwd, onSelect, o
         >
           +
         </button>
+        {shown && <AttachButton id={shown.id} />}
         {shown && <span className="absolute right-[12px] text-ink-faint">{shownCwd ?? shortenHome(shown.cwd)}</span>}
       </div>
 
       {slots.length === 0 && (
         <div className="flex flex-1 items-center justify-center font-mono text-[12px] text-ink-faint">
-          no sessions — ⌘T to start one
+          no sessions. ⌘T to start one
         </div>
       )}
       {/* Every slot is mounted; the visible ones share a grid of equal
@@ -283,6 +285,39 @@ export function Terminals({ slots, active, accent, hidden, shownCwd, onSelect, o
         })}
       </div>
     </div>
+  )
+}
+
+/** Files or photos into the showing session, through a picker: the same
+ *  path a drop on the pane takes (attach.ts). */
+function AttachButton({ id }: { id: string }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [note, setNote] = useState<string | null>(null)
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => input.current?.click()}
+        aria-label="attach files or photos"
+        title={note ? `Could not attach: ${note}` : 'Attach files or photos to this session (or drop them on it)'}
+        className="h-[26px] rounded-control px-[7px] text-ink-faint hover:text-ink"
+        style={note ? { color: 'var(--color-faber)' } : undefined}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+             strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M21.4 11.1l-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l8.5-8.5a3.7 3.7 0 0 1 5.2 5.2l-8.5 8.5a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8" />
+        </svg>
+      </button>
+      <input ref={input} type="file" multiple hidden
+             onChange={(e) => {
+               const files = Array.from(e.target.files ?? [])
+               e.target.value = ''
+               void attachFiles(id, files).then((err) => {
+                 setNote(err)
+                 if (err) setTimeout(() => setNote(null), 6000)
+               })
+             }} />
+    </>
   )
 }
 
