@@ -14,3 +14,27 @@ export function openExternal(url: string): void {
   if (inTauri()) void invoke('open_url', { url }).catch(fallback)
   else fallback()
 }
+
+const AUTOSTART_KEY = 'noctis.launch-at-login-set'
+
+/** Open at login, switched on once (2026-09-30, Shayne's call).
+ *
+ * The spec calls the app an always-there front door, and the autostart
+ * plugin was registered and granted without anything ever enabling it. Only
+ * the packaged app does this: the dev window is a debug binary under
+ * `tauri dev`, which is no thing to start at login. And only once: turned
+ * off later in System Settings, it stays off. */
+export async function launchAtLoginOnce(
+  autostart: { isEnabled: () => Promise<boolean>; enable: () => Promise<void> },
+  storage: Pick<Storage, 'getItem' | 'setItem'> = localStorage,
+): Promise<'enabled' | 'already' | 'skipped'> {
+  try {
+    if (storage.getItem(AUTOSTART_KEY)) return 'skipped'
+    const was = await autostart.isEnabled()
+    if (!was) await autostart.enable()
+    storage.setItem(AUTOSTART_KEY, new Date().toISOString())
+    return was ? 'already' : 'enabled'
+  } catch {
+    return 'skipped'  // a window that cannot set it still works
+  }
+}

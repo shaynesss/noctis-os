@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- TEMPLATE. __REPO_ROOT__ and __HOME__ are substituted by bootstrap/ at
+     install time. Do not launchctl load this file directly - render it
+     first. launchd expands neither ~ nor environment variables, which is
+     why the paths are absolute and this is a template. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.noctis-os.backend</string>
+
+    <!-- The backend for the packaged Noctis.app (v2.0). The app is a window
+         and a PTY host; it does not start a server. `make dev` used to be
+         what started one, and a packaged app has no `make dev`, so the
+         backend is its own login service: supervise.py, which already keeps
+         uvicorn up, restarted by launchd in turn if it ever exits. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REPO_ROOT__/backend/.venv/bin/python</string>
+        <string>supervise.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO_ROOT__/backend</string>
+
+    <!-- launchd's own PATH has no Homebrew, and the backend runs `git` for
+         the Repo view and `claude -p` for the session recap. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:__HOME__/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- The same log `make dev` wrote, so every message that points at
+         runtime/dev.log stays right. launchd opens it to append. -->
+    <key>StandardOutPath</key>
+    <string>__REPO_ROOT__/backend/runtime/dev.log</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO_ROOT__/backend/runtime/dev.log</string>
+</dict>
+</plist>

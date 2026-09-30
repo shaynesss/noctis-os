@@ -133,30 +133,47 @@ elif act "create .env from .env.example, with a generated token"; then
 fi
 
 # ── 5. launchd ────────────────────────────────────────────────────────
-head_ "5. Scheduled jobs"
+head_ "5. Login services"
 
 # launchd expands neither ~ nor environment variables in these paths, which
-# is why the tracked file is a template and this step renders it.
-tpl="$REPO_ROOT/launchd/com.noctis-os.nightshift.plist.template"
-dst="$HOME/Library/LaunchAgents/com.noctis-os.nightshift.plist"
-if [ ! -f "$tpl" ]; then
-  fail "plist template missing at $tpl"; note_problem
-else
+# is why the tracked files are templates and this step renders them.
+#
+# Two since v2.0 (2026-09-30): nightshift, nightly at 03:00, and the
+# backend, at login and kept alive, because the packaged Noctis.app is a
+# window and does not start a server the way `make dev` did.
+install_plist() {
+  local name="$1" what="$2"
+  local tpl="$REPO_ROOT/launchd/com.noctis-os.$name.plist.template"
+  local dst="$HOME/Library/LaunchAgents/com.noctis-os.$name.plist"
+  if [ ! -f "$tpl" ]; then
+    fail "plist template missing at $tpl"; note_problem; return
+  fi
   # The template carries a "do not load this directly" comment that stops
   # being true the moment it is rendered, so it is stripped rather than
   # shipped into ~/Library/LaunchAgents.
-  rendered="$(sed "s|__REPO_ROOT__|$REPO_ROOT|g" "$tpl" | sed '/<!-- TEMPLATE\./,/-->/d')"
+  local rendered
+  rendered="$(sed -e "s|__REPO_ROOT__|$REPO_ROOT|g" -e "s|__HOME__|$HOME|g" "$tpl" | sed '/<!-- TEMPLATE\./,/-->/d')"
   if [ -f "$dst" ] && [ "$rendered" = "$(cat "$dst")" ]; then
-    skip "nightshift plist already installed and current"
-  elif act "render + install nightshift plist, then reload it"; then
+    skip "$name service already installed and current"
+  elif act "render + install $name service, then reload it"; then
     mkdir -p "$HOME/Library/LaunchAgents"
     printf '%s\n' "$rendered" > "$dst"
     plutil -lint "$dst" >/dev/null
-    launchctl unload "$dst" 2>/dev/null || true
-    launchctl load "$dst"
-    ok "nightshift plist installed and loaded (nightly 03:00)"
+    if [ "$name" = "backend" ]; then
+      # One supervisor at a time: one started by `make dev` or `make
+      # reload` would hold the port, and the service's would fail to bind.
+      pkill -f 'python[0-9.]* supervise\.py$' 2>/dev/null || true
+      pkill -f 'uvicorn main:app' 2>/dev/null || true
+      sleep 1
+    fi
+    launchctl bootout "gui/$(id -u)" "$dst" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$dst"
+    ok "$name service installed and loaded ($what)"
   fi
-fi
+}
+
+install_plist nightshift "nightly 03:00"
+install_plist backend "at login, kept alive"
 
 # ── summary ───────────────────────────────────────────────────────────
 head_ "Summary"

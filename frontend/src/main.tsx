@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './shell/App.tsx'
+import { inTauri, launchAtLoginOnce } from './shell/host'
 
 
 /* Catches a render-time crash and shows it.
@@ -88,6 +89,10 @@ for (const type of ['dragover', 'drop'] as const) {
   window.addEventListener(type, (e: DragEvent) => {
     if (carriesFiles(e)) e.preventDefault()
   }, { capture: true })
+}
+
+if (import.meta.env.PROD && inTauri()) {
+  void import('@tauri-apps/plugin-autostart').then((autostart) => launchAtLoginOnce(autostart))
 }
 
 createRoot(document.getElementById('root')!).render(

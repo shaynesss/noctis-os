@@ -1,4 +1,4 @@
-.PHONY: setup bootstrap dev browser doctor reload test open-app
+.PHONY: setup bootstrap dev browser doctor reload test open-app app switch
 
 setup:
 	./scripts/setup.sh
@@ -129,10 +129,32 @@ reload:
 dev:
 	@trap 'kill 0' EXIT; \
 	PATH="$$HOME/.cargo/bin:$$PATH"; \
-	(cd backend && .venv/bin/python supervise.py) & \
+	if launchctl print gui/$$(id -u)/com.noctis-os.backend >/dev/null 2>&1; then \
+		echo "backend: the login service is running it (com.noctis-os.backend); not starting a second"; \
+	else \
+		(cd backend && .venv/bin/python supervise.py) & \
+	fi; \
 	(cd frontend && ./node_modules/.bin/tsc -b --watch --preserveWatchOutput 2>&1 | awk '{print "[tsc] " $$0; fflush()}') & \
 	(cd frontend && PATH="$$HOME/.cargo/bin:$$PATH" npm run app) & \
 	wait
+
+# The packaged app (v2.0): a release build of the shell, installed into
+# /Applications. It is a window and a PTY host and starts no server; the
+# backend is the login service bootstrap installs (com.noctis-os.backend).
+# Building writes only frontend/dist and src-tauri/target, which a running
+# `make dev` does not watch, so this is safe beside an open dev window.
+app:
+	@cd frontend && PATH="$$HOME/.cargo/bin:$$PATH" npx tauri build --bundles app
+	@rm -rf /Applications/Noctis.app
+	@ditto frontend/src-tauri/target/release/bundle/macos/Noctis.app /Applications/Noctis.app
+	@echo "installed /Applications/Noctis.app"
+
+# Move from the dev window to the packaged app, once: builds and installs
+# the app if needed, puts the backend under its login service, quits the dev
+# window (every terminal in it ends; each comes back resumed), opens the app.
+# Runs as a one-off launchd job so it outlives the window it closes.
+switch:
+	@scripts/switch_to_app.sh
 
 # desktop/NoctisOS.app is a thin double-click wrapper around `make dev`
 # (real Dock/Finder icon, no terminal needed) -- always runs the live
