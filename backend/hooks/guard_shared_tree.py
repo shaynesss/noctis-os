@@ -83,17 +83,22 @@ def _newlines_as_separators(command: str) -> str:
         elif ch in "'\"":
             quote = ch
         elif ch == "\n":
-            ch = ";"
+            # Newline kept, then the separator: a `#` comment runs to the end
+            # of its line, and with the newline gone it ran to the end of the
+            # whole command, hiding every line after it (review, 2026-09-30).
+            ch = "\n;"
         out.append(ch)
     return "".join(out)
 
 
-def _segments(command: str) -> list[list[str]] | None:
-    """The command's simple commands, each a token list; None if unparseable.
+def _segments(command: str) -> list[list[str] | str] | None:
+    """The command's simple commands, each a token list, with "(" and ")"
+    between them where a subshell opens and closes; None if unparseable.
 
-    Tokenised whole, as a shell would, with `;`, `&&`, `|`, `(` and the rest
-    as their own tokens, then cut at them. So `ls && git add -A`, `(git add
-    -A)` and `$(git add -A)` are each seen as a git call of their own.
+    Tokenised whole, as a shell would, with `;`, `&&`, `|` and parentheses as
+    their own tokens, then cut at them. So `ls && git add -A`, `(git add -A)`
+    and `$(git add -A)` are each seen as a git call of their own, and a `cd`
+    inside `( ... )` is known to end at its `)`.
     """
     command = _newlines_as_separators(HEREDOC.sub(lambda m: "<<" + m.group(3), command))
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
@@ -102,17 +107,25 @@ def _segments(command: str) -> list[list[str]] | None:
         tokens = list(lexer)
     except ValueError:
         return None  # unbalanced quotes: not parseable, so not judged
-    out, current = [], []
+    out: list[list[str] | str] = []
+    current: list[str] = []
     for t in tokens:
         if t and all(c in "();<>|&" for c in t):
             if current:
                 out.append(current)
             current = []
+            out.extend(c for c in t if c in "()")
         else:
             current.append(t)
     if current:
         out.append(current)
     return out
+
+
+# Commands that run the command after them, so `env git add -A` and
+# `xargs git add` are git calls. Only these: a `git` anywhere else in a
+# command is an argument, and `echo git add -A` was refused as if it ran.
+WRAPPERS = {"env", "command", "xargs", "nohup", "sudo", "time", "exec", "nice"}
 
 
 def _is_git(token: str) -> bool:
@@ -121,9 +134,21 @@ def _is_git(token: str) -> bool:
 
 def _subcommand(tokens: list[str]) -> tuple[str, list[str], str | None] | None:
     """The git subcommand, its arguments and any `-C` directory, or None if
-    this is not a git call. `/usr/bin/git` is git."""
-    i = next((n for n, t in enumerate(tokens) if _is_git(t)), None)
-    if i is None:
+    this is not a git call. `/usr/bin/git` is git. Git must be the command:
+    the first word, after any `VAR=value` assignments and wrappers (and a
+    wrapper's own options)."""
+    i, wrapped = 0, False
+    while i < len(tokens):
+        t = tokens[i]
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", t):
+            i += 1                      # an assignment: GIT_DIR=x git ...
+        elif os.path.basename(t) in WRAPPERS:
+            i, wrapped = i + 1, True
+        elif wrapped and t.startswith("-"):
+            i += 1                      # a wrapper's own option: xargs -0 -n1 git
+        else:
+            break
+    if i >= len(tokens) or not _is_git(tokens[i]):
         return None
     i += 1
     where = None
@@ -160,15 +185,42 @@ def _positional(args: list[str], with_value: set[str] = frozenset()) -> list[str
     return out
 
 
+# Options whose next argument is a value, not a flag or a path: a commit
+# message of "-a is gone" is not `-a`.
+COMMIT_WITH_VALUE = {"-m", "--message", "-F", "--file", "-C", "-c", "--reuse-message",
+                     "--reedit-message", "--author", "--date", "-t", "--template",
+                     "--fixup", "--squash", "--trailer", "--cleanup"}
+
+
+def _flags(args: list[str], with_value: set[str]) -> list[str]:
+    """The option words of `args`, leaving out the value of each option in
+    `with_value`."""
+    out, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a in with_value:
+            out.append(a)
+            skip = True
+        elif a.startswith("-"):
+            out.append(a)
+    return out
+
+
 def _judge(sub: str, args: list[str]) -> str | None:
     positional = [a for a in args if not a.startswith("-")]
     if sub == "add" and (any(a in EVERYTHING for a in args) or not positional):
         return "stage every changed file"
-    if sub == "commit" and (_has_short_flag(args, "a") or "--all" in args):
-        return "commit every changed file"
+    if sub == "commit":
+        flags = _flags(args, COMMIT_WITH_VALUE)
+        if _has_short_flag(flags, "a") or "--all" in flags:
+            return "commit every changed file"
     if sub == "stash":
-        verb = positional[0] if positional else "push"
-        rest = args[args.index(verb) + 1:] if positional else args
+        # The verb is the first word that is not an option or a message
+        # (`git stash -m wip` is a push; "wip" is its message).
+        named = _positional(args, {"-m", "--message"})
+        verb = named[0] if named else "push"
+        rest = args[args.index(verb) + 1:] if named else args
         if verb == "save":   # takes a message, never a pathspec
             return "stash the whole working tree"
         if verb == "push" and "--" not in rest and not _positional(rest, {"-m", "--message"}):
@@ -186,6 +238,22 @@ def _judge(sub: str, args: list[str]) -> str | None:
     return None
 
 
+def _substitutions(token: str) -> list[str]:
+    """The commands inside every `$(...)` in a token, wherever it sits in
+    it: `"done: $(git add -A)"` runs one. Backticks are taken from the raw
+    command instead (see `whole_tree_command`): unquoted, the tokenizer
+    splits a backtick pair across words."""
+    found, i = [], 0
+    while (start := token.find("$(", i)) >= 0:
+        depth, j = 1, start + 2
+        while j < len(token) and depth:
+            depth += {"(": 1, ")": -1}.get(token[j], 0)
+            j += 1
+        found.append(token[start + 2:j - 1 if depth == 0 else j])
+        i = j
+    return found
+
+
 def whole_tree_command(command: str, _depth: int = 0) -> tuple[str, str, str | None] | None:
     """(what it would do, the command as written, the directory it acts in if
     not the session's own), or None if it is scoped.
@@ -197,11 +265,26 @@ def whole_tree_command(command: str, _depth: int = 0) -> tuple[str, str, str | N
     reaches is the one to ask about: a session in noctis-os running `cd
     ../second-brain && git add -A` touches the vault, not noctis-os.
     """
+    if _depth > 3:
+        return None
+    # Backtick substitutions, read from the text before it is split: unquoted,
+    # `git add -A` arrives as the words "`git", "add", "-A`".
+    for inner_text in re.findall(r"`([^`]+)`", HEREDOC.sub(lambda m: "<<" + m.group(3), command)):
+        if found := whole_tree_command(inner_text, _depth + 1):
+            return found
     segments = _segments(command)
-    if segments is None or _depth > 3:
+    if segments is None:
         return None
     here: str | None = None
+    scopes: list[str | None] = []
     for tokens in segments:
+        # A subshell's `cd` ends at its `)`.
+        if tokens == "(":
+            scopes.append(here)
+            continue
+        if tokens == ")":
+            here = scopes.pop() if scopes else here
+            continue
         if tokens[0] == "cd":
             target = tokens[1] if len(tokens) > 1 else "~"
             here = os.path.join(here, target) if here else target
@@ -213,8 +296,8 @@ def whole_tree_command(command: str, _depth: int = 0) -> tuple[str, str, str | N
             inner.append(tokens[tokens.index("-c") + 1])
         if tokens[0] == "eval":
             inner.append(" ".join(tokens[1:]))
-        inner += [t[2:-1] if t.startswith("$(") else t.strip("`")
-                  for t in tokens if t.startswith("$(") or t.startswith("`")]
+        for t in tokens:
+            inner += _substitutions(t)
         for text in inner:
             if found := whole_tree_command(text, _depth + 1):
                 effect, written, where = found

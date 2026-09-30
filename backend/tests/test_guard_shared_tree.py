@@ -242,3 +242,39 @@ def test_the_repository_judged_is_the_one_the_command_reaches(monkeypatch):
     monkeypatch.setattr(guard, "others_in_this_repo", lambda cwd, sid: asked.append(cwd) or [])
     guard.decide(_payload("cd ../vault && git add -A", cwd="/work/repo"))
     assert asked == ["/work/vault"]
+
+
+# --- found by the pre-ship review, 2026-09-30 ---------------------------------
+
+@pytest.mark.parametrize("command, effect", [
+    ("cd /repo\n# stage everything\ngit add -A", "stage every changed file"),     # a comment hid the rest
+    ("git status # check first\ngit add -A", "stage every changed file"),
+    ("git stash -m wip", "stash the whole working tree"),                          # "wip" is a message
+    ('echo "done: $(git add -A)"', "stage every changed file"),                   # $() inside a longer string
+    ("echo `git add -A` done", "stage every changed file"),
+    ("xargs -0 -n1 git add -A", "stage every changed file"),                       # a wrapper's options
+    ("GIT_DIR=.git env git add .", "stage every changed file"),
+])
+def test_the_forms_the_review_found_are_refused(command, effect):
+    found = guard.whole_tree_command(command)
+    assert found is not None and found[0] == effect, command
+
+
+@pytest.mark.parametrize("command", [
+    "echo git add -A",                                  # git as an argument, not the command
+    "grep -rn git add -A docs",
+    'git commit -m "-a is gone" backend/x.py',          # a message starting with -a
+    'git commit -F msg.txt backend/x.py',
+    "git stash push -m wip backend/jobs.py",
+    "git stash list",
+    "git stash pop",
+    "# git add -A is what not to do\ngit add backend/x.py",
+])
+def test_what_the_review_found_refused_wrongly_is_allowed(command):
+    assert guard.whole_tree_command(command) is None, command
+
+
+def test_a_cd_inside_a_subshell_ends_at_its_bracket():
+    found = guard.whole_tree_command("(cd ../second-brain && git log -1); git add -A")
+    assert found is not None and found[2] is None, "judged in the session's own repository"
+    assert guard.whole_tree_command("(cd ../second-brain && git add -A)")[2] == "../second-brain"
