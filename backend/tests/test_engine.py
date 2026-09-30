@@ -1,7 +1,6 @@
 """What survives of the driver: where the engine is, what it runs as, and the
 one-shot call. Asserted on argv and composed config, never by launching."""
 import json
-from pathlib import Path
 
 import engine
 

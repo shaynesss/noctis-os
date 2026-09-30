@@ -1,10 +1,6 @@
 """The regression suite as a module: scope follows composition, a failure
 reruns once, results are recorded per case against the prompt they ran on.
 Nothing here starts a session -- `ask` is always replaced."""
-from pathlib import Path
-
-import pytest
-
 from prompts import regression
 
 CASES = [
