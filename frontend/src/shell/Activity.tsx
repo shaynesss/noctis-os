@@ -13,7 +13,10 @@
  * day's tokens from the transcripts, both through `/v2/sessions/stats`. A
  * cell's hover names both (2026-09-30). */
 
-import { buildGrid, cellTitle, compactTokens, iso } from './grid'
+import { useRef, useState } from 'react'
+import { buildGrid, cellTitle, compactTokens, iso, streakEnding } from './grid'
+import { DayCard } from './DayCard'
+import type { Mode } from './domain'
 import { Unreachable } from './Async'
 import { Beam } from './Panels'
 
@@ -47,9 +50,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 
 
 
+/** Which cell the card is about, and the element it is anchored to. */
+type Hover = { w: number; d: number }
+
 export function Activity(
-  { days }: { days: { day: string; sessions: number; tokens?: number }[] | null | false },
+  { days }: { days: { day: string; sessions: number; tokens?: number; modes?: Partial<Record<Mode, number>> }[] | null | false },
 ) {
+  const [hover, setHover] = useState<Hover | null>(null)
+  const cells = useRef(new Map<string, HTMLDivElement>())
   /* Absent data is not zero activity.
    *
    * This was handed `[]` while the request was still in flight or had
@@ -86,6 +94,40 @@ export function Activity(
   // conversation is rather than with how much happened in it.
   const tokens = new Map(days.map((d) => [d.day, d.tokens ?? 0]))
   const yearTokens = weeks.flat().reduce((n, c) => n + (c.future ? 0 : tokens.get(iso(c.date)) ?? 0), 0)
+  const modes = new Map(days.map((d) => [d.day, d.modes ?? {}]))
+  const sessionsByDay = new Map(days.map((d) => [d.day, d.sessions]))
+  const maxTokens = weeks.flat().reduce((n, c) => Math.max(n, c.future ? 0 : tokens.get(iso(c.date)) ?? 0), 0)
+
+  /* The card for the hovered (or keyboard-focused) day, measured from the
+   * cell itself so it sits on it whatever the grid's size. */
+  const hovered = hover && weeks[hover.w]?.[hover.d]
+  const anchor = hover && cells.current.get(`${hover.w}-${hover.d}`)?.getBoundingClientRect()
+  const card = hovered && !hovered.future && anchor ? {
+    date: hovered.date,
+    sessions: hovered.count,
+    tokens: tokens.get(iso(hovered.date)) ?? 0,
+    modes: modes.get(iso(hovered.date)) ?? {},
+    maxTokens,
+    streak: streakEnding(hovered.date, sessionsByDay),
+    anchor,
+  } : null
+
+  /* Arrow keys walk the grid: left and right a week, up and down a day.
+   * Focus lands on today, the day you most likely want. */
+  const lastWeek = weeks.length - 1
+  const todayIndex = weeks[lastWeek].findIndex((c) => iso(c.date) === iso(today))
+  const move = (dw: number, dd: number) => setHover((h) => {
+    const at = h ?? { w: lastWeek, d: Math.max(0, todayIndex) }
+    let w = at.w + dw, d = at.d + dd
+    if (d < 0) { w -= 1; d = 6 } else if (d > 6) { w += 1; d = 0 }
+    w = Math.max(0, Math.min(lastWeek, w))
+    return weeks[w]?.[d]?.future ? at : { w, d }
+  })
+  const onKey = (e: React.KeyboardEvent) => {
+    const step: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }
+    if (step[e.key]) { e.preventDefault(); move(...step[e.key]) }
+    if (e.key === 'Escape') setHover(null)
+  }
 
   // A month label sits above the first week that begins that month, which is
   // the only placement that stays aligned as the year rolls.
@@ -128,21 +170,38 @@ export function Activity(
               <span key={i}>{d}</span>
             ))}
           </div>
-          <div className="grid grid-flow-col gap-[3px]"
+          <div className="grid grid-flow-col gap-[3px] rounded-[3px] outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-sig-5)]"
+               tabIndex={0}
+               aria-label={`Activity: ${total} sessions in the last year. Arrow keys move between days.`}
+               onPointerLeave={() => setHover(null)}
+               onFocus={() => setHover((h) => h ?? { w: lastWeek, d: Math.max(0, todayIndex) })}
+               onBlur={() => setHover(null)}
+               onKeyDown={onKey}
                style={{ gridTemplateColumns: `repeat(${weeks.length}, minmax(0, 1fr))`, gridTemplateRows: 'repeat(7, auto)' }}>
             {weeks.flatMap((col, w) =>
               col.map((c, d) => (
                 <div
                   key={`${w}-${d}`}
-                  title={cellTitle(c.date, c.count, tokens.get(iso(c.date)) ?? 0)}
-                  className="aspect-square w-full rounded-[2px]"
-                  style={{ background: level(c.count), visibility: c.future ? 'hidden' : undefined }}
+                  ref={(el) => { if (el) cells.current.set(`${w}-${d}`, el); else cells.current.delete(`${w}-${d}`) }}
+                  aria-label={cellTitle(c.date, c.count, tokens.get(iso(c.date)) ?? 0)}
+                  onPointerEnter={() => { if (!c.future) setHover({ w, d }) }}
+                  className="aspect-square w-full rounded-[2px] transition-[box-shadow,filter] duration-100"
+                  style={{
+                    background: level(c.count),
+                    visibility: c.future ? 'hidden' : undefined,
+                    // The day being read: a ring in the signature, lifted a
+                    // touch, so the eye can find the cell the card is about.
+                    ...(hover && hover.w === w && hover.d === d
+                      ? { boxShadow: '0 0 0 1px var(--color-sig-6), 0 0 8px rgba(222,119,138,0.45)', filter: 'brightness(1.25)' }
+                      : {}),
+                  }}
                 />
               )),
             )}
           </div>
         </div>
       </div></Beam>
+      {card && <DayCard day={card} today={today} />}
     </Frame>
   )
 }

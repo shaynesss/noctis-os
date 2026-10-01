@@ -1048,7 +1048,9 @@ def test_activity_carries_each_days_tokens_and_the_days_with_only_tokens(client,
         "daily": {today: 1_500_000, yesterday: 42, ancient: 7}})
     rows = {r["day"]: r for r in client.get("/v2/sessions/stats", headers=AUTH).json()["activity"]}
     assert rows[today]["sessions"] >= 1 and rows[today]["tokens"] == 1_500_000
-    assert rows[yesterday] == {"day": yesterday, "sessions": 0, "tokens": 42}, "tokens with no session still show"
+    assert rows[yesterday] == {"day": yesterday, "sessions": 0, "tokens": 42, "modes": {}}, "tokens with no session still show"
+    assert rows[today]["modes"].get("faber", 0) >= 1, "the hover card knows who worked that day"
+    assert sum(rows[today]["modes"].values()) == rows[today]["sessions"]
     assert ancient not in rows, "outside the grid's year"
 
 

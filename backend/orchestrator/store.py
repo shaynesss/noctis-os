@@ -482,6 +482,18 @@ class ConversationStore:
             "  FROM sessions WHERE started_at >= date('now', ?)"
             " GROUP BY day ORDER BY day", (f"-{days} days",)).fetchall()
 
+    def daily_modes(self, days: int = 365) -> dict[str, dict[str, int]]:
+        """Sessions per local day per mode, for the grid's hover card: which
+        characters worked that day (2026-10-01). Same day boundary as
+        `daily_activity`, so the two always agree on a day's total."""
+        out: dict[str, dict[str, int]] = {}
+        for r in self.db.execute(
+                "SELECT date(started_at, 'localtime') AS day, mode, COUNT(*) AS n"
+                "  FROM sessions WHERE started_at >= date('now', ?)"
+                " GROUP BY day, mode", (f"-{days} days",)):
+            out.setdefault(r["day"], {})[r["mode"]] = r["n"]
+        return out
+
     def lifetime_tokens(self) -> sqlite3.Row:
         """Totals across every turn Noctis has run.
 

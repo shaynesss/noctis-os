@@ -33,3 +33,36 @@ describe('token labels at a unit boundary', () => {
     expect(compactTokens(999_940)).toBe('999.9K')
   })
 })
+
+import { cardDate, dayStory, relativeDay, streakEnding } from './grid'
+
+describe("the hover card's story", () => {
+  const d = new Date(2026, 8, 29)
+
+  it('names the character who did most, in a voice that is stable per day', () => {
+    const story = dayStory(d, { faber: 4, general: 2, noctua: 1 })
+    expect(story.lead).toBe('faber')
+    expect(dayStory(d, { faber: 4, general: 2 }).line).toBe(story.line)   // same day, same words
+    expect(dayStory(d, {}).lead).toBeNull()
+    expect(['everyone slept', 'a quiet day', 'nobody home', 'the lights stayed off'])
+      .toContain(dayStory(d, {}).line)
+  })
+
+  it('breaks a tie towards the build modes', () => {
+    expect(dayStory(d, { general: 2, vesper: 2 }).lead).toBe('vesper')
+  })
+
+  it('counts a streak of real consecutive days ending on the day', () => {
+    const s = new Map([['2026-09-27', 1], ['2026-09-28', 3], ['2026-09-29', 2], ['2026-09-25', 5]])
+    expect(streakEnding(d, s)).toBe(3)
+    expect(streakEnding(new Date(2026, 8, 26), s)).toBe(0)
+  })
+
+  it('says today and yesterday, and dates the rest', () => {
+    const today = new Date(2026, 8, 30, 15, 0)
+    expect(relativeDay(new Date(2026, 8, 30), today)).toBe('today')
+    expect(relativeDay(d, today)).toBe('yesterday')
+    expect(relativeDay(new Date(2026, 8, 1), today)).toBeNull()
+    expect(cardDate(d)).toBe('Tue 29 Sep')
+  })
+})

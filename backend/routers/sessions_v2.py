@@ -477,9 +477,11 @@ def _activity(tokens_by_day: dict[str, int], days: int = 365) -> list[dict]:
     from datetime import date, timedelta
     since = (date.today() - timedelta(days=days)).isoformat()
     sessions = {r["day"]: r["sessions"] for r in _store.daily_activity(days=days)}
+    modes = _store.daily_modes(days=days)
     out = []
     for day in sorted(set(sessions) | {d for d in tokens_by_day if d >= since}):
-        out.append({"day": day, "sessions": sessions.get(day, 0), "tokens": tokens_by_day.get(day, 0)})
+        out.append({"day": day, "sessions": sessions.get(day, 0), "tokens": tokens_by_day.get(day, 0),
+                    "modes": modes.get(day, {})})
     return out
 
 
